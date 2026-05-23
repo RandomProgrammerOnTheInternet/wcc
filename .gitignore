@@ -1,0 +1,15 @@
+bkp
+*.o
+bin
+*.bkp
+*bkp
+insert_funny_joke_here
+tst.*
+testing
+.cache
+compile_commands.json
+test
+oldsrc
+.clang-format
+prog
+prog.s
