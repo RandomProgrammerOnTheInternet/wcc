@@ -148,3 +148,22 @@ int starts_with(char *thing, char *with)
 {
 	return strncmp(thing, with, strlen(with)) == 0;
 }
+
+#include "parse.h"
+
+void compile_err_node(void *node, const char *fmt, ...)
+{
+	va_list va;
+	va_start(va, fmt);
+	verror(((node_t *)node)->tok->loc, "error", fmt, va);
+	va_end(va);
+	exit(EXIT_FAILURE);
+}
+
+void compile_warn_node(void *node, const char *fmt, ...)
+{
+	va_list va;
+	va_start(va, fmt);
+	verror(((node_t *)node)->tok->loc, "warning", fmt, va);
+	va_end(va);
+}

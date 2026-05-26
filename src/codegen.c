@@ -48,6 +48,21 @@ DEF_INS(ret, RET, NULL, r1, NULL, 0, reg_t *r1);
 #undef INSNAME
 #undef MAKE
 
+#define GEN_BRCMP(c, name)                                              \
+	static UNUSEDA void emit_##name(reg_t *r1, reg_t *r2, ir_blk_t *fb, \
+									ir_blk_t *tb)                       \
+	{                                                                   \
+		ir_blk_add(outblk, ins_##name(r1, r2, fb, tb));                 \
+		return;                                                         \
+	}
+
+GEN_BRCMP(IR_INST_BREQ, breq);
+GEN_BRCMP(IR_INST_BRNE, brne);
+GEN_BRCMP(IR_INST_BRLT, brlt);
+GEN_BRCMP(IR_INST_BRLE, brle);
+
+#undef GEN_BRCMP
+
 /* odd one(s) out */
 static void emit_br(reg_t *on, ir_blk_t *trueblk, ir_blk_t *falseblk)
 {
@@ -155,6 +170,8 @@ void codegen_leave(FILE *f)
 	return;
 }
 
+static reg_t *codegen_expr(node_t *node);
+
 /* calculates address of node `node` -- places it into register `reg` */
 static reg_t *calc_addr(node_t *node)
 {
@@ -164,8 +181,11 @@ static reg_t *calc_addr(node_t *node)
 		emit_leas(addr, placement);
 		return addr;
 	}
+	if(node->kind == NODE_DEREF) {
+		return codegen_expr(node->lhs);
+	}
 
-	ERROR("cannot calculate address of non-variable");
+	compile_err_node(node, "cannot calculate address of non-variable");
 
 	return NULL;
 }
@@ -197,6 +217,15 @@ reg_t *codegen_expr(node_t *node)
 		emit_load(val, addr);
 		return val;
 	};
+	case NODE_ADDR: {
+		return calc_addr(node->lhs);
+	}
+	case NODE_DEREF: {
+		reg_t *expr = codegen_expr(node->lhs);
+		reg_t *val = reg_make();
+		emit_load(val, expr);
+		return val;
+	}
 	case NODE_ASSIGN: {
 		reg_t *lval = calc_addr(node->lhs);
 		reg_t *rval = codegen_expr(node->rhs);
@@ -337,7 +366,7 @@ void codegen_expr_stmt(node_t *node)
 
 	}; break;
 	default:
-		ERROR("invalid stmt");
+		compile_err_node(node, "invalid stmt");
 		break;
 	}
 

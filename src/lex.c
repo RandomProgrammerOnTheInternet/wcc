@@ -61,17 +61,17 @@ int islexpunct(int c)
 {
 	return c == '+' || c == '-' || c == '*' || c == '/' || c == ')' ||
 		   c == '(' || c == '>' || c == '<' || c == ';' || c == '=' ||
-		   c == '{' || c == '}';
-}
-
-/* is this (first) character an identifier? */
-int isidentfirst(int c)
-{
-	return isident(c) || (c >= '0' && c <= '9');
+		   c == '{' || c == '}' || c == '&' || c == '*';
 }
 
 /* is this (other) character an identifier? */
 int isident(int c)
+{
+	return isidentfirst(c) || (c >= '0' && c <= '9');
+}
+
+/* is this (first) character an identifier? */
+int isidentfirst(int c)
 {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
 }
@@ -131,6 +131,10 @@ token_t *lex_do(char *prog)
 			prog++;
 		}
 
+		if(*prog == 0) {
+			break;
+		}
+
 		size_t left = len - (prog - prog_start);
 
 		/* tokenize number */
@@ -177,7 +181,7 @@ token_t *lex_do(char *prog)
 			continue;
 		}
 
-		compile_err(prog, "unknown expression");
+		compile_err(prog, "unknown expression '%d'", *prog);
 	}
 
 	tok = tok->next = token_make(TOK_END, prog, prog);

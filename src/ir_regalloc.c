@@ -18,14 +18,11 @@ static ir_inst_t *find_last_or_flow_ins(ir_inst_t *root)
 {
 	ir_inst_t *ret = root;
 	for(; ret; ret = ret->next) {
-		if(ret->type == IR_INST_RET || ret->type == IR_INST_BR ||
-		   ret->type == IR_INST_JMP) {
+		if(ir_inst_is_term(ret->type)) {
 			return ret;
 		}
 	}
-	ASSERT(ret->type == IR_INST_RET || ret->type == IR_INST_BR ||
-			   ret->type == IR_INST_JMP,
-		   "IR is not constructed properly");
+	ASSERT(ir_inst_is_term(ret->type), "IR is not constructed properly");
 	return NULL;
 }
 
@@ -301,8 +298,7 @@ void ir_regalloc_spill(ir_func_t *fun, LIST(reg_t *) allocated)
 			rewrite_ins(prev, cur);
 			prev = cur;
 
-			if(cur->type == IR_INST_BR || cur->type == IR_INST_RET ||
-			   cur->type == IR_INST_JMP) {
+			if(ir_inst_is_term(cur->type)) {
 				break;
 			}
 		}
@@ -452,8 +448,7 @@ static void ir_turn_into_x86(ir_func_t *fun)
 			turn_into_x86_ins(prev, cur);
 			prev = cur;
 
-			if(cur->type == IR_INST_BR || cur->type == IR_INST_RET ||
-			   cur->type == IR_INST_JMP) {
+			if(ir_inst_is_term(cur->type)) {
 				break;
 			}
 		}

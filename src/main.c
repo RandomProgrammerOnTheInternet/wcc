@@ -9,6 +9,8 @@
 #include "codegen.h"
 #include "arena.h"
 
+int debug = 0;
+
 char *next_arg(int max, int *argc, char *argv[])
 {
 	if(*argc >= max) {
@@ -19,6 +21,71 @@ char *next_arg(int max, int *argc, char *argv[])
 	return arg;
 }
 
+char *file_reader(FILE *f)
+{
+	fseek(f, 0, SEEK_END);
+	long size = ftell(f);
+	fseek(f, 0, SEEK_SET);
+
+	char *prog = zalloc(size + 2);
+	char *crlf_to_lf = zalloc(size + 1);
+
+	long pos = 0;
+	while(pos < size) {
+		long readback = fread(prog + pos, 1, size - pos, f);
+		ENSURE(readback, "failed to read from file");
+		pos += readback;
+	}
+
+	size_t j = 0;
+	/* turn CRLF -> LF because yes */
+	for(size_t i = 0; i < (size_t)size; i++) {
+		if(prog[i] != '\r' && prog[i] != '\n') {
+			crlf_to_lf[j++] = prog[i];
+			continue;
+		}
+
+		if(prog[i] == '\r' && prog[i + 1] == '\n') {
+			crlf_to_lf[j++] = '\n';
+			continue;
+		}
+
+		if(prog[i] == '\n') {
+			crlf_to_lf[j++] = '\n';
+			continue;
+		}
+
+		ERROR("how did you get here");
+	}
+
+	free(prog);
+
+	return crlf_to_lf;
+}
+
+static void version(char *pname)
+{
+	UNUSED(pname);
+	printf("wcc version 0.0.1 build %s\n", __DATE__);
+	return;
+}
+
+static void help(char *pname)
+{
+	version(pname);
+	printf(
+		"Usage: %s <input file> [-o <output asm file>] [-t <arch>-<abi>] [-d] [-?/--help]\n",
+		pname);
+	printf(
+		"  -o <output>:\t\tfile to output assembly to (stdout is default)\n");
+	printf("  -t <arch>-<abi>:\ttarget architecture, abi\n");
+	printf("                  \tonly aarch64-apple, x64-sysv\n");
+	printf("                  \tare supported.\n");
+	printf("  -d:\t\t\tenable debug IR printing\n");
+	printf("  -?, --help:\t\tthis page\n");
+	return;
+}
+
 int main(int argc, char *argv[])
 {
 	if(scr_init()) {
@@ -26,16 +93,18 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	if(argc < 2) {
-		fprintf(stderr, "usage: %s <src> [opts..]\n", argv[0]);
+	if(argc == 1) {
+		help(argv[0]);
 		return 1;
 	}
 
 	enum ir_arch arch = DEFAULT_BACKEND;
 
+	FILE *read_from = NULL;
+	char *read_from_name = NULL;
 	FILE *emit_to = NULL;
 
-	int argc2 = 2;
+	int argc2 = 1;
 	while(argc2 < argc) {
 		const char *arg = argv[argc2++];
 		if(strcmp(arg, "-o") == 0) {
@@ -56,15 +125,41 @@ int main(int argc, char *argv[])
 			}
 			continue;
 		}
+
+		if(strcmp(arg, "-d") == 0) {
+			debug = 1;
+			continue;
+		}
+
+		if(strcmp(arg, "--help") == 0 || strcmp(arg, "-?") == 0) {
+			help(argv[0]);
+			return 1;
+		}
+		if(strstr(arg, ".c")) {
+			if(!read_from) {
+				read_from = fopen(arg, "r");
+				read_from_name = (char *)arg;
+				ENSURE(read_from, "failed to open file '%s'", arg);
+			} else {
+				ENSURE(2 + 2 == 3, "TODO: Multiple file compliation");
+			}
+			continue;
+		}
+
 		ERROR("unknown argument '%s'", arg);
+	}
+
+	if(!read_from) {
+		ERROR("need an input file");
 	}
 
 	if(!emit_to) {
 		emit_to = stdout;
 	}
 
-	char *prog = memdup_extra(argv[1], strlen(argv[1]), strlen(argv[1]) + 1);
-	compile_setsrc(prog, NULL);
+	char *prog = file_reader(read_from);
+	fclose(read_from);
+	compile_setsrc(prog, read_from_name);
 
 	token_t *head = lex_do(prog);
 	token_t *cur = head;

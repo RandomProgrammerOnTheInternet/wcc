@@ -8,7 +8,6 @@ tst.*
 testing
 .cache
 compile_commands.json
-test
 oldsrc
 .clang-format
 prog

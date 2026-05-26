@@ -11,6 +11,20 @@ static long counter(int reset)
 	return counter++;
 }
 
+int ir_inst_is_term(enum ins_type type)
+{
+	return type == IR_INST_BR || type == IR_INST_RET || type == IR_INST_JMP ||
+		   type == IR_INST_BREQ || type == IR_INST_BRNE ||
+		   type == IR_INST_BRLT || type == IR_INST_BRLE;
+}
+
+/* is this instruction a comparision? */
+int ir_inst_is_cmp(enum ins_type type)
+{
+	return type == IR_INST_EQ || type == IR_INST_NE || type == IR_INST_LE ||
+		   type == IR_INST_LT;
+}
+
 /* reset register counter */
 void reg_reset_counter(void)
 {
@@ -29,6 +43,8 @@ reg_t *reg_make(void)
 	reg->def = 0;
 	reg->last_use = 0;
 	reg->vr = counter(0);
+	reg->insty = IR_INST_NOP;
+	reg->lhs = reg->rhs = NULL;
 
 	return reg;
 }
@@ -108,6 +124,23 @@ DEF_INS(ret, RET, NULL, r1, NULL, 0, reg_t *r1);
 #undef MAKE
 
 /* the odd one(s) out */
+
+#define GEN_BRCMP(c, name)                                                  \
+	ir_inst_t *ins_##name(reg_t *r1, reg_t *r2, ir_blk_t *fb, ir_blk_t *tb) \
+	{                                                                       \
+		ir_inst_t *ins = ir_inst_make(c, NULL, r1, r2, 0);                  \
+		ins->false_blk = fb;                                                \
+		ins->true_blk = tb;                                                 \
+		return ins;                                                         \
+	}
+
+GEN_BRCMP(IR_INST_BREQ, breq);
+GEN_BRCMP(IR_INST_BRNE, brne);
+GEN_BRCMP(IR_INST_BRLT, brlt);
+GEN_BRCMP(IR_INST_BRLE, brle);
+
+#undef GEN_BRCMP
+
 ir_inst_t *ins_br(reg_t *on, ir_blk_t *falseb, ir_blk_t *trueb)
 {
 	ir_inst_t *ins = ir_inst_make(IR_INST_BR, NULL, on, NULL, 0);
@@ -259,6 +292,18 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 	case IR_INST_BR:
 		out("br %%r%ld, BB%ld, BB%ld", r1, ins->true_blk->num,
 			ins->false_blk->num);
+	case IR_INST_BREQ:
+		out("br.eq %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
+			ins->false_blk->num);
+	case IR_INST_BRNE:
+		out("br.ne %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
+			ins->false_blk->num);
+	case IR_INST_BRLT:
+		out("br.lt %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
+			ins->false_blk->num);
+	case IR_INST_BRLE:
+		out("br.le %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
+			ins->false_blk->num);
 	case IR_INST_RET:
 		out("ret %%r%ld", r1);
 	case IR_INST_LEAS:
@@ -338,16 +383,45 @@ static int arm_reg[5] = { 8, 9, 10, 11, 12 };
 static const char *x64_reg[5] = { "rdi", "rsi", "rdx", "rcx", "r8" };
 
 static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
-									  size_t i)
+									  long last_i)
 {
 	/* todo: smarter basic block placement */
-	UNUSED(i);
 	fprintf(f, "_BB%ld:\n", blk->num);
 	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
 		int r0 = ins->r0 ? arm_reg[ins->r0->rr] : -1;
 		int r1 = ins->r1 ? arm_reg[ins->r1->rr] : -1;
 		int r2 = ins->r2 ? arm_reg[ins->r2->rr] : -1;
 		switch(ins->type) {
+		case IR_INST_BREQ:
+		case IR_INST_BRNE:
+		case IR_INST_BRLT:
+		case IR_INST_BRLE:
+			fprintf(f, "\tcmp x%d, x%d\n", r1, r2);
+			switch(ins->type) {
+			default:
+				break;
+			/* remember: this is for false condition
+			 * so invert the specified condition */
+			case IR_INST_BREQ:
+				fprintf(f, "\tbne _BB%ld\n", ins->false_blk->num);
+				break;
+			case IR_INST_BRNE:
+				fprintf(f, "\tbeq _BB%ld\n", ins->false_blk->num);
+				break;
+			case IR_INST_BRLT:
+				fprintf(f, "\tbge _BB%ld\n", ins->false_blk->num);
+				break;
+			case IR_INST_BRLE:
+				fprintf(f, "\tbgt _BB%ld\n", ins->false_blk->num);
+				break;
+			}
+			if(ins->true_blk->num == blk->num + 1) {
+				/* fallthrough */
+				break;
+			}
+			/* dang it */
+			fprintf(f, "\tb _BB%ld\n", ins->true_blk->num);
+			break;
 		case IR_INST_BR:
 			fprintf(f, "\ttst x%d, x%d\n", r1, r1);
 			fprintf(f, "\tbeq _BB%ld\n", ins->false_blk->num);
@@ -372,7 +446,9 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			if(r1 != -1) {
 				fprintf(f, "\tmov x0, x%d\n", r1);
 			}
-			fprintf(f, "\tb %s_ret\n", fn->name);
+			if(blk->num != last_i) {
+				fprintf(f, "\tb %s_ret\n", fn->name);
+			}
 			break;
 		case IR_INST_NOP:
 			break;
@@ -444,8 +520,7 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			break;
 		}
 
-		if(ins->type == IR_INST_BR || ins->type == IR_INST_JMP ||
-		   ins->type == IR_INST_RET) {
+		if(ir_inst_is_term(ins->type)) {
 			break;
 		}
 	}
@@ -465,8 +540,9 @@ static void ir_func_emit_aarch64_apple(FILE *f, ir_func_t *fun)
 		fprintf(f, "\tsub sp, sp, #%zu\n", alignd);
 	}
 
-	for(size_t i = 0; i < list_len(fun->blocks); i++) {
-		ir_emit_blk_aarch64_apple(f, fun, fun->blocks[i], i);
+	size_t len = list_len(fun->blocks);
+	for(size_t i = 0; i < len; i++) {
+		ir_emit_blk_aarch64_apple(f, fun, fun->blocks[i], len - 1);
 	}
 
 	/* leave stack frame */
@@ -487,15 +563,42 @@ static int64_t i64abs(int64_t v)
 }
 
 static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
-								 size_t i)
+								 long last_i)
 {
-	UNUSED(i);
 	fprintf(f, ".BB%ld:\n", blk->num);
 	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
 		const char *r0 = ins->r0 ? x64_reg[ins->r0->rr] : NULL;
 		const char *r1 = ins->r1 ? x64_reg[ins->r1->rr] : NULL;
 		const char *r2 = ins->r2 ? x64_reg[ins->r2->rr] : NULL;
 		switch(ins->type) {
+		case IR_INST_BREQ:
+		case IR_INST_BRNE:
+		case IR_INST_BRLT:
+		case IR_INST_BRLE:
+			fprintf(f, "\tcmp %s, %s\n", r1, r2);
+			switch(ins->type) {
+			default:
+				break;
+			case IR_INST_BREQ:
+				fprintf(f, "\tjne .BB%ld\n", ins->false_blk->num);
+				break;
+			case IR_INST_BRNE:
+				fprintf(f, "\tje .BB%ld\n", ins->false_blk->num);
+				break;
+			case IR_INST_BRLT:
+				fprintf(f, "\tjge .BB%ld\n", ins->false_blk->num);
+				break;
+			case IR_INST_BRLE:
+				fprintf(f, "\tjg .BB%ld\n", ins->false_blk->num);
+				break;
+			}
+			if(ins->true_blk->num == blk->num + 1) {
+				/* fallthrough */
+				break;
+			}
+			/* dang it */
+			fprintf(f, "\tjmp .BB%ld\n", ins->true_blk->num);
+			break;
 		case IR_INST_BR:
 			fprintf(f, "\ttest %s, %s\n", r1, r1);
 			fprintf(f, "\tje .BB%ld\n", ins->false_blk->num);
@@ -520,7 +623,9 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			if(r1 != NULL) {
 				fprintf(f, "\tmov rax, %s\n", r1);
 			}
-			fprintf(f, "\tjmp %s_ret\n", fn->name);
+			if(blk->num != last_i) {
+				fprintf(f, "\tjmp %s_ret\n", fn->name);
+			}
 			break;
 		case IR_INST_NOP:
 			break;
@@ -603,8 +708,7 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			break;
 		}
 
-		if(ins->type == IR_INST_BR || ins->type == IR_INST_JMP ||
-		   ins->type == IR_INST_RET) {
+		if(ir_inst_is_term(ins->type)) {
 			break;
 		}
 	}
@@ -642,6 +746,11 @@ static void ir_stackopt(ir_func_t *func)
 			}
 			if(ins->r2 && ins->r2->stack_loc && ins->type != IR_INST_LOAD &&
 			   ins->type != IR_INST_STORE) {
+				ins->r2->stack_loc = false;
+			}
+
+			/* edge case */
+			if(ins->r2 && ins->r2->stack_loc && ins->type == IR_INST_STORE) {
 				ins->r2->stack_loc = false;
 			}
 		}
@@ -683,6 +792,91 @@ static void ir_stackopt(ir_func_t *func)
 	return;
 }
 
+static int cmp_to_br(enum ins_type ins)
+{
+	if(!ir_inst_is_cmp(ins)) {
+		return IR_INST_NOP;
+	}
+	switch(ins) {
+	case IR_INST_EQ:
+		return IR_INST_BREQ;
+	case IR_INST_NE:
+		return IR_INST_BRNE;
+	case IR_INST_LT:
+		return IR_INST_BRLT;
+	case IR_INST_LE:
+		return IR_INST_BRLE;
+	default:
+		return IR_INST_NOP;
+	}
+}
+
+/* optimize
+ * %cond = cmp.XX %r1, %r2
+ * ...
+ * br %cond, T, F
+ * ->
+ * br.XX %r1, %r2, T, F
+ */
+static void ir_branchopt(ir_func_t *func)
+{
+	/* scan comparisions */
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(ir_inst_is_cmp(ins->type)) {
+				ins->r0->insty = ins->type;
+				ins->r0->lhs = ins->r1;
+				ins->r0->rhs = ins->r2;
+				continue;
+			}
+
+			/* if written to discard this opt */
+			if(ins->r0 && ir_inst_is_cmp(ins->r0->insty)) {
+				ins->r0->insty = IR_INST_NOP;
+				ins->r0->lhs = ins->r0->rhs = NULL;
+				continue;
+			}
+
+			/* if read from any ins except `br` discard this opt */
+			if(ins->r1 && ir_inst_is_cmp(ins->r1->insty) &&
+			   ins->type != IR_INST_BR) {
+				ins->r1->insty = IR_INST_NOP;
+				ins->r1->lhs = ins->r1->rhs = NULL;
+				continue;
+			}
+
+			if(ins->r2 && ir_inst_is_cmp(ins->r2->insty) &&
+			   ins->type != IR_INST_BR) {
+				ins->r2->insty = IR_INST_NOP;
+				ins->r2->lhs = ins->r2->rhs = NULL;
+				continue;
+			}
+		}
+	}
+
+	/* eliminate comparisions that have been merged with branches */
+
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(ir_inst_is_cmp(ins->type) && ins->r0->insty == ins->type) {
+				ins->type = IR_INST_NOP;
+				ins->r0 = ins->r1 = ins->r2 = NULL;
+				continue;
+			}
+
+			if(ins->type == IR_INST_BR && ir_inst_is_cmp(ins->r1->insty)) {
+				reg_t *cmp = ins->r1;
+				ins->type = cmp_to_br(cmp->insty);
+				ins->r1 = cmp->lhs;
+				ins->r2 = cmp->rhs;
+			}
+		}
+	}
+	return;
+}
+
 /* removes nops */
 static void ir_nopremover(ir_func_t *fun)
 {
@@ -712,11 +906,21 @@ static void ir_nopremover(ir_func_t *fun)
 	}
 }
 
+extern int debug;
+
 /* optimizes a function */
 void ir_opt(ir_func_t *func)
 {
+	if(debug) {
+		ir_dump(func, 'v');
+	}
 	ir_stackopt(func);
 	ir_nopremover(func);
+	ir_branchopt(func);
+	ir_nopremover(func);
+	if(debug) {
+		ir_dump(func, 'v');
+	}
 	return;
 }
 
@@ -744,8 +948,9 @@ static void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 		fprintf(f, "\tsub rsp, %zu\n", alignd);
 	}
 
-	for(size_t i = 0; i < list_len(fun->blocks); i++) {
-		ir_emit_blk_x64_sysv(f, fun, fun->blocks[i], i);
+	size_t len = list_len(fun->blocks);
+	for(size_t i = 0; i < len; i++) {
+		ir_emit_blk_x64_sysv(f, fun, fun->blocks[i], len - 1);
 	}
 
 	/* leave stack frame */

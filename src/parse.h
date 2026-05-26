@@ -9,7 +9,7 @@
 /* current grammar:
 
 prim = "(" expr ")" | ident | num
-unary = ("+" | "-") unary
+unary = ("+" | "-" | "*" | "&") unary
 		| primary
 mul = unary ("*" unary | "/" unary)*
 add = mul ("+" mul | "-" mul)*
@@ -50,6 +50,8 @@ enum node_kind {
 	NODE_IF, /* if */
 	NODE_WHILE, /* while */
 	NODE_FOR, /* for */
+	NODE_ADDR, /* & */
+	NODE_DEREF, /* * */
 };
 
 /* a variable */
@@ -66,6 +68,8 @@ typedef struct node {
 	struct node *lhs, *rhs;
 	struct node *next; /* next tree */
 	struct node *body; /* inner block */
+
+	token_t *tok; /* first token of this node */
 
 	/* if condition */
 	struct node *cond;
@@ -88,7 +92,7 @@ typedef struct func {
 } func_t;
 
 /* makes a node */
-node_t *node_make(enum node_kind kind);
+node_t *node_make(enum node_kind kind, token_t *tok);
 
 /* deallocates a node */
 void node_delete(node_t *node);
@@ -99,16 +103,16 @@ void node_delete_all(node_t *root);
 /* -- node types -- */
 
 /* make a binop node */
-node_t *node_bin(enum node_kind kind, node_t *lhs, node_t *rhs);
+node_t *node_bin(enum node_kind kind, node_t *lhs, node_t *rhs, token_t *tok);
 
 /* make a unaryop node */
-node_t *node_unary(enum node_kind kind, node_t *lhs);
+node_t *node_unary(enum node_kind kind, node_t *lhs, token_t *tok);
 
 /* make a number node */
-node_t *node_num(uint64_t val);
+node_t *node_num(uint64_t val, token_t *tok);
 
 /* make a variable node */
-node_t *node_var(obj_t *var);
+node_t *node_var(obj_t *var, token_t *tok);
 
 /* -- variables/objects -- */
 
