@@ -360,7 +360,7 @@ static node_t *parse_prim(token_t *tok, token_t **rest)
 	if(tok->kind == TOK_IDENT) {
 		obj_t *obj = find_var(tok);
 		if(!obj) {
-			obj = obj_make(strndup(tok->loc, tok->len));
+			obj = obj_make(memdup_extra(tok->loc, tok->len, tok->len + 1));
 		}
 		node_t *node = node_var(obj);
 		*rest = tok->next;
