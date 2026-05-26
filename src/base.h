@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdarg.h>
+#include <inttypes.h>
 
 // clang-format off
 #define you_know_you_can_theoretically_name_this_whatever_you_want_so_im_gonna_test_that_so_this_is_the_identity_macro_basically_and_it_is_used_for_stringifying_expressions_in_a_macro(x) x
