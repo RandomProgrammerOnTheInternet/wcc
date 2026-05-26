@@ -21,14 +21,22 @@ void node_delete(node_t *node)
 /* deallocates a whole node AST tree */
 void node_delete_all(node_t *root)
 {
-	if(root->lhs) {
-		node_delete_all(root->lhs);
+#define del(x)              \
+	if(x) {                 \
+		node_delete_all(x); \
 	}
 
-	if(root->rhs) {
-		node_delete_all(root->rhs);
-	}
+	del(root->lhs);
+	del(root->rhs);
+	del(root->next);
+	del(root->body);
+	del(root->cond);
+	del(root->then);
+	del(root->elze);
+	del(root->init);
+	del(root->inc);
 
+#undef del
 	node_delete(root);
 	return;
 }
