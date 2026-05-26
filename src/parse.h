@@ -17,8 +17,14 @@ relational = add ("<" add | "<=" add | ">" add | ">=" add)*
 equality = relational ("==" relational | "!=" relational)*
 assign = equality ("=" assign)?
 expr = assign
-expr-stmt = expr ";"
-stmt = expr-stmt
+expr-stmt = expr? ";"
+stmt = "return" expr ";"
+      | "if" "(" expr ")" stmt ("else" stmt)?
+      | "for" "(" expr-stmt expr? ";" expr? ")" stmt
+      | "while" "(" expr ")" stmt
+	  | "{" compound-stmt
+	  | expr-stmt
+compound-stmt = stmt* "}"
 prog = stmt*
 
 */
@@ -39,7 +45,19 @@ enum node_kind {
 	NODE_LT, /* less than < */
 	NODE_LE, /* less than or equal to <= */
 	NODE_EXPR_STMT, /* expression statement */
+	NODE_RET, /* return stmt */
+	NODE_BLOCK, /* block stmt */
+	NODE_IF, /* if */
+	NODE_WHILE, /* while */
+	NODE_FOR, /* for */
 };
+
+/* a variable */
+typedef struct obj {
+	struct obj *next; /* linked list */
+	long off; /* place on stack frame */
+	char *name; /* name of variable */
+} obj_t;
 
 /* an AST node */
 typedef struct node {
@@ -47,9 +65,27 @@ typedef struct node {
 	/* left-, right-hand side of the tree */
 	struct node *lhs, *rhs;
 	struct node *next; /* next tree */
-	char var; /* for NODE_VAR */
+	struct node *body; /* inner block */
+
+	/* if condition */
+	struct node *cond;
+	struct node *then;
+	struct node *elze;
+
+	/* for */
+	struct node *init;
+	struct node *inc;
+
+	obj_t *var; /* for NODE_VAR */
 	uint64_t num; /* for NODE_NUM */
 } node_t;
+
+/* a function */
+typedef struct func {
+	node_t *body; /* body of the function */
+	obj_t *vars; /* variables of the function */
+	size_t stack_size; /* total size of this function's stack frame */
+} func_t;
 
 /* makes a node */
 node_t *node_make(enum node_kind kind);
@@ -72,9 +108,20 @@ node_t *node_unary(enum node_kind kind, node_t *lhs);
 node_t *node_num(uint64_t val);
 
 /* make a variable node */
-node_t *node_var(char name);
+node_t *node_var(obj_t *var);
+
+/* -- variables/objects -- */
+
+/* create an object with a name `name` */
+obj_t *obj_make(char *name);
+
+/* delete an object */
+void obj_delete(obj_t *obj);
+
+/* deletes all objects in linked list */
+void obj_delete_all(obj_t *root);
 
 /* does the parsing */
-node_t *parse_do(token_t *toks);
+func_t *parse_do(token_t *toks);
 
 #endif /* PARSE_H_ */

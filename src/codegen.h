@@ -4,6 +4,7 @@
 #include "base.h"
 #include "lex.h"
 #include "parse.h"
+#include "ir.h"
 
 /* loads an immediate into register `reg` */
 void codegen_load_imm(FILE *f, int reg, uint64_t imm);
@@ -26,10 +27,7 @@ void codegen_enter(FILE *f, size_t stack_need);
 /* leaves a function stack frame */
 void codegen_leave(FILE *f);
 
-/* generates code for an expression */
-void codegen_expr(FILE *f, node_t *node);
-
-/* generates code for a program */
-void codegen_do(FILE *f, node_t *node);
+/* generates code for a function */
+void codegen_func(FILE *f, func_t *fn);
 
 #endif /* CODEGEN_H_ */

@@ -37,16 +37,22 @@ int main(int argc, char *argv[])
 
 	token_t *head = lex_do(prog);
 	token_t *cur = head;
-	node_t *prog_node = parse_do(cur);
-	codegen_do(emit_to, prog_node);
+	func_t *prog_node = parse_do(cur);
+	codegen_func(emit_to, prog_node);
 
 	free(prog);
 
 	fclose(emit_to);
 
-	// todo, custom arena allocator support
-	// token_delete_all(head);
-	// node_delete_all(prog_node);
+	token_delete_all(head);
+	node_t *curnode = prog_node->body;
+	node_t *nxtnode = NULL;
+	while(curnode) {
+		nxtnode = curnode->next;
+		node_delete_all(curnode);
+		curnode = nxtnode;
+	}
+	obj_delete_all(prog_node->vars);
 
 	scr_cleanup();
 	return 0;

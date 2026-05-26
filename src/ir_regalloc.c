@@ -1,0 +1,364 @@
+#include "ir.h"
+#include "parse.h"
+#include <limits.h>
+#include "ir_regalloc.h"
+
+/* simple linear search */
+static int has_reg(LIST(reg_t *) list, reg_t *target)
+{
+	for(size_t i = 0; i < list_len(list); i++) {
+		if(list[i] == target) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static ir_inst_t *find_last_or_flow_ins(ir_inst_t *root)
+{
+	ir_inst_t *ret = root;
+	for(; ret; ret = ret->next) {
+		if(ret->type == IR_INST_RET || ret->type == IR_INST_BR ||
+		   ret->type == IR_INST_JMP) {
+			return ret;
+		}
+	}
+	ASSERT(ret->type == IR_INST_RET || ret->type == IR_INST_BR ||
+			   ret->type == IR_INST_JMP,
+		   "IR is not constructed properly");
+	return NULL;
+}
+
+/* fill out all the defined registers in this block */
+static void fill_defs(ir_blk_t *blk)
+{
+	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+		if(!ins->r0) {
+			continue;
+		}
+		if(!has_reg(blk->regs_def, ins->r0)) {
+			list_append(blk->regs_def, ins->r0);
+		}
+	}
+	return;
+}
+
+/* fill out successors and predecessors (and also if block returns) */
+static void fill_succ_pred(ir_blk_t *blk)
+{
+	if(!blk || blk->succ[0] || blk->succ[1] || blk->returns) {
+		return;
+	}
+
+	/* find the last inst. */
+	ir_inst_t *flow = find_last_or_flow_ins(blk->insts);
+	int i = 0;
+	if(flow->type == IR_INST_RET) {
+		blk->returns = true;
+	}
+
+	if(flow->false_blk) {
+		/* add successor, predecessor */
+		blk->succ[i++] = flow->false_blk;
+		list_append(flow->false_blk->pred, blk);
+		fill_succ_pred(flow->false_blk);
+	}
+
+	if(flow->true_blk) {
+		/* add successor, predecessor */
+		blk->succ[i++] = flow->true_blk;
+		list_append(flow->true_blk->pred, blk);
+		fill_succ_pred(flow->true_blk);
+	}
+
+	return;
+}
+
+static void fill_ins_outs_reg(ir_blk_t *blk, reg_t *reg)
+{
+	if(!blk || !reg) {
+		return;
+	}
+
+	/* want to make sure it's not a defined reg */
+	if(has_reg(blk->regs_def, reg)) {
+		return;
+	}
+
+	/* its an input reg */
+	if(!has_reg(blk->regs_in, reg)) {
+		list_append(blk->regs_in, reg);
+	} else {
+		return;
+	}
+
+	/* to the predeccesors it's also an output reg: add it there */
+	for(size_t i = 0; i < list_len(blk->pred); i++) {
+		if(has_reg(blk->pred[i]->regs_def, reg) &&
+		   !has_reg(blk->pred[i]->regs_out, reg)) {
+			list_append(blk->pred[i]->regs_out, reg);
+			fill_ins_outs_reg(blk->pred[i], reg);
+		}
+	}
+
+	return;
+}
+
+/* fill the input & output registers of block */
+static void fill_ins_outs(ir_blk_t *blk)
+{
+	for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+		/* r0 is never an in/out reg because it is generated in the block. */
+		if(inst->r1)
+			fill_ins_outs_reg(blk, inst->r1);
+		if(inst->r2)
+			fill_ins_outs_reg(blk, inst->r2);
+		;
+	}
+}
+
+void ir_blk_reguse(ir_func_t *fun)
+{
+	size_t block_amount = list_len(fun->blocks);
+	fill_succ_pred(fun->blocks[0]);
+	for(size_t i = 0; i < block_amount; i++) {
+		fill_defs(fun->blocks[i]);
+	}
+	for(size_t i = 0; i < block_amount; i++) {
+		fill_ins_outs(fun->blocks[i]);
+	}
+	return;
+}
+
+/* needs ir_blk_reguse; defines the input registers to be zero for the entry block */
+void ir_blk_fixup_entry(ir_func_t *fun)
+{
+	if(list_len(fun->blocks) == 0) {
+		return;
+	}
+	ir_blk_t *entry = fun->blocks[0];
+	ir_inst_t *head = entry->insts;
+	ir_inst_t *pre;
+
+	for(size_t i = 0; i < list_len(entry->regs_in); i++) {
+		reg_t *reg = entry->regs_in[i];
+		pre = ir_inst_make(IR_INST_IMM, reg, NULL, NULL, 0);
+		pre->next = head;
+		head = pre;
+	}
+
+	entry->insts = head;
+
+	/* recompute defs */
+	fill_defs(entry);
+
+	return;
+}
+
+/* assumes the register is either r1 or r2 */
+static void reg_update_counter(reg_t *reg, long ins_counter)
+{
+	if(!reg)
+		return;
+	if(reg->last_use < ins_counter) {
+		reg->last_use = ins_counter;
+	}
+	return;
+}
+
+/* calculates register defs & last use for all blocks in `fun` */
+LIST(reg_t *) ir_blk_reglive(ir_func_t *fun)
+{
+	LIST(reg_t *) allocated = list_make(reg_t *);
+	/* the algorithm here is quite simple. basically,
+	 * we assume the blocks are layed out in order,
+	 * and then for each instruction we increment a counter
+	 * and then that is the "Program Counter". We assign
+	 * register definitions & last uses based on that number.
+	 * We also do these for the output registers.
+	 * This will be used for the eventual register allocator.
+	 */
+
+	/* instruction counter, starts at 1 because 0 is undef'd */
+	long ins_count = 1;
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			reg_update_counter(ins->r0, ins_count);
+			if(ins->r0 && ins->r0->def == 0) {
+				ins->r0->def = ins_count;
+				list_append(allocated, ins->r0);
+			}
+			reg_update_counter(ins->r1, ins_count);
+			reg_update_counter(ins->r2, ins_count);
+			ins_count++;
+		}
+		for(size_t j = 0; j < list_len(blk->regs_out); j++) {
+			reg_update_counter(blk->regs_out[j], ins_count);
+		}
+	}
+	return allocated;
+}
+
+static int spill_register(reg_t **regs, int amount)
+{
+	/* choose the one with the last last use */
+	int reg = 0;
+	for(size_t i = 0; i < (size_t)amount; i++) {
+		if(regs[reg]->last_use < regs[i]->last_use) {
+			reg = i;
+		}
+	}
+	return reg;
+}
+
+/* insert a spilled load before `ins` for r1 */
+static void rewrite_load_spill_r1(ir_inst_t *ins_prev, ir_inst_t *ins)
+{
+	ASSERT(ins->r1->spilld, "tried to spill a non-spilled register");
+	ir_inst_t *inst =
+		ir_inst_make(IR_INST_LOADSS, ins->r1, NULL, NULL, ins->r1->off);
+	ins_prev->next = inst;
+	inst->next = ins;
+	return;
+}
+
+/* insert a spilled load before `ins` for r2 */
+static void rewrite_load_spill_r2(ir_inst_t *ins_prev, ir_inst_t *ins)
+{
+	ASSERT(ins->r2->spilld, "tried to spill a non-spilled register");
+	ir_inst_t *inst =
+		ir_inst_make(IR_INST_LOADSS, ins->r2, NULL, NULL, ins->r2->off);
+	ins_prev->next = inst;
+	inst->next = ins;
+	return;
+}
+
+/* insert a spilled store after `ins` */
+static void rewrite_store_spill(ir_inst_t *ins)
+{
+	ASSERT(ins->r0->spilld, "tried to spill a non-spilled register");
+	ir_inst_t *inst =
+		ir_inst_make(IR_INST_STORESS, NULL, ins->r0, NULL, ins->r0->off);
+	ir_inst_t *nxt = ins->next;
+	ins->next = inst;
+	inst->next = nxt;
+	return;
+}
+
+/* spill registers used in `ins` if needed */
+static void rewrite_ins(ir_inst_t *ins_prev, ir_inst_t *ins)
+{
+	if(ins->type == IR_INST_LOADSS || ins->type == IR_INST_STORESS) {
+		return;
+	}
+	if(ins->r0 && ins->r0->spilld) {
+		rewrite_store_spill(ins);
+	}
+
+	if(ins->r1 && ins->r1->spilld) {
+		rewrite_load_spill_r1(ins_prev, ins);
+		ins_prev = ins->next;
+	}
+
+	if(ins->r2 && ins->r2->spilld) {
+		rewrite_load_spill_r2(ins_prev, ins);
+		ins_prev = ins->next;
+	}
+
+	return;
+}
+
+/* spill the needed registers to spill */
+void ir_regalloc_spill(ir_func_t *fun, LIST(reg_t *) allocated)
+{
+	/* now, calculate the spill offsets */
+	long off = -(long)(fun->stack_needed);
+	for(size_t i = 0; i < list_len(allocated); i++) {
+		if(!allocated[i]->spilld) {
+			continue;
+		}
+		reg_t *r = allocated[i];
+		off -= 8;
+		fun->stack_needed += 8;
+		r->off = off;
+	}
+
+	/* rewriting */
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		ir_inst_t *nop = ir_inst_make(IR_INST_NOP, NULL, NULL, NULL, 0);
+		nop->next = blk->insts;
+		blk->insts = nop;
+
+		ir_inst_t *prev = blk->insts;
+		ir_inst_t *cur = blk->insts->next;
+		for(; cur; cur = cur->next) {
+			rewrite_ins(prev, cur);
+			prev = cur;
+
+			if(cur->type == IR_INST_BR || cur->type == IR_INST_RET ||
+			   cur->type == IR_INST_JMP) {
+				break;
+			}
+		}
+
+		blk->insts = blk->insts->next;
+		ir_inst_delete(nop);
+	}
+}
+
+/* do the register allocation on `fun` */
+void ir_regalloc(LIST(reg_t *) allocated, int amount_)
+{
+	size_t amount = amount_ - 1; /* reserve 1 register for spilling */
+
+	/* register allocation: simple linear scan */
+
+	/* real registers */
+	reg_t **regs = zcalloc(amount, sizeof(reg_t *));
+
+	for(size_t i = 0; i < list_len(allocated); i++) {
+		reg_t *r = allocated[i];
+
+		bool need_spill = true;
+		/* find a register */
+		for(size_t j = 0; j < amount; j++) {
+			if(regs[j] && regs[j]->last_use > r->def) {
+				continue;
+			}
+
+			need_spill = false;
+			r->rr = j;
+			r->spilld = false;
+			regs[j] = r;
+			break;
+		}
+
+		if(!need_spill)
+			continue;
+
+		/* spill a register */
+		regs[amount] = r;
+		int spill = spill_register(regs, amount + 1);
+		r->rr = spill;
+		regs[spill]->spilld = true;
+		regs[spill]->rr = amount;
+	}
+
+	free(regs);
+	return;
+}
+
+/* do register allocation all in one */
+void ir_finalize(ir_func_t *fun, int amount)
+{
+	ir_blk_reguse(fun);
+	ir_blk_fixup_entry(fun);
+	LIST(reg_t *) allocated = ir_blk_reglive(fun);
+	ir_regalloc(allocated, amount);
+	ir_regalloc_spill(fun, allocated);
+
+	list_delete(allocated);
+	return;
+}

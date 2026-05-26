@@ -8,6 +8,7 @@
 /* -- token -- */
 
 enum token_kind {
+	TOK_KEYWORD, /* keywords */
 	TOK_PUNCT, /* punctuators + - * / */
 	TOK_IDENT, /* identifiers az */
 	TOK_NUM, /* numbers 1234 */
@@ -49,7 +50,10 @@ int iswhitespace(int c);
 /* is this character a punctuator? */
 int islexpunct(int c);
 
-/* is this character an indentifier? */
+/* is this (first) character an identifier? */
+int isidentfirst(int c);
+
+/* is this (other) character an identifier? */
 int isident(int c);
 
 /* does the lexing */

@@ -3,7 +3,7 @@
 /* makes a token */
 token_t *token_make(enum token_kind kind, char *start, char *end)
 {
-	token_t *tok = scr_alloc(sizeof(token_t));
+	token_t *tok = zalloc(sizeof(token_t));
 	tok->kind = kind;
 	tok->loc = start;
 	tok->len = end - start;
@@ -60,13 +60,20 @@ uint64_t token_num(token_t *tok)
 int islexpunct(int c)
 {
 	return c == '+' || c == '-' || c == '*' || c == '/' || c == ')' ||
-		   c == '(' || c == '>' || c == '<' || c == ';' || c == '=';
+		   c == '(' || c == '>' || c == '<' || c == ';' || c == '=' ||
+		   c == '{' || c == '}';
 }
 
-/* is this character an identifier? */
+/* is this (first) character an identifier? */
+int isidentfirst(int c)
+{
+	return isident(c) || (c >= '0' && c <= '9');
+}
+
+/* is this (other) character an identifier? */
 int isident(int c)
 {
-	return c >= 'a' && c <= 'z';
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
 }
 
 /* returns the length of a possible punctuator */
@@ -90,17 +97,41 @@ int iswhitespace(int c)
 	return c == '\t' || c == ' ' || c == '\r' || c == '\n';
 }
 
+/* is this a keyword? */
+static int iskeyword(char *prog, size_t left)
+{
+	static const char *keywords[] = { "return", "if", "else", "for", "while" };
+	static const size_t keywords_count = sizeof(keywords) / sizeof(keywords[0]);
+
+	for(size_t i = 0; i < keywords_count; i++) {
+		const char *kw = keywords[i];
+		size_t len = strlen(kw);
+		if(strlen(kw) >= left)
+			continue;
+		if(strncmp(prog, kw, len) == 0) {
+			return len;
+		}
+	}
+
+	return 0;
+}
+
 /* does the lexing */
 token_t *lex_do(char *prog)
 {
+	char *prog_start = prog;
 	token_t start;
 	token_t *tok = &start;
+
+	size_t len = strlen(prog);
 
 	while(*prog) {
 		/* skip over whitespace */
 		while(iswhitespace(*prog)) {
 			prog++;
 		}
+
+		size_t left = len - (prog - prog_start);
 
 		/* tokenize number */
 		if(isdigit(*prog)) {
@@ -113,10 +144,24 @@ token_t *lex_do(char *prog)
 			continue;
 		}
 
+		/* tokenize keywords */
+		size_t kw_len = iskeyword(prog, left);
+		if(kw_len) {
+			token_t *kw = token_make(TOK_KEYWORD, prog, prog + kw_len);
+			prog += kw_len;
+			tok->next = kw;
+			tok = tok->next;
+			continue;
+		}
+
 		/* tokenize identifiers */
-		if(isident(*prog)) {
-			token_t *ident = token_make(TOK_IDENT, prog, prog + 1);
-			prog++;
+		if(isidentfirst(*prog)) {
+			char *start = prog;
+			while(isident(*prog)) {
+				prog++;
+			}
+
+			token_t *ident = token_make(TOK_IDENT, start, prog);
 			tok->next = ident;
 			tok = tok->next;
 			continue;

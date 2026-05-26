@@ -1,12 +1,73 @@
 #include "codegen.h"
 #include "parse.h"
 #include <stdlib.h>
+#include "ir.h"
+#include "ir_regalloc.h"
 
 #define load_imm codegen_load_imm
 #define push codegen_push
 #define push2 codegen_push2
 #define pop codegen_pop
 #define pop2 codegen_pop2
+
+static ir_func_t *fun;
+static ir_blk_t *outblk;
+
+#define MAKE(ty, r0, r1, r2, imm) ir_inst_make(IR_INST_##ty, r0, r1, r2, imm)
+
+#define INSNAME(name) emit_##name
+
+#define DEF_INS(name, name2, r0, r1, r2, imm, ...)     \
+	static UNUSEDA void INSNAME(name)(__VA_ARGS__)     \
+	{                                                  \
+		ir_inst_t *ins = MAKE(name2, r0, r1, r2, imm); \
+		ir_blk_add(outblk, ins);                       \
+		return;                                        \
+	}
+
+DEF_INS(nop, NOP, NULL, NULL, NULL, 0, void);
+DEF_INS(mov, MOV, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
+DEF_INS(imm, IMM, r0, NULL, NULL, imm, reg_t *r0, uint64_t imm);
+DEF_INS(add, ADD, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(sub, SUB, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(mul, MUL, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(div, DIV, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(eq, EQ, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(ne, NE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(lt, LT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(le, LE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(neg, NEG, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
+DEF_INS(leas, LEAS, r0, NULL, NULL, imm, reg_t *r0, long imm);
+DEF_INS(load, LOAD, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
+DEF_INS(loads, LOADS, r0, NULL, NULL, imm, reg_t *r0, long imm);
+DEF_INS(store, STORE, NULL, r0, r1, 0, reg_t *r0, reg_t *r1);
+DEF_INS(stores, STORES, r0, NULL, NULL, imm, reg_t *r0, long imm);
+DEF_INS(ret, RET, NULL, r1, NULL, 0, reg_t *r1);
+
+#undef DEF_INS
+#undef INSNAME
+#undef MAKE
+
+/* odd one(s) out */
+static void emit_br(reg_t *on, ir_blk_t *trueblk, ir_blk_t *falseblk)
+{
+	ir_blk_add(outblk, ins_br(on, falseblk, trueblk));
+	return;
+}
+
+static void emit_jmp(ir_blk_t *blk)
+{
+	ir_blk_add(outblk, ins_jmp(blk));
+	return;
+}
+
+static ir_blk_t *emit_blk(void)
+{
+	ir_blk_t *blk = ir_blk_make(NULL);
+	blk->num = list_len(fun->blocks);
+	list_append(fun->blocks, blk);
+	return blk;
+}
 
 static void load_imm_lane(FILE *f, int reg, uint16_t i, uint16_t shift,
 						  int *keep)
@@ -44,13 +105,10 @@ void codegen_load_imm(FILE *f, int reg, uint64_t imm_)
 	return;
 }
 
-int balance = 0;
-
 /* pushes `reg` onto stack */
 void codegen_push(FILE *f, int reg)
 {
 	fprintf(f, "\tstr x%d, [sp, #-16]!\n", reg);
-	balance++;
 	return;
 }
 
@@ -58,7 +116,6 @@ void codegen_push(FILE *f, int reg)
 void codegen_pop(FILE *f, int reg)
 {
 	fprintf(f, "\tldr x%d, [sp], #16\n", reg);
-	balance--;
 	return;
 }
 
@@ -66,7 +123,6 @@ void codegen_pop(FILE *f, int reg)
 void codegen_push2(FILE *f, int reg1, int reg2)
 {
 	fprintf(f, "\tstp x%d, x%d, [sp, #-16]!\n", reg1, reg2);
-	balance += 2;
 	return;
 }
 
@@ -74,7 +130,6 @@ void codegen_push2(FILE *f, int reg1, int reg2)
 void codegen_pop2(FILE *f, int reg1, int reg2)
 {
 	fprintf(f, "\tldp x%d, x%d, [sp], #16\n", reg1, reg2);
-	balance -= 2;
 	return;
 }
 
@@ -86,6 +141,8 @@ void codegen_enter(FILE *f, size_t stack_need)
 	if(alignd) {
 		fprintf(f, "\tmov fp, sp\n");
 		fprintf(f, "\tsub sp, sp, #%zu\n", alignd);
+	} else {
+		fprintf(f, "\tmov fp, sp\n");
 	}
 	return;
 }
@@ -99,126 +156,231 @@ void codegen_leave(FILE *f)
 }
 
 /* calculates address of node `node` -- places it into register `reg` */
-static void calc_addr(FILE *f, node_t *node, int reg)
+static reg_t *calc_addr(node_t *node)
 {
 	if(node->kind == NODE_VAR) {
-		long id = node->var - 'a';
-		long placement = 8 * (id + 1);
-		fprintf(f, "\tsub x%d, fp, #%ld\n", reg, placement);
-		return;
+		long placement = -node->var->off;
+		reg_t *addr = reg_make();
+		emit_leas(addr, placement);
+		return addr;
 	}
 
 	ERROR("cannot calculate address of non-variable");
 
-	return;
+	return NULL;
 }
 
 /* generates code given AST tree */
-void codegen_expr(FILE *f, node_t *node)
+reg_t *codegen_expr(node_t *node)
 {
-	if(!node)
-		return;
+	if(!node) {
+		ERROR("null node passed");
+	}
 
 	/* special cases */
 	switch(node->kind) {
-	case NODE_NUM:
-		load_imm(f, 0, node->num);
-		return;
-	case NODE_NEG:
-		codegen_expr(f, node->lhs);
-		fprintf(f, "\tneg x0, x0\n");
-		return;
-	case NODE_VAR:
-		calc_addr(f, node, 0);
-		fprintf(f, "\tldr x0, [x0]\n");
-		return;
-	case NODE_ASSIGN:
-		calc_addr(f, node->lhs, 0);
-		push(f, 0);
-		codegen_expr(f, node->rhs);
-		pop(f, 1);
-		fprintf(f, "\tstr x0, [x1]\n");
-		return;
+	case NODE_NUM: {
+		reg_t *imm = reg_make();
+
+		emit_imm(imm, node->num);
+		return imm;
+	}
+	case NODE_NEG: {
+		reg_t *val = codegen_expr(node->lhs);
+		reg_t *neg = reg_make();
+		emit_neg(neg, val);
+		return neg;
+	};
+	case NODE_VAR: {
+		reg_t *addr = calc_addr(node);
+		reg_t *val = reg_make();
+		emit_load(val, addr);
+		return val;
+	};
+	case NODE_ASSIGN: {
+		reg_t *lval = calc_addr(node->lhs);
+		reg_t *rval = codegen_expr(node->rhs);
+		emit_store(lval, rval);
+		return rval;
+	};
 	default:
 		break;
 	}
 
-	codegen_expr(f, node->rhs);
-	push(f, 0);
-	codegen_expr(f, node->lhs);
-	pop(f, 1);
+	reg_t *lhs = codegen_expr(node->lhs);
+	reg_t *rhs = codegen_expr(node->rhs);
+	reg_t *res = reg_make();
 
 	switch(node->kind) {
 	default:
 		break;
 
 	case NODE_ADD:
-		fprintf(f, "\tadd x0, x0, x1\n");
+		emit_add(res, lhs, rhs);
 		break;
 	case NODE_SUB:
-		fprintf(f, "\tsub x0, x0, x1\n");
+		emit_sub(res, lhs, rhs);
 		break;
 	case NODE_MUL:
-		fprintf(f, "\tmul x0, x0, x1\n");
+		emit_mul(res, lhs, rhs);
 		break;
 	case NODE_DIV:
-		fprintf(f, "\tsdiv x0, x0, x1\n");
+		emit_div(res, lhs, rhs);
 		break;
 	case NODE_VAR:
-		calc_addr(f, node, 0);
+		res = calc_addr(node);
 		break;
 	case NODE_ASSIGN:
 		break;
 	case NODE_EQ:
+		emit_eq(res, lhs, rhs);
+		break;
 	case NODE_NE:
+		emit_ne(res, lhs, rhs);
+		break;
 	case NODE_LE:
+		emit_le(res, lhs, rhs);
+		break;
 	case NODE_LT:
-		fprintf(f, "\tcmp x0, x1\n");
+		emit_lt(res, lhs, rhs);
+		break;
+	}
 
-		switch(node->kind) {
-		case NODE_EQ:
-			fprintf(f, "\tcset x0, eq\n");
-			break;
-		case NODE_NE:
-			fprintf(f, "\tcset x0, ne\n");
-			break;
-		case NODE_LE:
-			fprintf(f, "\tcset x0, le\n");
-			break;
-		case NODE_LT:
-			fprintf(f, "\tcset x0, lt\n");
-			break;
-		default: /* wth? */
-			break;
+	return res;
+}
+
+void codegen_expr_stmt(node_t *node)
+{
+	switch(node->kind) {
+	case NODE_EXPR_STMT:
+		(void)codegen_expr(node->lhs);
+		break;
+	case NODE_RET: {
+		reg_t *retval = codegen_expr(node->lhs);
+		emit_ret(retval);
+		break;
+	}
+	case NODE_BLOCK:
+		for(node_t *nod = node->body; nod; nod = nod->next) {
+			codegen_expr_stmt(nod);
+		}
+		break;
+	case NODE_WHILE: {
+		ir_blk_t *condchk = emit_blk();
+		ir_blk_t *loop = emit_blk();
+		ir_blk_t *resume = emit_blk();
+
+		emit_jmp(condchk);
+
+		outblk = condchk;
+		reg_t *cond = codegen_expr(node->cond);
+		emit_br(cond, loop, resume);
+
+		outblk = loop;
+		codegen_expr_stmt(node->then);
+		emit_jmp(condchk);
+		outblk = resume;
+	}; break;
+	case NODE_FOR: {
+		/* initalizer */
+		codegen_expr_stmt(node->init);
+
+		ir_blk_t *condchk = emit_blk(); /* check if need to go loop or resume */
+		ir_blk_t *then = emit_blk();
+		ir_blk_t *resume = emit_blk();
+
+		emit_jmp(condchk);
+
+		outblk = condchk;
+		reg_t *cond;
+		if(node->cond) {
+			cond = codegen_expr(node->cond);
+		} else {
+			cond = reg_make();
+			emit_imm(cond, 1);
 		}
 
+		emit_br(cond, then, resume);
+
+		outblk = then;
+		codegen_expr_stmt(node->then);
+		if(node->inc) {
+			UNUSED(codegen_expr(node->inc));
+		}
+
+		emit_jmp(condchk);
+		outblk = resume;
+
+	} break;
+	case NODE_IF: {
+		reg_t *cond = codegen_expr(node->cond);
+
+		ir_blk_t *then = emit_blk(), *elze;
+		ir_blk_t *resume = emit_blk();
+		if(node->elze == NULL) {
+			elze = resume;
+		} else {
+			elze = emit_blk();
+		}
+
+		emit_br(cond, then, elze);
+		outblk = then;
+		codegen_expr_stmt(node->then);
+		emit_jmp(resume);
+		if(node->elze) {
+			outblk = elze;
+			codegen_expr_stmt(node->elze);
+			emit_jmp(resume);
+		}
+
+		outblk = resume;
+
+	}; break;
+	default:
+		ERROR("invalid stmt");
 		break;
 	}
 
 	return;
 }
 
-void codegen_expr_stmt(FILE *f, node_t *node)
+/* calculate stack frame space needed for function `fn` */
+static void calc_stack_needed(func_t *fn)
 {
-	if(node->kind == NODE_EXPR_STMT) {
-		codegen_expr(f, node->lhs);
-		return;
+	size_t space = 0;
+	long off = -8;
+	for(obj_t *obj = fn->vars; obj; obj = obj->next) {
+		space += 8;
+		obj->off = off;
+		off -= 8;
 	}
-
-	ERROR("invalid stmt");
+	fn->stack_size = space;
 	return;
 }
 
-/* generates code for a program */
-void codegen_do(FILE *f, node_t *node)
+/* generates code for a function */
+void codegen_func(FILE *f, func_t *fn)
 {
-	fprintf(f, ".globl _main\n.p2align 2\n_main:\n");
-	codegen_enter(f, 8 * 26);
-	for(node_t *cur = node; cur; cur = cur->next) {
-		codegen_expr_stmt(f, cur);
-		ENSURE(balance == 0, "unbalanced program");
-	}
-	codegen_leave(f);
-	fprintf(f, "\tret\n");
+	ir_func_t *func = ir_func_make("_main");
+	fun = func;
+
+	ir_blk_t *blk = ir_blk_make(NULL);
+	blk->num = 0;
+	outblk = blk;
+	list_append(func->blocks, blk);
+
+	calc_stack_needed(fn);
+	fun->stack_needed = fn->stack_size;
+	codegen_expr_stmt(fn->body);
+
+	// ir_dump(func, 'v');
+	// putchar('\n');
+
+	ir_finalize(func, 5);
+	// ir_dump(func, 'r');
+
+	ir_func_emit(f, func);
+
+	ir_func_delete(func);
 	return;
 }

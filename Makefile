@@ -78,7 +78,9 @@ help:
 	@echo "make compile - build & link"
 	@echo "make clean - remove all binaries"
 	@echo "make test - test project"
+	@echo "make testsanitizers - test project w/ sanitizers"
 	@echo "make dirs - create binary directory"
+	@echo "make count - count lines of code for swag points"
 	@echo "make help - this screen"
 	@echo "make - default: dirs, build, link"
 	@echo "==============FLAGS=================="
@@ -88,6 +90,9 @@ help:
 	@echo "SANITIZERS\tyes/no to enable sanitizers"
 	@echo "FORTIFY\t\tyes/no to fortify code"
 	@echo "TESTARGS\targs to pass to 'make test'"
+
+count:
+	@cloc $(SRC) $(shell find src -name "*.h")
 
 dirs:
 	@# Create bin dir
@@ -124,3 +129,7 @@ clean:
 # test app
 test: $(BINDIR)/$(APP)
 	@./test.sh
+
+testsanitizers:
+	@make -B SANITIZERS=yes test
+	@make -B clean
