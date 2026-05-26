@@ -535,16 +535,16 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			}
 			break;
 		case IR_INST_ADD:
-			fprintf(f, "\tadd %s, %s\n", r0, r1);
+			fprintf(f, "\tadd %s, %s\n", r0, r2);
 			break;
 		case IR_INST_SUB:
-			fprintf(f, "\tsub %s, %s\n", r0, r1);
+			fprintf(f, "\tsub %s, %s\n", r0, r2);
 			break;
 		case IR_INST_MUL:
-			fprintf(f, "\tmul %s, %s\n", r0, r1);
+			fprintf(f, "\tmul %s, %s\n", r0, r2);
 			break;
 		case IR_INST_DIV:
-			fprintf(f, "\tdiv %s, %s\n", r0, r1);
+			fprintf(f, "\tdiv %s, %s\n", r0, r2);
 			break;
 		case IR_INST_NEG:
 			fprintf(f, "\tneg %s\n", r0);
