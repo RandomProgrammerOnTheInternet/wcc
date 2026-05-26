@@ -19,6 +19,9 @@ typedef struct reg {
 	size_t age; /* age of this register */
 	//obj_t *var; /* variable of register */
 	long off; /* offset of register */
+	/* for optimization: */
+	bool stack_loc; /* is this register from a leas instruction? */
+	long stack_off; /* if so, it's offset */
 } reg_t;
 
 enum ins_type {
@@ -155,6 +158,9 @@ void ir_blk_delete(ir_blk_t *blk);
 
 /* make an IR function */
 ir_func_t *ir_func_make(char *name);
+
+/* optimizes an IR function */
+void ir_opt(ir_func_t *fun);
 
 /* delete an IR function (aka all blocks, extras) */
 void ir_func_delete(ir_func_t *fun);

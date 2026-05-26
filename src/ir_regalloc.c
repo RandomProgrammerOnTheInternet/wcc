@@ -184,6 +184,10 @@ LIST(reg_t *) ir_blk_reglive(ir_func_t *fun)
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(ins->type == IR_INST_NOP) {
+				ins_count++;
+				continue;
+			}
 			reg_update_counter(ins->r0, ins_count);
 			if(ins->r0 && ins->r0->def == 0) {
 				ins->r0->def = ins_count;
@@ -388,6 +392,52 @@ static void turn_into_x86_ins(ir_inst_t *prev, ir_inst_t *cur)
 	}
 }
 
+static void ir_simplify(ir_func_t *fun)
+{
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+
+		ir_inst_t *nop = ir_inst_make(IR_INST_NOP, NULL, NULL, NULL, 0);
+		nop->next = blk->insts;
+		blk->insts = nop;
+
+		ir_inst_t *prev = nop;
+		ir_inst_t *nxt = blk->insts;
+		int removed = 0;
+		for(ir_inst_t *ins = blk->insts; ins; ins = nxt) {
+			removed = 0;
+			nxt = ins->next;
+
+			/* simplify useless moves where the source
+			 * and destination have same real register */
+			if(ins->type == IR_INST_MOV && ins->r0->rr != -1 &&
+			   ins->r0->rr == ins->r1->rr) {
+				prev->next = nxt;
+				ir_inst_delete(ins);
+				ins = nxt;
+				removed = 1;
+				goto end;
+			}
+
+			/* remove useless insts where thing stored is never used
+			 * beyond this inst */
+			if(ins->r0 && ins->r0->def == ins->r0->last_use) {
+				prev->next = nxt;
+				ir_inst_delete(ins);
+				ins = nxt;
+				removed = 1;
+				goto end;
+			}
+end:
+			if(!removed) {
+				prev = ins;
+			}
+		}
+		blk->insts = blk->insts->next;
+		ir_inst_delete(nop);
+	}
+}
+
 static void ir_turn_into_x86(ir_func_t *fun)
 {
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
@@ -425,11 +475,10 @@ void ir_finalize(ir_func_t *fun, int amount, enum ir_arch arch)
 		ir_turn_into_x86(fun);
 	}
 	ir_blk_reguse(fun);
-	ir_blk_fixup_entry(fun);
 	LIST(reg_t *) allocated = ir_blk_reglive(fun);
 	ir_regalloc(allocated, amount);
 	ir_regalloc_spill(fun, allocated);
-
+	ir_simplify(fun);
 	list_delete(allocated);
 	return;
 }

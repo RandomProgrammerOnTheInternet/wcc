@@ -376,6 +376,7 @@ void codegen_func(FILE *f, func_t *fn, enum ir_arch backend)
 	// ir_dump(func, 'v');
 	// putchar('\n');
 
+	ir_opt(func);
 	ir_finalize(func, 5, backend);
 	// ir_dump(func, 'r');
 

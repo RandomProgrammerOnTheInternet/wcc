@@ -611,6 +611,115 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 	return;
 }
 
+/* optimize
+ * %reg = leas #off
+ * ...
+ * %other_reg = load %reg
+ * to
+ * %other_reg = loads #off
+ * and then
+ * %reg = leas #off
+ 
+ */
+static void ir_stackopt(ir_func_t *func)
+{
+	/* first, check which registers are leas */
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(ins->type == IR_INST_LEAS) {
+				ins->r0->stack_loc = true;
+				ins->r0->stack_off = ins->imm;
+			} else if(ins->r0) {
+				ins->r0->stack_loc = false;
+			}
+
+			/* however if we use this register outside of loads and stores
+			 * we can't optimize it */
+			if(ins->r1 && ins->r1->stack_loc && ins->type != IR_INST_LOAD &&
+			   ins->type != IR_INST_STORE) {
+				ins->r1->stack_loc = false;
+			}
+			if(ins->r2 && ins->r2->stack_loc && ins->type != IR_INST_LOAD &&
+			   ins->type != IR_INST_STORE) {
+				ins->r2->stack_loc = false;
+			}
+		}
+	}
+
+	/* replace those leas with nops */
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(ins->type == IR_INST_LEAS && ins->r0->stack_loc) {
+				ins->type = IR_INST_NOP;
+			}
+		}
+	}
+
+	/* now, simply replace the load %leas_reg with loads #off */
+	/* and store %leas_reg, %reg with stores %reg, #off */
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(ins->type != IR_INST_LOAD && ins->type != IR_INST_STORE) {
+				continue;
+			}
+
+			if(ins->type == IR_INST_LOAD && ins->r1->stack_loc) {
+				ins->type = IR_INST_LOADS;
+				ins->imm = -ins->r1->stack_off;
+			}
+
+			if(ins->type == IR_INST_STORE && ins->r1->stack_loc) {
+				reg_t *r1 = ins->r1;
+				ins->r1 = ins->r2;
+				ins->type = IR_INST_STORES;
+				ins->imm = -r1->stack_off;
+			}
+		}
+	}
+
+	return;
+}
+
+/* removes nops */
+static void ir_nopremover(ir_func_t *fun)
+{
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+
+		ir_inst_t *nop = ir_inst_make(IR_INST_NOP, NULL, NULL, NULL, 0);
+		nop->next = blk->insts;
+		blk->insts = nop;
+
+		ir_inst_t *prev = nop;
+		ir_inst_t *nxt = blk->insts->next;
+		for(ir_inst_t *ins = blk->insts->next; ins; ins = nxt) {
+			nxt = ins->next;
+
+			if(ins->type == IR_INST_NOP) {
+				prev->next = nxt;
+				ir_inst_delete(ins);
+				ins = nxt;
+			} else {
+				prev = ins;
+			}
+		}
+
+		blk->insts = blk->insts->next;
+		ir_inst_delete(nop);
+	}
+}
+
+/* optimizes a function */
+void ir_opt(ir_func_t *func)
+{
+	ir_stackopt(func);
+	ir_nopremover(func);
+	return;
+}
+
 static void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 {
 	char *name = fun->name;
