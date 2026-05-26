@@ -5,7 +5,13 @@ Currently it implements Calculator Number Lang. Single letter variables, simple 
 
 I plan to also add a proper IR optimizer & codegen after I get far enough.
 
-Generates code for aarch64. I plan to add x86 later.
+Generates code for aarch64 & x86_64. I have not tested if the x86_64 backend works because I don't have an x86 machine.
+
+## Usage
+
+```
+./bin/wcc "program" [-o output] [-t target (either aarch64-apple or x64-sysv)]
+````
 
 ## Build
 
