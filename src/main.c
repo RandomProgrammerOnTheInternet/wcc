@@ -163,7 +163,7 @@ int main(int argc, char *argv[])
 
 	token_t *head = lex_do(prog);
 	token_t *cur = head;
-	func_t *prog_node = parse_do(cur);
+	obj_t *prog_node = parse_do(cur);
 	codegen_func(emit_to, prog_node, arch);
 
 	free(prog);

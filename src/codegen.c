@@ -178,6 +178,7 @@ static reg_t *calc_addr(node_t *node)
 	if(node->kind == NODE_VAR) {
 		long placement = -node->var->off;
 		reg_t *addr = reg_make();
+		addr->var = node->var;
 		emit_leas(addr, placement);
 		return addr;
 	}
@@ -214,6 +215,7 @@ reg_t *codegen_expr(node_t *node)
 	case NODE_VAR: {
 		reg_t *addr = calc_addr(node);
 		reg_t *val = reg_make();
+		val->var = node->var;
 		emit_load(val, addr);
 		return val;
 	};
@@ -374,11 +376,14 @@ void codegen_expr_stmt(node_t *node)
 }
 
 /* calculate stack frame space needed for function `fn` */
-static void calc_stack_needed(func_t *fn)
+static void calc_stack_needed(obj_t *fn)
 {
 	size_t space = 0;
 	long off = -8;
 	for(obj_t *obj = fn->vars; obj; obj = obj->next) {
+		if(obj->is_func) {
+			continue;
+		}
 		space += 8;
 		obj->off = off;
 		off -= 8;
@@ -388,8 +393,9 @@ static void calc_stack_needed(func_t *fn)
 }
 
 /* generates code for a function */
-void codegen_func(FILE *f, func_t *fn, enum ir_arch backend)
+void codegen_func(FILE *f, obj_t *fn, enum ir_arch backend)
 {
+	ENSURE(fn->is_func, "tried to generate code for a variable");
 	ir_func_t *func = ir_func_make("_main");
 	fun = func;
 
@@ -406,7 +412,7 @@ void codegen_func(FILE *f, func_t *fn, enum ir_arch backend)
 	// putchar('\n');
 
 	ir_opt(func);
-	ir_finalize(func, 5, backend);
+	ir_finalize(func, 3);
 	// ir_dump(func, 'r');
 
 	ir_func_emit(f, func, backend);

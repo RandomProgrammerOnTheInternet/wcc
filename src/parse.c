@@ -80,12 +80,15 @@ node_t *node_var(obj_t *var, token_t *tok)
 /* -- variables/objects -- */
 
 /* create an object with a name `name` */
-obj_t *obj_make(char *name)
+obj_t *obj_make(char *name, bool is_func)
 {
 	/* also inserts it into locals linked list */
 	obj_t *obj = zalloc(sizeof(obj_t));
-	obj->next = locals;
-	locals = obj;
+	if(!is_func) {
+		obj->next = locals;
+		locals = obj;
+	}
+	obj->is_func = is_func;
 	obj->name = name;
 	obj->off = 0;
 	return obj;
@@ -361,7 +364,8 @@ static node_t *parse_prim(token_t *tok, token_t **rest)
 	if(tok->kind == TOK_IDENT) {
 		obj_t *obj = find_var(tok);
 		if(!obj) {
-			obj = obj_make(memdup_extra(tok->loc, tok->len, tok->len + 1));
+			obj =
+				obj_make(memdup_extra(tok->loc, tok->len, tok->len + 1), false);
 		}
 		node_t *node = node_var(obj, tok);
 		*rest = tok->next;
@@ -403,11 +407,11 @@ static node_t *parse_unary(token_t *tok, token_t **rest)
 }
 
 /* does the parsing */
-func_t *parse_do(token_t *toks)
+obj_t *parse_do(token_t *toks)
 {
 	token_t *tok = token_skip(toks, "{");
 
-	func_t *f = zalloc(sizeof(func_t));
+	obj_t *f = obj_make("_main", true);
 
 	f->body = parse_compound_stmt(tok, &tok);
 	f->vars = locals;

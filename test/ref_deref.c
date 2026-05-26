@@ -2,5 +2,6 @@
 	a = 5;
 	b = &a;
 	*b = 1;
-	return a;
+	*(&b) = 3;
+	return a + b;
 }

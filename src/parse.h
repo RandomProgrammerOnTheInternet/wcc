@@ -55,10 +55,18 @@ enum node_kind {
 };
 
 /* a variable */
+
+struct node;
+
 typedef struct obj {
 	struct obj *next; /* linked list */
 	long off; /* place on stack frame */
 	char *name; /* name of variable */
+
+	bool is_func; /* is this object af function? */
+	struct node *body; /* body of the function */
+	struct obj *vars; /* variables of the function */
+	size_t stack_size; /* total size of this function's stack frame */
 } obj_t;
 
 /* an AST node */
@@ -83,13 +91,6 @@ typedef struct node {
 	obj_t *var; /* for NODE_VAR */
 	uint64_t num; /* for NODE_NUM */
 } node_t;
-
-/* a function */
-typedef struct func {
-	node_t *body; /* body of the function */
-	obj_t *vars; /* variables of the function */
-	size_t stack_size; /* total size of this function's stack frame */
-} func_t;
 
 /* makes a node */
 node_t *node_make(enum node_kind kind, token_t *tok);
@@ -117,7 +118,7 @@ node_t *node_var(obj_t *var, token_t *tok);
 /* -- variables/objects -- */
 
 /* create an object with a name `name` */
-obj_t *obj_make(char *name);
+obj_t *obj_make(char *name, bool is_func);
 
 /* delete an object */
 void obj_delete(obj_t *obj);
@@ -126,6 +127,6 @@ void obj_delete(obj_t *obj);
 void obj_delete_all(obj_t *root);
 
 /* does the parsing */
-func_t *parse_do(token_t *toks);
+obj_t *parse_do(token_t *toks);
 
 #endif /* PARSE_H_ */

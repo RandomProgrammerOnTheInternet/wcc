@@ -61,9 +61,8 @@ typedef struct reg {
 	long def; /* when this reg was defined */
 	long last_use; /* when this reg was last used */
 	bool spilld; /* is this reg spilled? */
-	size_t age; /* age of this register */
-	//obj_t *var; /* variable of register */
-	long off; /* offset of register */
+	uint64_t imm; /* immediate associated with this reg */
+	obj_t *var; /* variable of register */
 	/* for optimization: */
 	bool stack_loc; /* is this register from a leas instruction? */
 	long stack_off; /* if so, it's offset */
@@ -190,6 +189,9 @@ void ir_print_inst(ir_inst_t *ins, int mode);
 
 /* dump IR */
 void ir_dump(ir_func_t *fun, int mode);
+
+/* removes nops */
+void ir_nopremover(ir_func_t *fun);
 
 /* codegen an IR function */
 /* assumes function has been finalized */

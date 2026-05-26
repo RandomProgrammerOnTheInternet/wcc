@@ -1,5 +1,7 @@
 #include "ir.h"
 #include "ir_regalloc.h"
+#include "ir_aarch64.h"
+#include "ir_x64.h"
 #include "arena.h"
 
 static long counter(int reset)
@@ -340,379 +342,24 @@ void ir_dump(ir_func_t *fun, int mode)
 	return;
 }
 
-static void load_imm_lane(FILE *f, int reg, uint16_t i, uint16_t shift,
-						  int *keep)
+/* mark immediate registers */
+static void ir_markimms(ir_func_t *func)
 {
-	char *kt = "zk";
-	if(i) {
-		fprintf(f, "\tmov%c x%d, #%hu", kt[*keep], reg, i);
-		if(shift) {
-			fprintf(f, ", lsl #%hu", shift);
-		}
-		fprintf(f, "\n");
-		*keep = 1;
-	}
-	return;
-}
-
-/* loads an immediate into register `reg` */
-static void load_imm(FILE *f, int reg, uint64_t imm_)
-{
-	uint64_t imm = imm_;
-	int64_t imms = (int64_t)imm;
-
-	if(imms <= 4095 && imms >= -4095) {
-		fprintf(f, "\tmov x%d, #%lld\n", reg, imms);
-		return;
-	}
-
-	int keep = 0;
-
-	load_imm_lane(f, reg, (imm >> 0) & 0xffff, 0, &keep);
-	load_imm_lane(f, reg, (imm >> 16) & 0xffff, 16, &keep);
-	load_imm_lane(f, reg, (imm >> 32) & 0xffff, 32, &keep);
-	load_imm_lane(f, reg, (imm >> 48) & 0xffff, 48, &keep);
-
-	return;
-}
-
-/* intentionally limiting amount of registers to 5 here to test
- * the register allocator. */
-static int arm_reg[5] = { 8, 9, 10, 11, 12 };
-/* todo: some of these are argument registers, have to save them for later */
-static const char *x64_reg[5] = { "rdi", "rsi", "rdx", "rcx", "r8" };
-
-static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
-									  long last_i)
-{
-	/* todo: smarter basic block placement */
-	fprintf(f, "_BB%ld:\n", blk->num);
-	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-		int r0 = ins->r0 && ins->r0->rr >= 0 ? arm_reg[ins->r0->rr] : -1;
-		int r1 = ins->r1 && ins->r1->rr >= 0 ? arm_reg[ins->r1->rr] : -1;
-		int r2 = ins->r2 && ins->r2->rr >= 0 ? arm_reg[ins->r2->rr] : -1;
-		switch(ins->type) {
-		case IR_INST_BREQ:
-		case IR_INST_BRNE:
-		case IR_INST_BRLT:
-		case IR_INST_BRLE:
-			fprintf(f, "\tcmp x%d, x%d\n", r1, r2);
-			switch(ins->type) {
-			default:
-				break;
-			/* remember: this is for false condition
-			 * so invert the specified condition */
-			case IR_INST_BREQ:
-				fprintf(f, "\tbne _BB%ld\n", ins->false_blk->num);
-				break;
-			case IR_INST_BRNE:
-				fprintf(f, "\tbeq _BB%ld\n", ins->false_blk->num);
-				break;
-			case IR_INST_BRLT:
-				fprintf(f, "\tbge _BB%ld\n", ins->false_blk->num);
-				break;
-			case IR_INST_BRLE:
-				fprintf(f, "\tbgt _BB%ld\n", ins->false_blk->num);
-				break;
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(ins->type == IR_INST_IMM) {
+				ins->r0->imm = ins->imm;
+				ins->r0->insty = IR_INST_IMM;
+				continue;
 			}
-			if(ins->true_blk->num == blk->num + 1) {
-				/* fallthrough */
-				break;
+
+			/* if another value stored to this instruction, remove it's immediate status */
+			if(ins->r0 && ins->r0->insty == IR_INST_IMM) {
+				ins->r0->imm = 0;
+				ins->r0->insty = IR_INST_NOP;
+				continue;
 			}
-			/* dang it */
-			fprintf(f, "\tb _BB%ld\n", ins->true_blk->num);
-			break;
-		case IR_INST_BR:
-			fprintf(f, "\ttst x%d, x%d\n", r1, r1);
-			fprintf(f, "\tbeq _BB%ld\n", ins->false_blk->num);
-			/* big brain optimization */
-			/* fallthrough to true block if in front of us */
-			if(ins->true_blk->num == blk->num + 1) {
-				break;
-			}
-			/* else don't */
-			fprintf(f, "\tb _BB%ld\n", ins->true_blk->num);
-			break;
-		case IR_INST_JMP:
-			/* big brain optimization */
-			/* fallthrough if target in front of us */
-			if(ins->true_blk->num == blk->num + 1) {
-				break;
-			}
-			/* else just jump */
-			fprintf(f, "\tb _BB%ld\n", ins->true_blk->num);
-			break;
-		case IR_INST_RET:
-			if(r1 != -1) {
-				fprintf(f, "\tmov x0, x%d\n", r1);
-			}
-			if(blk->num != last_i) {
-				fprintf(f, "\tb %s_ret\n", fn->name);
-			}
-			break;
-		case IR_INST_NOP:
-			break;
-		case IR_INST_MOV:
-			fprintf(f, "\tmov x%d, x%d\n", r0, r1);
-			break;
-		case IR_INST_IMM:
-			load_imm(f, r0, ins->imm);
-			break;
-		case IR_INST_ADD:
-			fprintf(f, "\tadd x%d, x%d, x%d\n", r0, r1, r2);
-			break;
-		case IR_INST_SUB:
-			fprintf(f, "\tsub x%d, x%d, x%d\n", r0, r1, r2);
-			break;
-		case IR_INST_MUL:
-			fprintf(f, "\tmul x%d, x%d, x%d\n", r0, r1, r2);
-			break;
-		case IR_INST_DIV:
-			fprintf(f, "\tsdiv x%d, x%d, x%d\n", r0, r1, r2);
-			break;
-		case IR_INST_NEG:
-			fprintf(f, "\tneg x%d, x%d\n", r0, r1);
-			break;
-		case IR_INST_EQ:
-		case IR_INST_NE:
-		case IR_INST_LT:
-		case IR_INST_LE:
-			fprintf(f, "\tcmp x%d, x%d\n", r1, r2);
-
-			switch(ins->type) {
-			case IR_INST_EQ:
-				fprintf(f, "\tcset x%d, eq\n", r0);
-				break;
-			case IR_INST_NE:
-				fprintf(f, "\tcset x%d, ne\n", r0);
-				break;
-			case IR_INST_LT:
-				fprintf(f, "\tcset x%d, lt\n", r0);
-				break;
-			case IR_INST_LE:
-				fprintf(f, "\tcset x%d, le\n", r0);
-				break;
-
-			default: /* wth? */
-				break;
-			}
-			break;
-		case IR_INST_LEAS:
-			fprintf(f, "\tsub x%d, fp, #%lld\n", r0, ins->imm);
-			break;
-		case IR_INST_LOAD:
-			fprintf(f, "\tldr x%d, [x%d]\n", r0, r1);
-			break;
-		case IR_INST_LOADS:
-		case IR_INST_LOADSS:
-			fprintf(f, "\tldr x%d, [fp, #%lld]\n", r0, (int64_t)ins->imm);
-			break;
-
-		case IR_INST_STORE:
-			fprintf(f, "\tstr x%d, [x%d]\n", r2, r1);
-			break;
-		case IR_INST_STORES:
-		case IR_INST_STORESS:
-			fprintf(f, "\tstr x%d, [fp, #%lld]\n", r1, (int64_t)ins->imm);
-			break;
-
-		default:
-			break;
-		}
-
-		if(ir_inst_is_term(ins->type)) {
-			break;
-		}
-	}
-	return;
-}
-
-static void ir_func_emit_aarch64_apple(FILE *f, ir_func_t *fun)
-{
-	fprintf(f, ".globl %s\n", fun->name);
-	fprintf(f, ".p2align 2\n");
-	fprintf(f, "%s:\n", fun->name);
-	/* enter stack frame */
-	size_t alignd = align_to(fun->stack_needed, 16);
-	fprintf(f, "\tstp fp, lr, [sp, #-16]!\n");
-	fprintf(f, "\tmov fp, sp\n");
-	if(alignd) {
-		fprintf(f, "\tsub sp, sp, #%zu\n", alignd);
-	}
-
-	size_t len = list_len(fun->blocks);
-	for(size_t i = 0; i < len; i++) {
-		ir_emit_blk_aarch64_apple(f, fun, fun->blocks[i], len - 1);
-	}
-
-	/* leave stack frame */
-	fprintf(f, "%s_ret:\n", fun->name);
-	fprintf(f, "\tmov sp, fp\n");
-	fprintf(f, "\tldp fp, lr, [sp], #16\n");
-	fprintf(f, "\tret\n");
-
-	return;
-}
-
-static int64_t i64abs(int64_t v)
-{
-	if(v < 0) {
-		return -v;
-	}
-	return v;
-}
-
-static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
-								 long last_i)
-{
-	fprintf(f, ".BB%ld:\n", blk->num);
-	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-		const char *r0 = ins->r0 && ins->r0->rr >= 0 ? x64_reg[ins->r0->rr] :
-													   NULL;
-		const char *r1 = ins->r1 && ins->r1->rr >= 0 ? x64_reg[ins->r1->rr] :
-													   NULL;
-		const char *r2 = ins->r2 && ins->r2->rr >= 0 ? x64_reg[ins->r2->rr] :
-													   NULL;
-		switch(ins->type) {
-		case IR_INST_BREQ:
-		case IR_INST_BRNE:
-		case IR_INST_BRLT:
-		case IR_INST_BRLE:
-			fprintf(f, "\tcmp %s, %s\n", r1, r2);
-			switch(ins->type) {
-			default:
-				break;
-			case IR_INST_BREQ:
-				fprintf(f, "\tjne .BB%ld\n", ins->false_blk->num);
-				break;
-			case IR_INST_BRNE:
-				fprintf(f, "\tje .BB%ld\n", ins->false_blk->num);
-				break;
-			case IR_INST_BRLT:
-				fprintf(f, "\tjge .BB%ld\n", ins->false_blk->num);
-				break;
-			case IR_INST_BRLE:
-				fprintf(f, "\tjg .BB%ld\n", ins->false_blk->num);
-				break;
-			}
-			if(ins->true_blk->num == blk->num + 1) {
-				/* fallthrough */
-				break;
-			}
-			/* dang it */
-			fprintf(f, "\tjmp .BB%ld\n", ins->true_blk->num);
-			break;
-		case IR_INST_BR:
-			fprintf(f, "\ttest %s, %s\n", r1, r1);
-			fprintf(f, "\tje .BB%ld\n", ins->false_blk->num);
-			/* big brain optimization */
-			/* fallthrough to true block if in front of us */
-			if(ins->true_blk->num == blk->num + 1) {
-				break;
-			}
-			/* else don't */
-			fprintf(f, "\tjmp .BB%ld\n", ins->true_blk->num);
-			break;
-		case IR_INST_JMP:
-			/* big brain optimization */
-			/* fallthrough if target in front of us */
-			if(ins->true_blk->num == blk->num + 1) {
-				break;
-			}
-			/* else just jump */
-			fprintf(f, "\tjmp .BB%ld\n", ins->true_blk->num);
-			break;
-		case IR_INST_RET:
-			if(r1 != NULL) {
-				fprintf(f, "\tmov rax, %s\n", r1);
-			}
-			if(blk->num != last_i) {
-				fprintf(f, "\tjmp %s_ret\n", fn->name);
-			}
-			break;
-		case IR_INST_NOP:
-			break;
-		case IR_INST_MOV:
-			fprintf(f, "\tmov %s, %s\n", r0, r1);
-			break;
-		case IR_INST_IMM:
-			if(ins->imm == 0) {
-				fprintf(f, "\txor %s, %s\n", r0, r0);
-			} else {
-				fprintf(f, "\tmov %s, %lld\n", r0, (int64_t)ins->imm);
-			}
-			break;
-		case IR_INST_ADD:
-			fprintf(f, "\tadd %s, %s\n", r0, r2);
-			break;
-		case IR_INST_SUB:
-			fprintf(f, "\tsub %s, %s\n", r0, r2);
-			break;
-		case IR_INST_MUL:
-			fprintf(f, "\timul %s, %s\n", r0, r2);
-			break;
-		case IR_INST_DIV:
-			fprintf(f, "\tpush rdx\n");
-			fprintf(f, "\tmov rax, %s\n", r0);
-			fprintf(f, "\tcqo\n");
-			fprintf(f, "\tidiv %s\n", r2);
-			fprintf(f, "\tpop rdx\n");
-			fprintf(f, "\tmov %s, rax\n", r0);
-			break;
-		case IR_INST_NEG:
-			fprintf(f, "\tneg %s\n", r0);
-			break;
-		case IR_INST_EQ:
-		case IR_INST_NE:
-		case IR_INST_LT:
-		case IR_INST_LE:
-			fprintf(f, "\tcmp %s, %s\n", r1, r2);
-
-			switch(ins->type) {
-			case IR_INST_EQ:
-				fprintf(f, "\tsete al\n");
-				break;
-			case IR_INST_NE:
-				fprintf(f, "\tsetne al\n");
-				break;
-			case IR_INST_LT:
-				fprintf(f, "\tsetl al\n");
-				break;
-			case IR_INST_LE:
-				fprintf(f, "\tsetle al\n");
-				break;
-
-			default: /* wth? */
-				break;
-			}
-			fprintf(f, "\tmovzx %s, al\n", r0);
-			break;
-		case IR_INST_LEAS:
-			fprintf(f, "\tlea %s, [rbp - %lld]\n", r0, (int64_t)ins->imm);
-			break;
-		case IR_INST_LOAD:
-			fprintf(f, "\tmov %s, [%s]\n", r0, r1);
-			break;
-		case IR_INST_LOADS:
-		case IR_INST_LOADSS:
-			fprintf(f, "\tmov %s, [rbp - %lld]\n", r0,
-					i64abs((int64_t)ins->imm));
-			break;
-		case IR_INST_STORE:
-			fprintf(f, "\tmov [%s], %s\n", r1, r2);
-			break;
-		case IR_INST_STORES:
-		case IR_INST_STORESS:
-			fprintf(f, "\tmov [rbp - %lld], %s\n", i64abs((int64_t)ins->imm),
-					r1);
-			break;
-
-		default:
-			break;
-		}
-
-		if(ir_inst_is_term(ins->type)) {
-			break;
 		}
 	}
 	return;
@@ -831,6 +478,12 @@ static void ir_branchopt(ir_func_t *func)
 				ins->r0->insty = ins->type;
 				ins->r0->lhs = ins->r1;
 				ins->r0->rhs = ins->r2;
+				ins->r1->insty = ins->type;
+				ins->r1->lhs = ins->r1;
+				ins->r1->rhs = ins->r2;
+				ins->r2->insty = ins->type;
+				ins->r2->lhs = ins->r1;
+				ins->r2->rhs = ins->r2;
 				continue;
 			}
 
@@ -838,6 +491,14 @@ static void ir_branchopt(ir_func_t *func)
 			if(ins->r0 && ir_inst_is_cmp(ins->r0->insty)) {
 				ins->r0->insty = IR_INST_NOP;
 				ins->r0->lhs = ins->r0->rhs = NULL;
+				if(ins->r1) {
+					ins->r1->insty = IR_INST_NOP;
+					ins->r1->lhs = ins->r1->rhs = NULL;
+				}
+				if(ins->r2) {
+					ins->r2->insty = IR_INST_NOP;
+					ins->r2->lhs = ins->r2->rhs = NULL;
+				}
 				continue;
 			}
 
@@ -863,7 +524,8 @@ static void ir_branchopt(ir_func_t *func)
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-			if(ir_inst_is_cmp(ins->type) && ins->r0->insty == ins->type) {
+			if(ir_inst_is_cmp(ins->type) && ins->r0->insty == ins->type &&
+			   ins->r1->insty == ins->type && ins->r2->insty == ins->type) {
 				ins->type = IR_INST_NOP;
 				ins->r0 = ins->r1 = ins->r2 = NULL;
 				continue;
@@ -881,7 +543,7 @@ static void ir_branchopt(ir_func_t *func)
 }
 
 /* removes nops */
-static void ir_nopremover(ir_func_t *fun)
+void ir_nopremover(ir_func_t *fun)
 {
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
@@ -917,6 +579,7 @@ void ir_opt(ir_func_t *func)
 	if(debug) {
 		ir_dump(func, 'v');
 	}
+	ir_markimms(func);
 	ir_stackopt(func);
 	ir_nopremover(func);
 	ir_branchopt(func);
@@ -924,45 +587,6 @@ void ir_opt(ir_func_t *func)
 	if(debug) {
 		ir_dump(func, 'v');
 	}
-	return;
-}
-
-static void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
-{
-	char *name = fun->name;
-	char *og_name = name;
-	/* big no no on x64 */
-	if(starts_with(name, "_")) {
-		name = name + 1;
-		fun->name = name;
-	}
-	/* correct syntax */
-	fprintf(f, ".intel_syntax noprefix\n");
-	fprintf(f, ".global %s\n", name);
-	fprintf(f, ".align 4\n");
-	fprintf(f, "%s:\n", name);
-
-	/* enter stack frame */
-	size_t alignd = align_to(fun->stack_needed, 16);
-	// fprintf(f, "\tstp fp, lr, [sp, #-16]!\n");
-	fprintf(f, "\tpush rbp\n");
-	fprintf(f, "\tmov rbp, rsp\n");
-	if(alignd) {
-		fprintf(f, "\tsub rsp, %zu\n", alignd);
-	}
-
-	size_t len = list_len(fun->blocks);
-	for(size_t i = 0; i < len; i++) {
-		ir_emit_blk_x64_sysv(f, fun, fun->blocks[i], len - 1);
-	}
-
-	/* leave stack frame */
-	fprintf(f, "%s_ret:\n", name);
-	fprintf(f, "\tmov rsp, rbp\n");
-	fprintf(f, "\tpop rbp\n");
-	fprintf(f, "\tret\n");
-
-	fun->name = og_name;
 	return;
 }
 

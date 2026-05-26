@@ -45,7 +45,7 @@ assert 42 "if.c"
 assert 11 "regalloc_test.c"
 assert 3 "for.c"
 assert 42 "while.c"
-assert 1 "ref_deref.c"
+assert 4 "ref_deref.c"
 
 if [ "$passing" = "1" ]; then
   echo "all tests passed"

@@ -218,7 +218,7 @@ static void rewrite_load_spill_r1(ir_inst_t *ins_prev, ir_inst_t *ins)
 {
 	ASSERT(ins->r1->spilld, "tried to spill a non-spilled register");
 	ir_inst_t *inst =
-		ir_inst_make(IR_INST_LOADSS, ins->r1, NULL, NULL, ins->r1->off);
+		ir_inst_make(IR_INST_LOADSS, ins->r1, NULL, NULL, ins->r1->var->off);
 	ins_prev->next = inst;
 	inst->next = ins;
 	return;
@@ -229,7 +229,7 @@ static void rewrite_load_spill_r2(ir_inst_t *ins_prev, ir_inst_t *ins)
 {
 	ASSERT(ins->r2->spilld, "tried to spill a non-spilled register");
 	ir_inst_t *inst =
-		ir_inst_make(IR_INST_LOADSS, ins->r2, NULL, NULL, ins->r2->off);
+		ir_inst_make(IR_INST_LOADSS, ins->r2, NULL, NULL, ins->r2->var->off);
 	ins_prev->next = inst;
 	inst->next = ins;
 	return;
@@ -240,7 +240,7 @@ static void rewrite_store_spill(ir_inst_t *ins)
 {
 	ASSERT(ins->r0->spilld, "tried to spill a non-spilled register");
 	ir_inst_t *inst =
-		ir_inst_make(IR_INST_STORESS, NULL, ins->r0, NULL, ins->r0->off);
+		ir_inst_make(IR_INST_STORESS, NULL, ins->r0, NULL, ins->r0->var->off);
 	ir_inst_t *nxt = ins->next;
 	ins->next = inst;
 	inst->next = nxt;
@@ -282,7 +282,8 @@ void ir_regalloc_spill(ir_func_t *fun, LIST(reg_t *) allocated)
 		reg_t *r = allocated[i];
 		off -= 8;
 		fun->stack_needed += 8;
-		r->off = off;
+		r->var = obj_make(strdup("_spilld"), false);
+		r->var->off = off;
 	}
 
 	/* rewriting */
@@ -350,44 +351,6 @@ void ir_regalloc(LIST(reg_t *) allocated, int amount_)
 	return;
 }
 
-/* is the instruction in form A = F(B, C) where it needs A and B to be seperate? */
-static bool ins_is_3source(enum ins_type t)
-{
-	return t == IR_INST_ADD || t == IR_INST_SUB || t == IR_INST_MUL ||
-		   t == IR_INST_DIV;
-}
-
-/* is the instruction in form A = F(B) where it needs A and B to be seperate? */
-static bool ins_is_2source(enum ins_type t)
-{
-	return t == IR_INST_NEG;
-}
-
-static void turn_into_x86_ins(ir_inst_t *prev, ir_inst_t *cur)
-{
-	if(!ins_is_3source(cur->type) && !ins_is_2source(cur->type)) {
-		return;
-	}
-
-	if(ins_is_3source(cur->type)) {
-		/* rewrite A = F(B, C) into A = B; A = F(A, C) */
-		ir_inst_t *mov = ins_mov(cur->r0, cur->r1);
-		cur->r1 = cur->r0;
-		mov->next = cur;
-		prev->next = mov;
-		return;
-	}
-
-	if(ins_is_2source(cur->type)) {
-		/* rewrite A = F(B) into A = B; A = F(A) */
-		ir_inst_t *mov = ins_mov(cur->r0, cur->r1);
-		cur->r1 = cur->r0;
-		mov->next = cur;
-		prev->next = mov;
-		return;
-	}
-}
-
 static void ir_simplify(ir_func_t *fun)
 {
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
@@ -434,46 +397,26 @@ end:
 	}
 }
 
-static void ir_turn_into_x86(ir_func_t *fun)
-{
-	for(size_t i = 0; i < list_len(fun->blocks); i++) {
-		ir_blk_t *blk = fun->blocks[i];
-		ir_inst_t *nop = ir_inst_make(IR_INST_NOP, NULL, NULL, NULL, 0);
-		nop->next = blk->insts;
-		blk->insts = nop;
-
-		ir_inst_t *prev = blk->insts;
-		ir_inst_t *cur = blk->insts->next;
-		for(; cur; cur = cur->next) {
-			turn_into_x86_ins(prev, cur);
-			prev = cur;
-
-			if(ir_inst_is_term(cur->type)) {
-				break;
-			}
-		}
-
-		blk->insts = blk->insts->next;
-		ir_inst_delete(nop);
-	}
-}
-
 /* do register allocation all in one */
-void ir_finalize(ir_func_t *fun, int amount, enum ir_arch arch)
+void ir_finalize(ir_func_t *fun, int amount)
 {
-	if(arch == IR_ARCH_X64_SYSV) {
-		/* x86 arithmetic instructions are like
-		 * A = A + B  or  A = F(A)
-		 * rather than
-		 * A = B + C  or  A = F(B)
-		 * so we have to modify the IR to accomodate this. */
-		ir_turn_into_x86(fun);
-	}
 	ir_blk_reguse(fun);
 	LIST(reg_t *) allocated = ir_blk_reglive(fun);
 	ir_regalloc(allocated, amount);
 	ir_regalloc_spill(fun, allocated);
 	ir_simplify(fun);
+
+	/* free objects */
+	for(size_t i = 0; i < list_len(allocated); i++) {
+		if(!allocated[i]->spilld) {
+			continue;
+		}
+
+		if(allocated[i]->var) {
+			obj_delete(allocated[i]->var);
+		}
+	}
+
 	list_delete(allocated);
 	return;
 }
