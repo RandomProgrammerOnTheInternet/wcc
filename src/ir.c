@@ -388,9 +388,9 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 	/* todo: smarter basic block placement */
 	fprintf(f, "_BB%ld:\n", blk->num);
 	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-		int r0 = ins->r0 ? arm_reg[ins->r0->rr] : -1;
-		int r1 = ins->r1 ? arm_reg[ins->r1->rr] : -1;
-		int r2 = ins->r2 ? arm_reg[ins->r2->rr] : -1;
+		int r0 = ins->r0 && ins->r0->rr >= 0 ? arm_reg[ins->r0->rr] : -1;
+		int r1 = ins->r1 && ins->r1->rr >= 0 ? arm_reg[ins->r1->rr] : -1;
+		int r2 = ins->r2 && ins->r2->rr >= 0 ? arm_reg[ins->r2->rr] : -1;
 		switch(ins->type) {
 		case IR_INST_BREQ:
 		case IR_INST_BRNE:
@@ -567,9 +567,12 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 {
 	fprintf(f, ".BB%ld:\n", blk->num);
 	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-		const char *r0 = ins->r0 ? x64_reg[ins->r0->rr] : NULL;
-		const char *r1 = ins->r1 ? x64_reg[ins->r1->rr] : NULL;
-		const char *r2 = ins->r2 ? x64_reg[ins->r2->rr] : NULL;
+		const char *r0 = ins->r0 && ins->r0->rr >= 0 ? x64_reg[ins->r0->rr] :
+													   NULL;
+		const char *r1 = ins->r1 && ins->r1->rr >= 0 ? x64_reg[ins->r1->rr] :
+													   NULL;
+		const char *r2 = ins->r2 && ins->r2->rr >= 0 ? x64_reg[ins->r2->rr] :
+													   NULL;
 		switch(ins->type) {
 		case IR_INST_BREQ:
 		case IR_INST_BRNE:
