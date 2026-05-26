@@ -63,7 +63,7 @@ int main(int argc, char *argv[])
 		emit_to = stdout;
 	}
 
-	char *prog = strdup(argv[1]);
+	char *prog = memdup_extra(argv[1], strlen(argv[1]), strlen(argv[1]) + 1);
 	compile_setsrc(prog, NULL);
 
 	token_t *head = lex_do(prog);
