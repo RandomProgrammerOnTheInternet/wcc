@@ -2,14 +2,6 @@
 #include "ir_regalloc.h"
 #include "arena.h"
 
-/* is this inst type a 3-register op? */
-int ir_inst_is3(enum ins_type type)
-{
-	return type == IR_INST_ADD || type == IR_INST_SUB || type == IR_INST_MUL ||
-		   type == IR_INST_DIV || type == IR_INST_EQ || type == IR_INST_NE ||
-		   type == IR_INST_LT || type == IR_INST_LE;
-}
-
 static long counter(int reset)
 {
 	static int counter = 1;
@@ -339,17 +331,22 @@ static void load_imm(FILE *f, int reg, uint64_t imm_)
 	return;
 }
 
-static int reg[5] = { 8, 9, 10, 11, 12 };
+/* intentionally limiting amount of registers to 5 here to test
+ * the register allocator. */
+static int arm_reg[5] = { 8, 9, 10, 11, 12 };
+/* todo: some of these are argument registers, have to save them for later */
+static const char *x64_reg[5] = { "rdi", "rsi", "rdx", "rcx", "r8" };
 
-static void ir_emit_blk(FILE *f, ir_func_t *fn, ir_blk_t *blk, size_t i)
+static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
+									  size_t i)
 {
 	/* todo: smarter basic block placement */
 	UNUSED(i);
 	fprintf(f, "_BB%ld:\n", blk->num);
 	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-		int r0 = ins->r0 ? reg[ins->r0->rr] : -1;
-		int r1 = ins->r1 ? reg[ins->r1->rr] : -1;
-		int r2 = ins->r2 ? reg[ins->r2->rr] : -1;
+		int r0 = ins->r0 ? arm_reg[ins->r0->rr] : -1;
+		int r1 = ins->r1 ? arm_reg[ins->r1->rr] : -1;
+		int r2 = ins->r2 ? arm_reg[ins->r2->rr] : -1;
 		switch(ins->type) {
 		case IR_INST_BR:
 			fprintf(f, "\ttst x%d, x%d\n", r1, r1);
@@ -455,9 +452,7 @@ static void ir_emit_blk(FILE *f, ir_func_t *fn, ir_blk_t *blk, size_t i)
 	return;
 }
 
-/* codegen an IR function */
-/* assumes it has been finalized */
-void ir_func_emit(FILE *f, ir_func_t *fun)
+static void ir_func_emit_aarch64_apple(FILE *f, ir_func_t *fun)
 {
 	fprintf(f, ".globl %s\n", fun->name);
 	fprintf(f, ".p2align 2\n");
@@ -471,7 +466,7 @@ void ir_func_emit(FILE *f, ir_func_t *fun)
 	}
 
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
-		ir_emit_blk(f, fun, fun->blocks[i], i);
+		ir_emit_blk_aarch64_apple(f, fun, fun->blocks[i], i);
 	}
 
 	/* leave stack frame */
@@ -481,4 +476,186 @@ void ir_func_emit(FILE *f, ir_func_t *fun)
 	fprintf(f, "\tret\n");
 
 	return;
+}
+
+static int64_t i64abs(int64_t v)
+{
+	if(v < 0) {
+		return -v;
+	}
+	return v;
+}
+
+static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
+								 size_t i)
+{
+	UNUSED(i);
+	fprintf(f, ".BB%ld:\n", blk->num);
+	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+		const char *r0 = ins->r0 ? x64_reg[ins->r0->rr] : NULL;
+		const char *r1 = ins->r1 ? x64_reg[ins->r1->rr] : NULL;
+		const char *r2 = ins->r2 ? x64_reg[ins->r2->rr] : NULL;
+		switch(ins->type) {
+		case IR_INST_BR:
+			fprintf(f, "\ttest %s, %s\n", r1, r1);
+			fprintf(f, "\tje .BB%ld\n", ins->false_blk->num);
+			/* big brain optimization */
+			/* fallthrough to true block if in front of us */
+			if(ins->true_blk->num == blk->num + 1) {
+				break;
+			}
+			/* else don't */
+			fprintf(f, "\tjmp .BB%ld\n", ins->true_blk->num);
+			break;
+		case IR_INST_JMP:
+			/* big brain optimization */
+			/* fallthrough if target in front of us */
+			if(ins->true_blk->num == blk->num + 1) {
+				break;
+			}
+			/* else just jump */
+			fprintf(f, "\tjmp .BB%ld\n", ins->true_blk->num);
+			break;
+		case IR_INST_RET:
+			if(r1 != NULL) {
+				fprintf(f, "\tmov rax, %s\n", r1);
+			}
+			fprintf(f, "\tjmp %s_ret\n", fn->name);
+			break;
+		case IR_INST_NOP:
+			break;
+		case IR_INST_MOV:
+			fprintf(f, "\tmov %s, %s\n", r0, r1);
+			break;
+		case IR_INST_IMM:
+			if(ins->imm == 0) {
+				fprintf(f, "\txor %s, %s\n", r0, r0);
+			} else {
+				fprintf(f, "\tmov %s, %lld\n", r0, (int64_t)ins->imm);
+			}
+			break;
+		case IR_INST_ADD:
+			fprintf(f, "\tadd %s, %s\n", r0, r1);
+			break;
+		case IR_INST_SUB:
+			fprintf(f, "\tsub %s, %s\n", r0, r1);
+			break;
+		case IR_INST_MUL:
+			fprintf(f, "\tmul %s, %s\n", r0, r1);
+			break;
+		case IR_INST_DIV:
+			fprintf(f, "\tdiv %s, %s\n", r0, r1);
+			break;
+		case IR_INST_NEG:
+			fprintf(f, "\tneg %s\n", r0);
+			break;
+		case IR_INST_EQ:
+		case IR_INST_NE:
+		case IR_INST_LT:
+		case IR_INST_LE:
+			fprintf(f, "\tcmp %s, %s\n", r1, r2);
+
+			switch(ins->type) {
+			case IR_INST_EQ:
+				fprintf(f, "\tsete al\n");
+				break;
+			case IR_INST_NE:
+				fprintf(f, "\tsetne al\n");
+				break;
+			case IR_INST_LT:
+				fprintf(f, "\tsetl al\n");
+				break;
+			case IR_INST_LE:
+				fprintf(f, "\tsetle al\n");
+				break;
+
+			default: /* wth? */
+				break;
+			}
+			fprintf(f, "\tmovzx %s, al\n", r0);
+			break;
+		case IR_INST_LEAS:
+			fprintf(f, "\tlea %s, [rbp - %lld]\n", r0, (int64_t)ins->imm);
+			break;
+		case IR_INST_LOAD:
+			fprintf(f, "\tmov %s, [%s]\n", r0, r1);
+			break;
+		case IR_INST_LOADS:
+		case IR_INST_LOADSS:
+			fprintf(f, "\tmov %s, [rbp - %lld]\n", r0,
+					i64abs((int64_t)ins->imm));
+			break;
+		case IR_INST_STORE:
+			fprintf(f, "\tmov [%s], %s\n", r1, r2);
+			break;
+		case IR_INST_STORES:
+		case IR_INST_STORESS:
+			fprintf(f, "\tmov [rbp - %lld], %s\n", i64abs((int64_t)ins->imm),
+					r1);
+			break;
+
+		default:
+			break;
+		}
+
+		if(ins->type == IR_INST_BR || ins->type == IR_INST_JMP ||
+		   ins->type == IR_INST_RET) {
+			break;
+		}
+	}
+	return;
+}
+
+static void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
+{
+	char *name = fun->name;
+	char *og_name = name;
+	/* big no no on x64 */
+	if(starts_with(name, "_")) {
+		name = name + 1;
+		fun->name = name;
+	}
+	/* correct syntax */
+	fprintf(f, ".intel_syntax noprefix\n");
+	fprintf(f, ".global %s\n", name);
+	fprintf(f, ".align 4\n");
+	fprintf(f, "%s:\n", name);
+
+	/* enter stack frame */
+	size_t alignd = align_to(fun->stack_needed, 16);
+	// fprintf(f, "\tstp fp, lr, [sp, #-16]!\n");
+	fprintf(f, "\tpush rbp\n");
+	fprintf(f, "\tmov rbp, rsp\n");
+	if(alignd) {
+		fprintf(f, "\tsub rsp, %zu\n", alignd);
+	}
+
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_emit_blk_x64_sysv(f, fun, fun->blocks[i], i);
+	}
+
+	/* leave stack frame */
+	fprintf(f, "%s_ret:\n", name);
+	fprintf(f, "\tmov rsp, rbp\n");
+	fprintf(f, "\tpop rbp\n");
+	fprintf(f, "\tret\n");
+
+	fun->name = og_name;
+	return;
+}
+
+/* codegen an IR function */
+/* assumes it has been finalized */
+void ir_func_emit(FILE *f, ir_func_t *fun, enum ir_arch arch)
+{
+	switch(arch) {
+	case IR_ARCH_AARCH64_APPLE:
+		ir_func_emit_aarch64_apple(f, fun);
+		break;
+	case IR_ARCH_X64_SYSV:
+		ir_func_emit_x64_sysv(f, fun);
+		break;
+	default:
+		break;
+	}
 }

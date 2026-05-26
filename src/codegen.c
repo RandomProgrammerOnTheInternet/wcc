@@ -359,7 +359,7 @@ static void calc_stack_needed(func_t *fn)
 }
 
 /* generates code for a function */
-void codegen_func(FILE *f, func_t *fn)
+void codegen_func(FILE *f, func_t *fn, enum ir_arch backend)
 {
 	ir_func_t *func = ir_func_make("_main");
 	fun = func;
@@ -376,10 +376,10 @@ void codegen_func(FILE *f, func_t *fn)
 	// ir_dump(func, 'v');
 	// putchar('\n');
 
-	ir_finalize(func, 5);
+	ir_finalize(func, 5, backend);
 	// ir_dump(func, 'r');
 
-	ir_func_emit(f, func);
+	ir_func_emit(f, func, backend);
 
 	ir_func_delete(func);
 	return;

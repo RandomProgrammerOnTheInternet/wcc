@@ -60,6 +60,12 @@ enum ins_type {
 	IR_INST_RET, /* ret (%r1) */
 };
 
+enum ir_arch {
+	/* architecture-abi */
+	IR_ARCH_AARCH64_APPLE, /* aarch64-apple */
+	IR_ARCH_X64_SYSV, /* x64-sysv */
+};
+
 struct ir_blk;
 
 /* an IR instruction. is a linked list */
@@ -160,12 +166,10 @@ void ir_print_inst(ir_inst_t *ins, int mode);
 void ir_dump(ir_func_t *fun, int mode);
 
 /* codegen an IR function */
-void ir_func_emit(FILE *f, ir_func_t *fun);
+/* assumes function has been finalized */
+void ir_func_emit(FILE *f, ir_func_t *fun, enum ir_arch arch);
 
 /* add IR instruction to IR block */
 void ir_blk_add(ir_blk_t *blk, ir_inst_t *inst);
-
-/* is this inst type a 3-register op? */
-int ir_inst_is3(enum ins_type type);
 
 #endif /* IR_H_ */

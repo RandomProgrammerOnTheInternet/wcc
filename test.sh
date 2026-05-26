@@ -7,7 +7,7 @@ assert() {
   expect="$1"
   actual="$2"
 
-  ./bin/wcc "$actual" prog.s
+  ./bin/wcc "$actual" -o prog.s
   compilerstatus="$?"
 
   if [ "$compilerstatus" = "1" ]; then

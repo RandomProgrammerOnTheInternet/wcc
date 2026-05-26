@@ -125,4 +125,17 @@ void compile_warn(char *loc, const char *fmt, ...);
 /* does string `thing` start with `with`? */
 int starts_with(char *thing, char *with);
 
+#if defined(__x86_64__) || defined(_M_X64)
+#define DEFAULT_BACKEND IR_ARCH_X64_SYSV
+#endif /* x86 */
+
+#if defined(__aarch64__) || defined(_M_ARM64)
+#define DEFAULT_BACKEND IR_ARCH_AARCH64_APPLE
+#endif /* arm */
+
+#ifndef DEFAULT_BACKEND
+#warning no default backend for this arch, defaulting to x86
+#define DEFAULT_BACKEND IR_ARCH_X64_SYSV
+#endif /* DEFAULT_BACKEND */
+
 #endif /* BASE_H_ */
