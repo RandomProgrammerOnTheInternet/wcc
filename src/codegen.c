@@ -212,6 +212,16 @@ void codegen_expr_stmt(node_t *node)
 			codegen_expr_stmt(nod);
 		}
 		break;
+	case NODE_DOWHILE: {
+		ir_blk_t *then = emit_blk();
+		ir_blk_t *resume = emit_blk();
+		emit_jmp(then);
+		outblk = then;
+		codegen_expr_stmt(node->then);
+		reg_t *cond = codegen_expr(node->cond);
+		emit_br(cond, then, resume);
+		outblk = resume;
+	}; break;
 	case NODE_WHILE: {
 		ir_blk_t *condchk = emit_blk();
 		ir_blk_t *loop = emit_blk();

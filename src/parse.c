@@ -244,6 +244,20 @@ static node_t *parse_stmt(token_t *tok, token_t **rest)
 		return whilenod;
 	}
 
+	/* do while */
+	if(tok->kind == TOK_KEYWORD && token_eq(tok, "do")) {
+		tok = token_skip(tok, "do");
+		node_t *dowhile = node_make(NODE_DOWHILE, tok);
+		dowhile->then = parse_stmt(tok, &tok);
+		tok = token_skip(tok, "while");
+		tok = token_skip(tok, "(");
+		dowhile->cond = parse_expr(tok, &tok);
+		tok = token_skip(tok, ")");
+		tok = token_skip(tok, ";");
+		*rest = tok;
+		return dowhile;
+	}
+
 	/* "{" compound-stmt */
 	if(token_eq(tok, "{")) {
 		node_t *compound_stmt = parse_compound_stmt(tok->next, &tok);

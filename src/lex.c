@@ -98,16 +98,18 @@ int iswhitespace(int c)
 }
 
 /* is this a keyword? */
-static int iskeyword(char *prog, size_t left)
+static int iskeyword(char *prog, size_t plen)
 {
-	static const char *keywords[] = { "return", "if", "else", "for", "while" };
+	static const char *keywords[] = { "return", "if",	 "else",
+									  "for",	"while", "do" };
 	static const size_t keywords_count = sizeof(keywords) / sizeof(keywords[0]);
 
 	for(size_t i = 0; i < keywords_count; i++) {
 		const char *kw = keywords[i];
 		size_t len = strlen(kw);
-		if(strlen(kw) >= left)
+		if(plen != len) {
 			continue;
+		}
 		if(strncmp(prog, kw, len) == 0) {
 			return len;
 		}
@@ -135,8 +137,6 @@ token_t *lex_do(char *prog)
 			break;
 		}
 
-		size_t left = len - (prog - prog_start);
-
 		/* tokenize number */
 		if(isdigit(*prog)) {
 			char *num = prog;
@@ -148,16 +148,6 @@ token_t *lex_do(char *prog)
 			continue;
 		}
 
-		/* tokenize keywords */
-		size_t kw_len = iskeyword(prog, left);
-		if(kw_len) {
-			token_t *kw = token_make(TOK_KEYWORD, prog, prog + kw_len);
-			prog += kw_len;
-			tok->next = kw;
-			tok = tok->next;
-			continue;
-		}
-
 		/* tokenize identifiers */
 		if(isidentfirst(*prog)) {
 			char *start = prog;
@@ -165,7 +155,13 @@ token_t *lex_do(char *prog)
 				prog++;
 			}
 
-			token_t *ident = token_make(TOK_IDENT, start, prog);
+			/* tokenize keywords */
+			int type = TOK_IDENT;
+			if(iskeyword(start, prog - start)) {
+				type = TOK_KEYWORD;
+			}
+
+			token_t *ident = token_make(type, start, prog);
 			tok->next = ident;
 			tok = tok->next;
 			continue;

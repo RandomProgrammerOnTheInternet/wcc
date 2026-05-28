@@ -23,6 +23,7 @@ stmt = "return" expr ";"
       | "if" "(" expr ")" stmt ("else" stmt)?
       | "for" "(" expr-stmt expr? ";" expr? ")" stmt
       | "while" "(" expr ")" stmt
+      | "do" stmt "while" "(" expr ")" ";"
 	  | "{" compound-stmt
 	  | expr-stmt
 compound-stmt = stmt* "}"
@@ -50,6 +51,7 @@ enum node_kind {
 	NODE_BLOCK, /* block stmt */
 	NODE_IF, /* if */
 	NODE_WHILE, /* while */
+	NODE_DOWHILE, /* do-while */
 	NODE_FOR, /* for */
 	NODE_ADDR, /* & */
 	NODE_DEREF, /* * */
