@@ -110,7 +110,7 @@ static bool ins_is_3source(enum ins_type t)
 {
 	/* ADD is not needed here because on x64 you can do lea A, [B+C] */
 	return t == IR_INST_SUB || t == IR_INST_MUL || t == IR_INST_DIV ||
-		   t == IR_INST_SUBI || t == IR_INST_MULI || t == IR_INST_DIVI;
+		   t == IR_INST_MULI || t == IR_INST_DIVI;
 }
 
 /* is the instruction in form A = F(B) where it needs A and B to be seperate? */
@@ -331,12 +331,18 @@ brcmp_main:
 			}
 
 		case IR_INST_SUBI:
-			if(ins->imm == 1) {
-				fprintf(f, "\tdec %s\n", r0);
+			if(ins->r0->rr == ins->r1->rr) {
+				if(ins->imm == 1) {
+					fprintf(f, "\tdec %s\n", r0);
+				} else {
+					fprintf(f, "\tsub %s, %lld\n", r0, (int64_t)ins->imm);
+				}
+				break;
 			} else {
-				fprintf(f, "\tsub %s, %lld\n", r0, (int64_t)ins->imm);
+				fprintf(f, "\tlea %s, [%s - %lld]\n", r0, r1,
+						(int64_t)ins->imm);
+				break;
 			}
-			break;
 		case IR_INST_MULI:
 		case IR_INST_DIVI:
 			ERROR("impossible instruction encountered");
