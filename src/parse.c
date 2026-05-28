@@ -84,7 +84,7 @@ node_t *node_var(obj_t *var, token_t *tok)
 obj_t *obj_make(char *name, bool is_func)
 {
 	/* also inserts it into locals linked list */
-	obj_t *obj = zalloc(sizeof(obj_t));
+	obj_t *obj = scr_alloc(sizeof(obj_t));
 	if(!is_func) {
 		obj->next = locals;
 		locals = obj;
@@ -112,7 +112,7 @@ static obj_t *find_var(token_t *tok)
 void obj_delete(obj_t *obj)
 {
 	free(obj->name);
-	free(obj);
+	// scr_free(obj);
 }
 
 /* deletes all objects in linked list */
@@ -298,12 +298,12 @@ parse:
 	}
 
 	if(token_eq(tok, ">")) {
-		node = node_bin(NODE_LT, parse_add(tok->next, &tok), node, tok);
+		node = node_bin(NODE_GT, node, parse_add(tok->next, &tok), tok);
 		goto parse;
 	}
 
 	if(token_eq(tok, ">=")) {
-		node = node_bin(NODE_LE, parse_add(tok->next, &tok), node, tok);
+		node = node_bin(NODE_GE, node, parse_add(tok->next, &tok), tok);
 		goto parse;
 	}
 

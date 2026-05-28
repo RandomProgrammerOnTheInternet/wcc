@@ -7,7 +7,7 @@ assert() {
   expect="$1"
   actual=$2
 
-  ./bin/wcc test/$actual -o prog.s -O1
+  ./bin/wcc test/$actual -o prog.s -O3
   compilerstatus="$?"
 
   if [ "$compilerstatus" = "1" ]; then
@@ -27,7 +27,6 @@ assert() {
     passing=0
   fi
 }
-
 assert 0 "null_stmt.c"
 assert 0 "ret0.c"
 assert 1 "sub.c"

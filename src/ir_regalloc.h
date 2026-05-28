@@ -20,6 +20,6 @@ void ir_regalloc(LIST(reg_t *) allocated, int amount);
 void ir_regalloc_spill(ir_func_t *fun, LIST(reg_t *) allocated);
 
 /* do register allocation all in one */
-void ir_finalize(ir_func_t *fun, int amount);
+void ir_finalize(ir_func_t *fun, int amount, enum ir_arch arch);
 
 #endif /* IR_REGALLOC_H_ */

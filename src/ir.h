@@ -20,6 +20,12 @@ enum ins_type {
 	IR_INST_MUL, /* %r0 = mul %r1, %r2 */
 	IR_INST_DIV, /* %r0 = div %r1, %r2 */
 
+	/* immediate binops */
+	IR_INST_ADDI, /* %r0 = addi %r1, #imm */
+	IR_INST_SUBI, /* %r0 = subi %r1, #imm */
+	IR_INST_MULI, /* %r0 = muli %r1, #imm */
+	IR_INST_DIVI, /* %r0 = divi %r1, #imm */
+
 	/* arithmetic - unaryops */
 	IR_INST_NEG, /* %r0 = neg %r1 */
 
@@ -28,12 +34,32 @@ enum ins_type {
 	IR_INST_NE, /* %r0 = cmp.ne %r1, %r2 */
 	IR_INST_LT, /* %r0 = cmp.lt %r1, %r2 */
 	IR_INST_LE, /* %r0 = cmp.le %r1, %r2 */
+	IR_INST_GT, /* %r0 = cmp.gt %r1, %r2 */
+	IR_INST_GE, /* %r0 = cmp.ge %r1, %r2 */
+
+	/* immediate comparisons */
+	IR_INST_EQI, /* %r0 = cmpi.eq %r1, #imm */
+	IR_INST_NEI, /* %r0 = cmpi.ne %r1, #imm */
+	IR_INST_LTI, /* %r0 = cmpi.lt %r1, #imm */
+	IR_INST_LEI, /* %r0 = cmpi.le %r1, #imm */
+	IR_INST_GTI, /* %r0 = cmpi.gt %r1, #imm */
+	IR_INST_GEI, /* %r0 = cmpi.ge %r1, #imm */
 
 	/* compare-and-branches (all signed for now) */
 	IR_INST_BREQ, /* breq %r1, %r2, true-blk, false-blk */
 	IR_INST_BRNE, /* brne %r1, %r2, true-blk, false-blk */
 	IR_INST_BRLT, /* brlt %r1, %r2, true-blk, false-blk */
 	IR_INST_BRLE, /* brle %r1, %r2, true-blk, false-blk */
+	IR_INST_BRGT, /* brgt %r1, %r2, true-blk, false-blk */
+	IR_INST_BRGE, /* brge %r1, %r2, true-blk, false-blk */
+
+	/* immediate compare-and-branches */
+	IR_INST_BREQI, /* breqi %r1, #imm, true-blk, false-blk */
+	IR_INST_BRNEI, /* brnei %r1, #imm, true-blk, false-blk */
+	IR_INST_BRLTI, /* brlti %r1, #imm, true-blk, false-blk */
+	IR_INST_BRLEI, /* brlei %r1, #imm, true-blk, false-blk */
+	IR_INST_BRGTI, /* brgti %r1, #imm, true-blk, false-blk */
+	IR_INST_BRGEI, /* brgei %r1, #imm, true-blk, false-blk */
 
 	/* memory */
 	IR_INST_LOAD, /* %r0 = load %r1 */
@@ -50,6 +76,7 @@ enum ins_type {
 	IR_INST_BR, /* br %r1, false-blk, true-blk */
 	IR_INST_JMP, /* jmp blk */
 	IR_INST_RET, /* ret (%r1) */
+	IR_INST_CALL, /* (%r0) = call %a1, %a2, ... */
 };
 
 /* a "register" */
@@ -87,6 +114,7 @@ typedef struct ir_inst {
 	reg_t *r0, *r1, *r2; /* instruction args */
 	uint64_t imm; /* immediate, if needed */
 	struct ir_blk *false_blk, *true_blk; /* for br */
+	LIST(reg_t *) call_args; /* for call */
 } ir_inst_t;
 
 /* IR block (collection of instructions, >= 1 entry and only <= 2 exits) */
@@ -109,6 +137,8 @@ typedef struct ir_func {
 	char *name; /* name of this function */
 	LIST(ir_blk_t *) blocks; /* the collection of blocks */
 	size_t stack_needed; /* stack space needed for this function */
+	bool alloc_strat; /* false = prefer caller-save first, true = prefer callee-save first */
+	bool *alloc_used; /* used registers for allocation (for pushing/poping) */
 } ir_func_t;
 
 /* -- big list of instructions -- */
@@ -127,6 +157,18 @@ DEF_INS(eq, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(ne, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(lt, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(le, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(gt, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(ge, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(addi, reg_t *r0, reg_t *r2, long imm);
+DEF_INS(subi, reg_t *r0, reg_t *r2, long imm);
+DEF_INS(muli, reg_t *r0, reg_t *r2, long imm);
+DEF_INS(divi, reg_t *r0, reg_t *r2, long imm);
+DEF_INS(eqi, reg_t *r0, reg_t *r2, long imm);
+DEF_INS(nei, reg_t *r0, reg_t *r2, long imm);
+DEF_INS(lti, reg_t *r0, reg_t *r2, long imm);
+DEF_INS(lei, reg_t *r0, reg_t *r2, long imm);
+DEF_INS(gti, reg_t *r0, reg_t *r2, long imm);
+DEF_INS(gei, reg_t *r0, reg_t *r2, long imm);
 DEF_INS(neg, reg_t *r0, reg_t *r1);
 DEF_INS(leas, reg_t *r0, long imm);
 DEF_INS(load, reg_t *r0, reg_t *r1);
@@ -138,6 +180,16 @@ DEF_INS(breq, reg_t *r1, reg_t *r2, ir_blk_t *falseblk, ir_blk_t *trueblk);
 DEF_INS(brne, reg_t *r1, reg_t *r2, ir_blk_t *falseblk, ir_blk_t *trueblk);
 DEF_INS(brlt, reg_t *r1, reg_t *r2, ir_blk_t *falseblk, ir_blk_t *trueblk);
 DEF_INS(brle, reg_t *r1, reg_t *r2, ir_blk_t *falseblk, ir_blk_t *trueblk);
+DEF_INS(brgt, reg_t *r1, reg_t *r2, ir_blk_t *falseblk, ir_blk_t *trueblk);
+DEF_INS(brge, reg_t *r1, reg_t *r2, ir_blk_t *falseblk, ir_blk_t *trueblk);
+
+DEF_INS(breqi, reg_t *r1, long imm, ir_blk_t *falseblk, ir_blk_t *trueblk);
+DEF_INS(brnei, reg_t *r1, long imm, ir_blk_t *falseblk, ir_blk_t *trueblk);
+DEF_INS(brlti, reg_t *r1, long imm, ir_blk_t *falseblk, ir_blk_t *trueblk);
+DEF_INS(brlei, reg_t *r1, long imm, ir_blk_t *falseblk, ir_blk_t *trueblk);
+DEF_INS(brgti, reg_t *r1, long imm, ir_blk_t *falseblk, ir_blk_t *trueblk);
+DEF_INS(brgei, reg_t *r1, long imm, ir_blk_t *falseblk, ir_blk_t *trueblk);
+
 DEF_INS(jmp, ir_blk_t *blk);
 DEF_INS(ret, reg_t *r1);
 
@@ -149,6 +201,12 @@ int ir_inst_is_term(enum ins_type type);
 
 /* is this instruction a comparision? */
 int ir_inst_is_cmp(enum ins_type type);
+
+/* is this instruction associative? (F(B, C) == F(C, B)) */
+int ir_inst_is_assoc(enum ins_type type);
+
+/* does this instruction have r2 as an immediate? */
+int ir_inst_r2_imm(enum ins_type type);
 
 /* make a (new) register */
 reg_t *reg_make(void);

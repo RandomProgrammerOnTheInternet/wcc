@@ -13,25 +13,49 @@ static long counter(int reset)
 	return counter++;
 }
 
+/* does this instruction have r2 as an immediate? */
+int ir_inst_r2_imm(enum ins_type type)
+{
+	return type == IR_INST_ADDI || type == IR_INST_SUBI ||
+		   type == IR_INST_MULI || type == IR_INST_DIVI ||
+		   type == IR_INST_EQI || type == IR_INST_NEI || type == IR_INST_LTI ||
+		   type == IR_INST_LEI || type == IR_INST_GTI || type == IR_INST_GTI;
+}
+
 int ir_inst_is_term(enum ins_type type)
 {
 	return type == IR_INST_BR || type == IR_INST_RET || type == IR_INST_JMP ||
 		   type == IR_INST_BREQ || type == IR_INST_BRNE ||
-		   type == IR_INST_BRLT || type == IR_INST_BRLE;
+		   type == IR_INST_BRLT || type == IR_INST_BRLE ||
+		   type == IR_INST_BRGT || type == IR_INST_BRGE ||
+		   type == IR_INST_BREQI || type == IR_INST_BRNEI ||
+		   type == IR_INST_BRLTI || type == IR_INST_BRLEI ||
+		   type == IR_INST_BRGTI || type == IR_INST_BRGEI;
 }
 
 /* is this instruction a comparision? */
 int ir_inst_is_cmp(enum ins_type type)
 {
 	return type == IR_INST_EQ || type == IR_INST_NE || type == IR_INST_LE ||
-		   type == IR_INST_LT;
+		   type == IR_INST_LT || type == IR_INST_GT || type == IR_INST_GE ||
+		   type == IR_INST_EQI || type == IR_INST_NEI || type == IR_INST_LEI ||
+		   type == IR_INST_LTI || type == IR_INST_GTI || type == IR_INST_GEI;
 }
 
 /* is this instruction foldable? */
 static int ir_inst_is_foldable(enum ins_type type)
 {
 	return ir_inst_is_cmp(type) || type == IR_INST_ADD || type == IR_INST_SUB ||
-		   type == IR_INST_MUL || type == IR_INST_DIV;
+		   type == IR_INST_MUL || type == IR_INST_DIV || type == IR_INST_ADDI ||
+		   type == IR_INST_SUBI || type == IR_INST_MULI || type == IR_INST_DIVI;
+}
+
+/* is this instruction associative? (F(B, C) == F(C, B)) */
+int ir_inst_is_assoc(enum ins_type type)
+{
+	return type == IR_INST_EQ || type == IR_INST_NE || type == IR_INST_LT ||
+		   type == IR_INST_LE || type == IR_INST_GT || type == IR_INST_GE ||
+		   type == IR_INST_ADD || type == IR_INST_MUL;
 }
 
 /* reset register counter */
@@ -120,6 +144,20 @@ DEF_INS(eq, EQ, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(ne, NE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(lt, LT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(le, LE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(gt, GT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(ge, GE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+
+DEF_INS(addi, ADD, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
+DEF_INS(subi, SUB, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
+DEF_INS(muli, MUL, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
+DEF_INS(divi, DIV, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
+DEF_INS(eqi, EQ, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
+DEF_INS(nei, NE, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
+DEF_INS(lti, LT, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
+DEF_INS(lei, LE, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
+DEF_INS(gti, GT, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
+DEF_INS(gei, GE, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
+
 DEF_INS(neg, NEG, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
 DEF_INS(leas, LEAS, r0, NULL, NULL, imm, reg_t *r0, long imm);
 DEF_INS(load, LOAD, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
@@ -142,13 +180,31 @@ DEF_INS(ret, RET, NULL, r1, NULL, 0, reg_t *r1);
 		ins->true_blk = tb;                                                 \
 		return ins;                                                         \
 	}
+#define GEN_BRCMPI(c, name)                                                \
+	ir_inst_t *ins_##name(reg_t *r1, long imm, ir_blk_t *fb, ir_blk_t *tb) \
+	{                                                                      \
+		ir_inst_t *ins = ir_inst_make(c, NULL, r1, NULL, imm);             \
+		ins->false_blk = fb;                                               \
+		ins->true_blk = tb;                                                \
+		return ins;                                                        \
+	}
 
 GEN_BRCMP(IR_INST_BREQ, breq);
 GEN_BRCMP(IR_INST_BRNE, brne);
 GEN_BRCMP(IR_INST_BRLT, brlt);
 GEN_BRCMP(IR_INST_BRLE, brle);
+GEN_BRCMP(IR_INST_BRGT, brgt);
+GEN_BRCMP(IR_INST_BRGE, brge);
+
+GEN_BRCMPI(IR_INST_BREQI, breqi);
+GEN_BRCMPI(IR_INST_BRNEI, brnei);
+GEN_BRCMPI(IR_INST_BRLTI, brlti);
+GEN_BRCMPI(IR_INST_BRLEI, brlei);
+GEN_BRCMPI(IR_INST_BRGTI, brgti);
+GEN_BRCMPI(IR_INST_BRGEI, brgei);
 
 #undef GEN_BRCMP
+#undef GEN_BRCMPI
 
 ir_inst_t *ins_br(reg_t *on, ir_blk_t *falseb, ir_blk_t *trueb)
 {
@@ -236,6 +292,7 @@ void ir_func_delete(ir_func_t *fun)
 		ir_blk_delete(blk);
 	}
 	list_delete(fun->blocks);
+	free(fun->alloc_used);
 	free(fun);
 	return;
 }
@@ -261,6 +318,24 @@ static void ir_fix_ins(ir_inst_t *ins)
 		FIX(BRNE, xx, r1, r2);
 		FIX(BRLT, xx, r1, r2);
 		FIX(BRLE, xx, r1, r2);
+		FIX(BRGT, xx, r1, r2);
+		FIX(BRGE, xx, r1, r2);
+		FIX(BREQI, xx, r1, xx);
+		FIX(BRNEI, xx, r1, xx);
+		FIX(BRLTI, xx, r1, xx);
+		FIX(BRLEI, xx, r1, xx);
+		FIX(BRGTI, xx, r1, xx);
+		FIX(BRGEI, xx, r1, xx);
+		FIX(ADDI, r0, r1, xx);
+		FIX(SUBI, r0, r1, xx);
+		FIX(MULI, r0, r1, xx);
+		FIX(DIVI, r0, r1, xx);
+		FIX(EQI, r0, r1, xx);
+		FIX(NEI, r0, r1, xx);
+		FIX(LTI, r0, r1, xx);
+		FIX(LEI, r0, r1, xx);
+		FIX(GTI, r0, r1, xx);
+		FIX(GEI, r0, r1, xx);
 		FIX(LOAD, r0, r1, xx);
 		FIX(STORE, xx, r1, r2);
 		FIX(LEAS, r0, xx, xx);
@@ -323,7 +398,7 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 	case IR_INST_MOV:
 		out("%%r%ld = %%r%ld", r0, r1);
 	case IR_INST_IMM:
-		out("%%r%ld = #%llu", r0, imm);
+		out("%%r%ld = #%lld", r0, imm);
 	case IR_INST_ADD:
 		out("%%r%ld = add %%r%ld, %%r%ld", r0, r1, r2);
 	case IR_INST_SUB:
@@ -332,6 +407,14 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		out("%%r%ld = mul %%r%ld, %%r%ld", r0, r1, r2);
 	case IR_INST_DIV:
 		out("%%r%ld = div %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_ADDI:
+		out("%%r%ld = addi %%r%ld, #%llu", r0, r1, imm);
+	case IR_INST_SUBI:
+		out("%%r%ld = subi %%r%ld, #%llu", r0, r1, imm);
+	case IR_INST_MULI:
+		out("%%r%ld = muli %%r%ld, #%lld", r0, r1, imm);
+	case IR_INST_DIVI:
+		out("%%r%ld = divi %%r%ld, #%lld", r0, r1, imm);
 	case IR_INST_NEG:
 		out("%%r%ld = neg %%r%ld", r0, r1);
 	case IR_INST_EQ:
@@ -342,6 +425,22 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		out("%%r%ld = cmp.lt %%r%ld, %%r%ld", r0, r1, r2);
 	case IR_INST_LE:
 		out("%%r%ld = cmp.le %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_GT:
+		out("%%r%ld = cmp.gt %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_GE:
+		out("%%r%ld = cmp.ge %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_EQI:
+		out("%%r%ld = cmpi.eq %%r%ld, #%lld", r0, r1, imm);
+	case IR_INST_NEI:
+		out("%%r%ld = cmpi.ne %%r%ld, #%lld", r0, r1, imm);
+	case IR_INST_LTI:
+		out("%%r%ld = cmpi.lt %%r%ld, #%lld", r0, r1, imm);
+	case IR_INST_LEI:
+		out("%%r%ld = cmpi.le %%r%ld, #%lld", r0, r1, imm);
+	case IR_INST_GTI:
+		out("%%r%ld = cmpi.gt %%r%ld, #%lld", r0, r1, imm);
+	case IR_INST_GEI:
+		out("%%r%ld = cmpi.ge %%r%ld, #%lld", r0, r1, imm);
 	case IR_INST_LOAD:
 		out("%%r%ld = load %%r%ld", r0, r1);
 	case IR_INST_STORE:
@@ -369,6 +468,30 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 	case IR_INST_BRLE:
 		out("br.le %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);
+	case IR_INST_BRGT:
+		out("br.gt %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
+			ins->false_blk->num);
+	case IR_INST_BRGE:
+		out("br.ge %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
+			ins->false_blk->num);
+	case IR_INST_BREQI:
+		out("br.eqi %%r%ld, %lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+			ins->false_blk->num);
+	case IR_INST_BRNEI:
+		out("br.nei %%r%ld, %lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+			ins->false_blk->num);
+	case IR_INST_BRLTI:
+		out("br.lti %%r%ld, %lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+			ins->false_blk->num);
+	case IR_INST_BRLEI:
+		out("br.lei %%r%ld, %lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+			ins->false_blk->num);
+	case IR_INST_BRGTI:
+		out("br.gti %%r%ld, %lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+			ins->false_blk->num);
+	case IR_INST_BRGEI:
+		out("br.gei %%r%ld, %lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+			ins->false_blk->num);
 	case IR_INST_RET:
 		out("ret %%r%ld", r1);
 	case IR_INST_LEAS:
@@ -385,6 +508,34 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 #undef r0
 #undef r1
 #undef r2
+}
+
+static int promote_assoc_to_assoc_imm(enum ins_type type)
+{
+	if(!ir_inst_is_assoc(type)) {
+		return type;
+	}
+	switch(type) {
+	case IR_INST_ADD:
+		return IR_INST_ADDI;
+	case IR_INST_MUL:
+		return IR_INST_MULI;
+	case IR_INST_EQ:
+		return IR_INST_EQI;
+	case IR_INST_NE:
+		return IR_INST_NEI;
+	case IR_INST_LT:
+		return IR_INST_LTI;
+	case IR_INST_LE:
+		return IR_INST_LEI;
+	case IR_INST_GT:
+		return IR_INST_GTI;
+	case IR_INST_GE:
+		return IR_INST_GEI;
+	default:
+		return IR_INST_NOP;
+	}
+	return IR_INST_NOP;
 }
 
 /* dump IR */
@@ -405,9 +556,45 @@ void ir_dump(ir_func_t *fun, int mode)
 	return;
 }
 
-/* constant folding */
-static void ir_fold(ir_func_t *func)
+/* move elimination */
+static int ir_mov_elim(ir_func_t *func)
 {
+	int changed = 0;
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(ins->type == IR_INST_MOV) {
+				changed = 1;
+				ins->r0->insty = IR_INST_MOV;
+				ins->r0->lhs = ins->r1;
+				ins->type = IR_INST_NOP;
+				continue;
+			}
+
+			/* if written to stop the elim */
+			if(ins->r0 && ins->r0->insty == IR_INST_MOV) {
+				ins->r0->insty = IR_INST_NOP;
+				continue;
+			}
+
+			if(ins->r1 && ins->r1->insty == IR_INST_MOV) {
+				changed = 1;
+				ins->r1 = ins->r1->lhs;
+			}
+
+			if(ins->r2 && ins->r2->insty == IR_INST_MOV) {
+				changed = 1;
+				ins->r2 = ins->r2->lhs;
+			}
+		}
+	}
+	return changed;
+}
+
+/* constant folding */
+static int ir_fold(ir_func_t *func)
+{
+	int changed = 0;
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
@@ -419,8 +606,17 @@ set_imm:
 				continue;
 			}
 
+			/* if another value stored to this instruction, remove it's immediate status */
+			if(ins->r0 && ins->r0->insty == IR_INST_IMM) {
+				changed = 1;
+				ins->r0->imm = 0;
+				ins->r0->insty = IR_INST_NOP;
+				continue;
+			}
+
 			/* fold */
 			if(ins->type == IR_INST_MOV && ins->r1->insty == IR_INST_IMM) {
+				changed = 1;
 				ins->type = IR_INST_IMM;
 				ins->imm = ins->r1->imm;
 				ins->r1 = NULL;
@@ -429,6 +625,7 @@ set_imm:
 			}
 
 			if(ins->type == IR_INST_NEG && ins->r1->insty == IR_INST_IMM) {
+				changed = 1;
 				ins->type = IR_INST_IMM;
 				ins->imm = -(long)ins->r1->imm;
 				ins->r1 = NULL;
@@ -436,9 +633,10 @@ set_imm:
 				continue;
 			}
 
-			/* fold 3-sources */
+			/* fold 3-sources with both imms */
 			if(ir_inst_is_foldable(ins->type) && ins->r1 && ins->r2 &&
 			   ins->r1->insty == IR_INST_IMM && ins->r2->insty == IR_INST_IMM) {
+				changed = 1;
 				int oldtype = ins->type;
 				ins->type = IR_INST_IMM;
 				long a1 = ins->r1->imm;
@@ -475,6 +673,12 @@ set_imm:
 				case IR_INST_LE:
 					ins->imm = a1 <= a2;
 					break;
+				case IR_INST_GT:
+					ins->imm = a1 > a2;
+					break;
+				case IR_INST_GE:
+					ins->imm = a1 >= a2;
+					break;
 				default:
 					break;
 				}
@@ -482,15 +686,125 @@ set_imm:
 				continue;
 			}
 
-			/* if another value stored to this instruction, remove it's immediate status */
-			if(ins->r0 && ins->r0->insty == IR_INST_IMM) {
-				ins->r0->imm = 0;
-				ins->r0->insty = IR_INST_NOP;
+			/* fold assocs with only 1 imm */
+			if(ir_inst_is_foldable(ins->type) && ir_inst_is_assoc(ins->type) &&
+			   ins->r1 && ins->r2 &&
+			   (ins->r1->insty == IR_INST_IMM ||
+				ins->r2->insty == IR_INST_IMM)) {
+				changed = 1;
+				/* reorder so that imm is on r2 */
+				if(ins->r1->insty == IR_INST_IMM) {
+					reg_t *swap = ins->r1;
+					ins->r1 = ins->r2;
+					ins->r2 = swap;
+					/* if comparison, change to inverse cond */
+					if(ins->type == IR_INST_LT || ins->type == IR_INST_LE ||
+					   ins->type == IR_INST_GT || ins->type == IR_INST_GE) {
+						switch(ins->type) {
+						case IR_INST_LT:
+							ins->type = IR_INST_GE;
+							break;
+						case IR_INST_LE:
+							ins->type = IR_INST_GT;
+							break;
+						case IR_INST_GT:
+							ins->type = IR_INST_LE;
+							break;
+						case IR_INST_GE:
+							ins->type = IR_INST_LT;
+							break;
+						default:
+							break;
+						}
+					}
+				}
+
+				ins->type = promote_assoc_to_assoc_imm(ins->type);
+				ins->imm = ins->r2->imm;
+				continue;
+			}
+
+			/* fold the half-folded ins */
+			if(ir_inst_r2_imm(ins->type) && ins->r1->insty == IR_INST_IMM) {
+				changed = 1;
+				long res = 0;
+				long a1 = ins->r1->imm;
+				long a2 = ins->imm;
+				ins->type = IR_INST_IMM;
+				switch(ins->type) {
+				case IR_INST_ADDI:
+					res = a1 + a2;
+					break;
+				case IR_INST_SUBI:
+					res = a1 - a2;
+					break;
+				case IR_INST_MULI:
+					res = a1 * a2;
+					break;
+				case IR_INST_DIVI:
+					res = a1 / a2;
+					break;
+				case IR_INST_EQI:
+					res = a1 == a2;
+					break;
+				case IR_INST_NEI:
+					res = a1 != a2;
+					break;
+				case IR_INST_LTI:
+					res = a1 < a2;
+					break;
+				case IR_INST_LEI:
+					res = a1 <= a2;
+					break;
+				case IR_INST_GTI:
+					res = a1 > a2;
+					break;
+				case IR_INST_GEI:
+					res = a1 >= a2;
+					break;
+
+				default:
+					break;
+				case IR_INST_BREQI:
+					ins->type = IR_INST_JMP;
+					res = a1 == a2;
+					break;
+				case IR_INST_BRNEI:
+					ins->type = IR_INST_JMP;
+					res = a1 != a2;
+					break;
+				case IR_INST_BRLTI:
+					ins->type = IR_INST_JMP;
+					res = a1 < a2;
+					break;
+				case IR_INST_BRLEI:
+					ins->type = IR_INST_JMP;
+					res = a1 <= a2;
+					break;
+				case IR_INST_BRGTI:
+					ins->type = IR_INST_JMP;
+					res = a1 > a2;
+					break;
+				case IR_INST_BRGEI:
+					ins->type = IR_INST_JMP;
+					res = a1 >= a2;
+					break;
+				}
+
+				if(ins->type == IR_INST_IMM) {
+					ins->imm = res;
+					continue;
+				}
+
+				if(!res && ins->type == IR_INST_JMP) {
+					ins->true_blk = ins->false_blk;
+				}
+
 				continue;
 			}
 		}
 	}
-	return;
+	return changed;
 }
 
 /* optimize
@@ -503,8 +817,9 @@ set_imm:
  * %reg = leas #off
  
  */
-static void ir_stackopt(ir_func_t *func)
+static int ir_stackopt(ir_func_t *func)
 {
+	int changed = 0;
 	/* first, check which registers are leas */
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
@@ -540,6 +855,7 @@ static void ir_stackopt(ir_func_t *func)
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
 			if(ins->type == IR_INST_LEAS && ins->r0->stack_loc) {
 				ins->type = IR_INST_NOP;
+				changed = 1;
 			}
 		}
 	}
@@ -556,6 +872,7 @@ static void ir_stackopt(ir_func_t *func)
 			if(ins->type == IR_INST_LOAD && ins->r1->stack_loc) {
 				ins->type = IR_INST_LOADS;
 				ins->imm = -ins->r1->stack_off;
+				changed = 1;
 			}
 
 			if(ins->type == IR_INST_STORE && ins->r1->stack_loc) {
@@ -563,11 +880,12 @@ static void ir_stackopt(ir_func_t *func)
 				ins->r1 = ins->r2;
 				ins->type = IR_INST_STORES;
 				ins->imm = -r1->stack_off;
+				changed = 1;
 			}
 		}
 	}
 
-	return;
+	return changed;
 }
 
 static int cmp_to_br(enum ins_type ins)
@@ -584,9 +902,57 @@ static int cmp_to_br(enum ins_type ins)
 		return IR_INST_BRLT;
 	case IR_INST_LE:
 		return IR_INST_BRLE;
+	case IR_INST_GT:
+		return IR_INST_BRGT;
+	case IR_INST_GE:
+		return IR_INST_BRGE;
+	case IR_INST_EQI:
+		return IR_INST_BREQI;
+	case IR_INST_NEI:
+		return IR_INST_BRNEI;
+	case IR_INST_LTI:
+		return IR_INST_BRLTI;
+	case IR_INST_LEI:
+		return IR_INST_BRLEI;
+	case IR_INST_GTI:
+		return IR_INST_BRGTI;
+	case IR_INST_GEI:
+		return IR_INST_BRGEI;
 	default:
 		return IR_INST_NOP;
 	}
+}
+
+static int ir_optzero(ir_func_t *func)
+{
+	int changed = 0;
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(ins->imm) {
+				continue;
+			}
+			switch(ins->type) {
+			case IR_INST_ADDI:
+			case IR_INST_SUBI:
+				/* %r0 = addi/subi %r1, 0 ->
+					 * %r0 = %r1 */
+				ins->type = IR_INST_MOV;
+				changed = 1;
+				break;
+			case IR_INST_MULI:
+			case IR_INST_DIVI:
+				/* %r0 = muli/divi %r1, 0 ->
+					 * %r0 = #0 */
+				ins->type = IR_INST_IMM;
+				changed = 1;
+				break;
+			default:
+				break;
+			}
+		}
+	}
+	return changed;
 }
 
 /* optimize
@@ -596,8 +962,9 @@ static int cmp_to_br(enum ins_type ins)
  * ->
  * br.XX %r1, %r2, T, F
  */
-static void ir_branchopt(ir_func_t *func)
+static int ir_branchopt(ir_func_t *func)
 {
+	int changed = 0;
 	/* scan comparisions */
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
@@ -606,12 +973,17 @@ static void ir_branchopt(ir_func_t *func)
 				ins->r0->insty = ins->type;
 				ins->r0->lhs = ins->r1;
 				ins->r0->rhs = ins->r2;
+				if(!ins->r2) {
+					ins->r0->imm = ins->imm;
+				}
 				ins->r1->insty = ins->type;
 				ins->r1->lhs = ins->r1;
 				ins->r1->rhs = ins->r2;
-				ins->r2->insty = ins->type;
-				ins->r2->lhs = ins->r1;
-				ins->r2->rhs = ins->r2;
+				if(ins->r2) {
+					ins->r2->insty = ins->type;
+					ins->r2->lhs = ins->r1;
+					ins->r2->rhs = ins->r2;
+				}
 				continue;
 			}
 
@@ -653,21 +1025,28 @@ static void ir_branchopt(ir_func_t *func)
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
 			if(ir_inst_is_cmp(ins->type) && ins->r0->insty == ins->type &&
-			   ins->r1->insty == ins->type && ins->r2->insty == ins->type) {
+			   ins->r1->insty == ins->type) {
+				if(ins->r2 && ins->r2->insty != ins->type) {
+					goto false_pos;
+				}
 				ins->type = IR_INST_NOP;
+				changed = 1;
 				ins->r0 = ins->r1 = ins->r2 = NULL;
 				continue;
 			}
+false_pos:
 
 			if(ins->type == IR_INST_BR && ir_inst_is_cmp(ins->r1->insty)) {
 				reg_t *cmp = ins->r1;
 				ins->type = cmp_to_br(cmp->insty);
 				ins->r1 = cmp->lhs;
 				ins->r2 = cmp->rhs;
+				ins->imm = cmp->imm;
+				changed = 1;
 			}
 		}
 	}
-	return;
+	return changed;
 }
 
 /* removes nops */
@@ -699,30 +1078,109 @@ void ir_nopremover(ir_func_t *fun)
 	}
 }
 
+/* changes
+ * stores #imm, %r1
+ * loads %r2, #imm
+ * ->
+ * stores #imm, %r1
+ * %r2 = %r1
+ */
+static int ir_stackreduce(ir_func_t *func)
+{
+	int changed = 0;
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		ir_inst_t *nxt = blk->insts;
+		for(ir_inst_t *ins = blk->insts; ins; ins = nxt) {
+			nxt = ins->next;
+
+			if(ins && nxt && ins->type == IR_INST_STORES &&
+			   nxt->type == IR_INST_LOADS && ins->imm == nxt->imm) {
+				reg_t *r1 = ins->r1;
+				reg_t *r2 = nxt->r0;
+				changed = 1;
+				/* bingo */
+				nxt->type = IR_INST_MOV;
+				nxt->r0 = r2;
+				nxt->r1 = r1;
+			}
+		}
+	}
+	return changed;
+}
+
 extern int debug;
 
 /* optimizes a function */
 void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 {
-	if(opt_level >= 1) {
-		if(debug) {
-			printf("Before common opts:\n");
-			ir_dump(func, 'v');
-			printf("****\n");
+	int change = 0;
+	int max_tolerated_change;
+	switch(opt_level) {
+	case 0:
+		max_tolerated_change = 0;
+		break;
+	case 1:
+		max_tolerated_change = 2;
+		break;
+	case 2:
+		max_tolerated_change = 4;
+		break;
+	case 3:
+		max_tolerated_change = 8;
+		break;
+	default:
+		max_tolerated_change = 0;
+		break;
+	}
+
+	if(debug) {
+		printf("Before common opts:\n");
+		ir_dump(func, 'v');
+		printf("****\n");
+	}
+
+	int left = max_tolerated_change;
+	while(left) {
+		change = 0;
+		/* stack-based optimizations */
+		{
+			change |= ir_stackopt(func);
+			ir_nopremover(func);
+			change |= ir_stackreduce(func);
+			change |= ir_mov_elim(func);
+			ir_nopremover(func);
+			ir_fix(func);
 		}
-		ir_fold(func);
-		ir_stackopt(func);
-		ir_nopremover(func);
-		ir_fix(func);
-		ir_branchopt(func);
-		ir_nopremover(func);
-		ir_fix(func);
-		ir_fold(func);
-		if(debug) {
-			printf("After common opts:\n");
-			ir_dump(func, 'v');
-			printf("****\n");
+
+		/* branch opts */
+		{
+			change |= ir_branchopt(func);
+			ir_nopremover(func);
+			ir_fix(func);
 		}
+
+		/* fold opts */
+		{
+			change |= ir_fold(func);
+			change |= ir_optzero(func);
+			ir_fix(func);
+			change |= ir_mov_elim(func);
+			ir_nopremover(func);
+			ir_fix(func);
+		}
+
+		if(!change) {
+			break;
+		}
+
+		left--;
+	}
+
+	if(debug) {
+		printf("After common opts:\n");
+		ir_dump(func, 'v');
+		printf("****\n");
 	}
 
 	/* apply arch specific opts */

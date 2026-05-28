@@ -110,7 +110,13 @@ static void fill_ins_outs(ir_blk_t *blk)
 			fill_ins_outs_reg(blk, inst->r1);
 		if(inst->r2)
 			fill_ins_outs_reg(blk, inst->r2);
-		;
+
+		/* call arguments */
+		if(inst->type == IR_INST_CALL) {
+			for(size_t i = 0; i < list_len(inst->call_args); i++) {
+				fill_ins_outs_reg(blk, inst->call_args[i]);
+			}
+		}
 	}
 }
 
@@ -192,6 +198,12 @@ LIST(reg_t *) ir_blk_reglive(ir_func_t *fun)
 			}
 			reg_update_counter(ins->r1, ins_count);
 			reg_update_counter(ins->r2, ins_count);
+
+			if(ins->type == IR_INST_CALL) {
+				for(size_t j = 0; j < list_len(ins->call_args); j++) {
+					reg_update_counter(ins->call_args[i], ins_count);
+				}
+			}
 			ins_count++;
 		}
 		for(size_t j = 0; j < list_len(blk->regs_out); j++) {
@@ -213,23 +225,12 @@ static int spill_register(reg_t **regs, int amount)
 	return reg;
 }
 
-/* insert a spilled load before `ins` for r1 */
-static void rewrite_load_spill_r1(ir_inst_t *ins_prev, ir_inst_t *ins)
+/* spill a register read `reg` before `ins` */
+static void rewrite_load_spill(ir_inst_t *ins_prev, ir_inst_t *ins, reg_t *reg)
 {
-	ASSERT(ins->r1->spilld, "tried to spill a non-spilled register");
+	ASSERT(reg->spilld, "tried to spill a non-spilled register");
 	ir_inst_t *inst =
-		ir_inst_make(IR_INST_LOADSS, ins->r1, NULL, NULL, ins->r1->var->off);
-	ins_prev->next = inst;
-	inst->next = ins;
-	return;
-}
-
-/* insert a spilled load before `ins` for r2 */
-static void rewrite_load_spill_r2(ir_inst_t *ins_prev, ir_inst_t *ins)
-{
-	ASSERT(ins->r2->spilld, "tried to spill a non-spilled register");
-	ir_inst_t *inst =
-		ir_inst_make(IR_INST_LOADSS, ins->r2, NULL, NULL, ins->r2->var->off);
+		ir_inst_make(IR_INST_LOADSS, reg, NULL, NULL, reg->var->off);
 	ins_prev->next = inst;
 	inst->next = ins;
 	return;
@@ -258,13 +259,23 @@ static void rewrite_ins(ir_inst_t *ins_prev, ir_inst_t *ins)
 	}
 
 	if(ins->r1 && ins->r1->spilld) {
-		rewrite_load_spill_r1(ins_prev, ins);
+		rewrite_load_spill(ins_prev, ins, ins->r1);
 		ins_prev = ins->next;
 	}
 
 	if(ins->r2 && ins->r2->spilld) {
-		rewrite_load_spill_r2(ins_prev, ins);
+		rewrite_load_spill(ins_prev, ins, ins->r2);
 		ins_prev = ins->next;
+	}
+
+	if(ins->type == IR_INST_CALL) {
+		for(size_t i = 0; i < list_len(ins->call_args); i++) {
+			reg_t *arg = ins->call_args[i];
+			if(arg && arg->spilld) {
+				rewrite_load_spill(ins_prev, ins, arg);
+				ins_prev = ins->next;
+			}
+		}
 	}
 
 	return;
@@ -321,6 +332,10 @@ void ir_regalloc(LIST(reg_t *) allocated, int amount_)
 
 	for(size_t i = 0; i < list_len(allocated); i++) {
 		reg_t *r = allocated[i];
+		if(!r) {
+			/* can't really spill a NULL */
+			continue;
+		}
 
 		bool need_spill = true;
 		/* find a register */
@@ -349,6 +364,101 @@ void ir_regalloc(LIST(reg_t *) allocated, int amount_)
 
 	free(regs);
 	return;
+}
+
+static long ir_eval_strat_cost(ir_func_t *fun, int amount, int callee_cost,
+							   int caller_cost, bool strat, bool *used)
+{
+	long cost = 0;
+
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(ins->r0) {
+				used[ins->r0->rr] = 1;
+			}
+
+			if(ins->r1) {
+				used[ins->r1->rr] = 1;
+			}
+
+			if(ins->r2) {
+				used[ins->r2->rr] = 1;
+			}
+
+			if(ins->type != IR_INST_CALL) {
+				continue;
+			}
+
+			size_t args = list_len(ins->call_args);
+			for(size_t i = 0; i < args; i++) {
+				if(ins->call_args[i]) {
+					used[ins->call_args[i]->rr] = 1;
+				}
+			}
+
+			/* count # of registers used */
+			size_t used_count = 0;
+			size_t leftovers = 0;
+			for(size_t i = 0; i < (size_t)amount; i++) {
+				used_count += used[i];
+			}
+			if(used_count > (size_t)caller_cost) {
+				leftovers = used_count - caller_cost;
+				used_count = caller_cost;
+			}
+
+			if(!strat) {
+				cost += used_count;
+			} else {
+				cost += leftovers;
+			}
+		}
+	}
+
+	size_t used_count = 0;
+	size_t leftovers = 0;
+	for(size_t i = 0; i < (size_t)amount; i++) {
+		used_count += used[i];
+	}
+	if(used_count > (size_t)callee_cost) {
+		leftovers = used_count - callee_cost;
+		used_count = callee_cost;
+	}
+
+	if(strat) {
+		cost += used_count;
+	} else {
+		cost += leftovers;
+	}
+
+	return cost;
+}
+
+/* chooses a register allocation strat */
+/* callee_cost = # of registers that are callee-save */
+/* caller_cost = # of registers that are caller-save */
+static bool ir_choose_alloc_strat(ir_func_t *fun, int amount, int callee_cost,
+								  int caller_cost)
+{
+	bool *used = calloc(amount, sizeof(bool));
+	fun->alloc_used = used;
+	long cost_caller =
+		ir_eval_strat_cost(fun, amount, callee_cost, caller_cost, false, used);
+	long cost_callee =
+		ir_eval_strat_cost(fun, amount, callee_cost, caller_cost, true, used);
+	if(cost_callee == cost_caller) {
+		/* callee is easier to implement */
+		return true;
+	}
+
+	if(cost_callee < cost_caller) {
+		return true; /* callee-save */
+	} else if(cost_caller < cost_callee) {
+		return false; /* caller-save */
+	}
+
+	return true; /* how did you get here? */
 }
 
 static void ir_simplify(ir_func_t *fun, int amount)
@@ -427,7 +537,7 @@ end:
 extern int debug;
 
 /* do register allocation all in one */
-void ir_finalize(ir_func_t *fun, int amount)
+void ir_finalize(ir_func_t *fun, int amount, enum ir_arch arch)
 {
 	ir_blk_reguse(fun);
 	LIST(reg_t *) allocated = ir_blk_reglive(fun);
@@ -436,6 +546,27 @@ void ir_finalize(ir_func_t *fun, int amount)
 	ir_fix(fun);
 	ir_simplify(fun, amount);
 	ir_fix(fun);
+
+	int callee_cost;
+	int caller_cost;
+
+	switch(arch) {
+	case IR_ARCH_AARCH64_APPLE:
+		callee_cost = 9; /* r19 .. r28 */
+		caller_cost = 7; /* r9 .. r15 */
+		break;
+	case IR_ARCH_X64_SYSV:
+		callee_cost = 5; /* rbx, r12 .. r15 */
+		caller_cost = 6; /* rsi, rdx, rcx, r8, r9, r11 */
+		break;
+
+	default:
+		ERROR("unknown backend");
+		break;
+	}
+
+	fun->alloc_strat =
+		ir_choose_alloc_strat(fun, amount, callee_cost, caller_cost);
 	if(debug) {
 		printf("Final IR:\n");
 		printf("\tvirtual:\n");

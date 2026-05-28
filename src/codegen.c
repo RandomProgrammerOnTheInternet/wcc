@@ -4,12 +4,6 @@
 #include "ir.h"
 #include "ir_regalloc.h"
 
-#define load_imm codegen_load_imm
-#define push codegen_push
-#define push2 codegen_push2
-#define pop codegen_pop
-#define pop2 codegen_pop2
-
 static ir_func_t *fun;
 static ir_blk_t *outblk;
 
@@ -36,6 +30,8 @@ DEF_INS(eq, EQ, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(ne, NE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(lt, LT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(le, LE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(gt, GT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(ge, GE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(neg, NEG, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
 DEF_INS(leas, LEAS, r0, NULL, NULL, imm, reg_t *r0, long imm);
 DEF_INS(load, LOAD, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
@@ -82,92 +78,6 @@ static ir_blk_t *emit_blk(void)
 	blk->num = list_len(fun->blocks);
 	list_append(fun->blocks, blk);
 	return blk;
-}
-
-static void load_imm_lane(FILE *f, int reg, uint16_t i, uint16_t shift,
-						  int *keep)
-{
-	char *kt = "zk";
-	if(i) {
-		fprintf(f, "\tmov%c x%d, #%hu", kt[*keep], reg, i);
-		if(shift) {
-			fprintf(f, ", lsl #%hu", shift);
-		}
-		fprintf(f, "\n");
-		*keep = 1;
-	}
-	return;
-}
-
-/* loads an immediate into register `reg` */
-void codegen_load_imm(FILE *f, int reg, uint64_t imm_)
-{
-	uint64_t imm = imm_;
-	int64_t imms = (int64_t)imm;
-
-	if(imms <= 4095 && imms >= -4095) {
-		fprintf(f, "\tmov x%d, #%lld\n", reg, imms);
-		return;
-	}
-
-	int keep = 0;
-
-	load_imm_lane(f, reg, (imm >> 0) & 0xffff, 0, &keep);
-	load_imm_lane(f, reg, (imm >> 16) & 0xffff, 16, &keep);
-	load_imm_lane(f, reg, (imm >> 32) & 0xffff, 32, &keep);
-	load_imm_lane(f, reg, (imm >> 48) & 0xffff, 48, &keep);
-
-	return;
-}
-
-/* pushes `reg` onto stack */
-void codegen_push(FILE *f, int reg)
-{
-	fprintf(f, "\tstr x%d, [sp, #-16]!\n", reg);
-	return;
-}
-
-/* pops `reg` off stack */
-void codegen_pop(FILE *f, int reg)
-{
-	fprintf(f, "\tldr x%d, [sp], #16\n", reg);
-	return;
-}
-
-/* pushes `reg1`, `reg2` onto stack */
-void codegen_push2(FILE *f, int reg1, int reg2)
-{
-	fprintf(f, "\tstp x%d, x%d, [sp, #-16]!\n", reg1, reg2);
-	return;
-}
-
-/* pops `reg2`, `reg1` off stack */
-void codegen_pop2(FILE *f, int reg1, int reg2)
-{
-	fprintf(f, "\tldp x%d, x%d, [sp], #16\n", reg1, reg2);
-	return;
-}
-
-/* enters a function stack frame */
-void codegen_enter(FILE *f, size_t stack_need)
-{
-	size_t alignd = align_to(stack_need, 16);
-	fprintf(f, "\tstp fp, lr, [sp, #-16]!\n");
-	if(alignd) {
-		fprintf(f, "\tmov fp, sp\n");
-		fprintf(f, "\tsub sp, sp, #%zu\n", alignd);
-	} else {
-		fprintf(f, "\tmov fp, sp\n");
-	}
-	return;
-}
-
-/* leaves a function stack frame */
-void codegen_leave(FILE *f)
-{
-	fprintf(f, "\tmov sp, fp\n");
-	fprintf(f, "\tldp fp, lr, [sp], #16\n");
-	return;
 }
 
 static reg_t *codegen_expr(node_t *node);
@@ -274,6 +184,12 @@ reg_t *codegen_expr(node_t *node)
 		break;
 	case NODE_LT:
 		emit_lt(res, lhs, rhs);
+		break;
+	case NODE_GE:
+		emit_ge(res, lhs, rhs);
+		break;
+	case NODE_GT:
+		emit_gt(res, lhs, rhs);
 		break;
 	}
 
@@ -412,7 +328,7 @@ void codegen_func(FILE *f, obj_t *fn, int opt_level, enum ir_arch backend)
 	// putchar('\n');
 
 	ir_opt(func, opt_level, backend);
-	ir_finalize(func, 5);
+	ir_finalize(func, 5, backend);
 	// ir_dump(func, 'r');
 
 	ir_func_emit(f, func, backend);

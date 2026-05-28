@@ -41,8 +41,8 @@ enum node_kind {
 	NODE_VAR, /* variable ident */
 	NODE_EQ, /* equal == */
 	NODE_NE, /* not equal != */
-	// NODE_GT,   do we need these?
-	// NODE_GE,
+	NODE_GT, /* greater than > */
+	NODE_GE, /* greater than or equal to >= */
 	NODE_LT, /* less than < */
 	NODE_LE, /* less than or equal to <= */
 	NODE_EXPR_STMT, /* expression statement */

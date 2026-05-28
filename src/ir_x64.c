@@ -1,10 +1,116 @@
 #include "ir.h"
 
+static int unpromote(enum ins_type type)
+{
+	switch(type) {
+	case IR_INST_ADDI:
+		return IR_INST_ADD;
+	case IR_INST_SUBI:
+		return IR_INST_SUB;
+	case IR_INST_MULI:
+		return IR_INST_MUL;
+	case IR_INST_DIVI:
+		return IR_INST_DIV;
+	case IR_INST_EQI:
+		return IR_INST_EQ;
+	case IR_INST_NEI:
+		return IR_INST_NE;
+	case IR_INST_LTI:
+		return IR_INST_LT;
+	case IR_INST_LEI:
+		return IR_INST_LE;
+	case IR_INST_GTI:
+		return IR_INST_GT;
+	case IR_INST_GEI:
+		return IR_INST_GE;
+	case IR_INST_BREQI:
+		return IR_INST_BREQ;
+	case IR_INST_BRNEI:
+		return IR_INST_BRNE;
+	case IR_INST_BRLTI:
+		return IR_INST_BRLT;
+	case IR_INST_BRLEI:
+		return IR_INST_BRLE;
+	case IR_INST_BRGTI:
+		return IR_INST_BRGT;
+	case IR_INST_BRGEI:
+		return IR_INST_BRGE;
+	default:
+		return IR_INST_NOP;
+	}
+	return IR_INST_NOP;
+}
+
+/* remove immediate from ins if immediate is out of [-4095, 4095] */
+/* for mul & div, remove it anyway */
+/* also turn addi x, neg -> subi x, pos
+ *           subi x, neg -> addi x, pos */
+static void degrade_ins(ir_inst_t *prev, ir_inst_t *ins)
+{
+	if(!ir_inst_r2_imm(ins->type)) {
+		return;
+	}
+
+	if(ins->type == IR_INST_ADDI && (int64_t)ins->imm < 0) {
+		ins->type = IR_INST_SUBI;
+		ins->imm = -(int64_t)ins->imm;
+	}
+
+	if(ins->type == IR_INST_SUBI && (int64_t)ins->imm < 0) {
+		ins->type = IR_INST_ADDI;
+		ins->imm = -(int64_t)ins->imm;
+	}
+
+	int64_t imm = (int64_t)ins->imm;
+	if(ins->type == IR_INST_MULI || ins->type == IR_INST_DIVI) {
+		goto remove;
+	}
+
+	if(imm < INT32_MIN || imm > INT32_MAX) {
+		reg_t *imml;
+remove:
+		imml = reg_make();
+		ir_inst_t *new_ins = ins_imm(imml, imm);
+		new_ins->next = ins;
+		prev->next = new_ins;
+		ins->type = unpromote(ins->type);
+		ins->r2 = imml;
+	}
+
+	return;
+}
+
+static void degrade_large_imms(ir_func_t *fun)
+{
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+
+		ir_inst_t *nop = ir_inst_make(IR_INST_NOP, NULL, NULL, NULL, 0);
+		nop->next = blk->insts;
+		blk->insts = nop;
+
+		ir_inst_t *prev = nop;
+		ir_inst_t *cur = blk->insts->next;
+		for(; cur; cur = cur->next) {
+			degrade_ins(prev, cur);
+			prev = cur;
+
+			if(ir_inst_is_term(cur->type)) {
+				break;
+			}
+		}
+
+		blk->insts = blk->insts->next;
+		ir_inst_delete(nop);
+	}
+}
+
 /* is the instruction in form A = F(B, C) where it needs A and B to be seperate? */
 static bool ins_is_3source(enum ins_type t)
 {
 	/* ADD is not needed here because on x64 you can do lea A, [B+C] */
-	return t == IR_INST_SUB || t == IR_INST_MUL || t == IR_INST_DIV;
+	return t == IR_INST_SUB || t == IR_INST_MUL || t == IR_INST_DIV ||
+		   t == IR_INST_SUBI || t == IR_INST_MULI || t == IR_INST_DIVI;
 }
 
 /* is the instruction in form A = F(B) where it needs A and B to be seperate? */
@@ -65,6 +171,7 @@ static void ir_turn_into_x64(ir_func_t *fun)
 void ir_func_opt_x64(ir_func_t *fun, int opt_level)
 {
 	UNUSED(opt_level);
+	degrade_large_imms(fun);
 	/* TODO: immediate inc/dec optimization */
 	ir_turn_into_x64(fun);
 	return;
@@ -93,25 +200,49 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		const char *r2 = ins->r2 && ins->r2->rr >= 0 ? x64_reg[ins->r2->rr] :
 													   NULL;
 		switch(ins->type) {
+		case IR_INST_BREQI:
+		case IR_INST_BRNEI:
+		case IR_INST_BRLTI:
+		case IR_INST_BRLEI:
+		case IR_INST_BRGTI:
+		case IR_INST_BRGEI:
+			fprintf(f, "\tcmp %s, %lld\n", r1, (int64_t)ins->imm);
+			goto brcmp_main;
+
 		case IR_INST_BREQ:
 		case IR_INST_BRNE:
 		case IR_INST_BRLT:
 		case IR_INST_BRLE:
+		case IR_INST_BRGT:
+		case IR_INST_BRGE:
 			fprintf(f, "\tcmp %s, %s\n", r1, r2);
+brcmp_main:
 			switch(ins->type) {
 			default:
 				break;
 			case IR_INST_BREQ:
+			case IR_INST_BREQI:
 				fprintf(f, "\tjne .BB%ld\n", ins->false_blk->num);
 				break;
 			case IR_INST_BRNE:
+			case IR_INST_BRNEI:
 				fprintf(f, "\tje .BB%ld\n", ins->false_blk->num);
 				break;
 			case IR_INST_BRLT:
+			case IR_INST_BRLTI:
 				fprintf(f, "\tjge .BB%ld\n", ins->false_blk->num);
 				break;
 			case IR_INST_BRLE:
+			case IR_INST_BRLEI:
 				fprintf(f, "\tjg .BB%ld\n", ins->false_blk->num);
+				break;
+			case IR_INST_BRGT:
+			case IR_INST_BRGTI:
+				fprintf(f, "\tjle .BB%ld\n", ins->false_blk->num);
+				break;
+			case IR_INST_BRGE:
+			case IR_INST_BRGEI:
+				fprintf(f, "\tjl .BB%ld\n", ins->false_blk->num);
 				break;
 			}
 			if(ins->true_blk->num == blk->num + 1) {
@@ -185,26 +316,73 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_NEG:
 			fprintf(f, "\tneg %s\n", r0);
 			break;
+		case IR_INST_ADDI:
+			if(ins->r0->rr == ins->r1->rr) {
+				if(ins->imm == 1) {
+					fprintf(f, "\tinc %s\n", r0);
+				} else {
+					fprintf(f, "\tadd %s, %lld\n", r0, (int64_t)ins->imm);
+				}
+				break;
+			} else {
+				fprintf(f, "\tlea %s, [%s + %lld]\n", r0, r1,
+						(int64_t)ins->imm);
+				break;
+			}
+
+		case IR_INST_SUBI:
+			if(ins->imm == 1) {
+				fprintf(f, "\tdec %s\n", r0);
+			} else {
+				fprintf(f, "\tsub %s, %lld\n", r0, (int64_t)ins->imm);
+			}
+			break;
+		case IR_INST_MULI:
+		case IR_INST_DIVI:
+			ERROR("impossible instruction encountered");
+			break;
+		case IR_INST_EQI:
+		case IR_INST_NEI:
+		case IR_INST_LTI:
+		case IR_INST_LEI:
+		case IR_INST_GTI:
+		case IR_INST_GEI:
+			fprintf(f, "\tcmp %s, %lld\n", r1, (int64_t)ins->imm);
+			goto cmp_main;
 		case IR_INST_EQ:
 		case IR_INST_NE:
 		case IR_INST_LT:
 		case IR_INST_LE:
+		case IR_INST_GT:
+		case IR_INST_GE:
 			fprintf(f, "\tcmp %s, %s\n", r1, r2);
 
+cmp_main:
 			switch(ins->type) {
 			case IR_INST_EQ:
+			case IR_INST_EQI:
 				fprintf(f, "\tsete al\n");
 				break;
 			case IR_INST_NE:
+			case IR_INST_NEI:
 				fprintf(f, "\tsetne al\n");
 				break;
 			case IR_INST_LT:
+			case IR_INST_LTI:
 				fprintf(f, "\tsetl al\n");
 				break;
 			case IR_INST_LE:
+			case IR_INST_LEI:
 				fprintf(f, "\tsetle al\n");
 				break;
-
+			case IR_INST_GT:
+			case IR_INST_GTI:
+				fprintf(f, "\tsetg al\n");
+				break;
+			case IR_INST_GE:
+			case IR_INST_GEI:
+				fprintf(f, "\tsetge al\n");
+				break;
 			default: /* wth? */
 				break;
 			}
