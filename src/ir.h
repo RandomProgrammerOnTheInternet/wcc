@@ -236,9 +236,6 @@ void ir_blk_delete(ir_blk_t *blk);
 /* make an IR function */
 ir_func_t *ir_func_make(char *name);
 
-/* optimizes an IR function */
-void ir_opt(ir_func_t *fun, int opt_level, enum ir_arch arch);
-
 /* delete an IR function (aka all blocks, extras) */
 void ir_func_delete(ir_func_t *fun);
 

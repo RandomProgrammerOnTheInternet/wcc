@@ -121,11 +121,8 @@ static int iskeyword(char *prog, size_t plen)
 /* does the lexing */
 token_t *lex_do(char *prog)
 {
-	char *prog_start = prog;
 	token_t start;
 	token_t *tok = &start;
-
-	size_t len = strlen(prog);
 
 	while(*prog) {
 		/* skip over whitespace */
