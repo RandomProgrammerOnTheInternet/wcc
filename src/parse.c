@@ -1,5 +1,6 @@
 #include "parse.h"
 #include "lex.h"
+#include "type.h"
 
 static obj_t *locals = NULL;
 
@@ -151,6 +152,7 @@ static node_t *parse_compound_stmt(token_t *tok, token_t **rest)
 		node_t *stmt = parse_stmt(tok, &tok);
 		cur->next = stmt;
 		cur = stmt;
+		type_propagate(cur);
 	}
 	tok = token_skip(tok, "}");
 

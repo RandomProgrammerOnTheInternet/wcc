@@ -179,7 +179,7 @@ void ir_blk_delete(ir_blk_t *blk);
 ir_func_t *ir_func_make(char *name);
 
 /* optimizes an IR function */
-void ir_opt(ir_func_t *fun);
+void ir_opt(ir_func_t *fun, int opt_level, enum ir_arch arch);
 
 /* delete an IR function (aka all blocks, extras) */
 void ir_func_delete(ir_func_t *fun);
@@ -199,5 +199,8 @@ void ir_func_emit(FILE *f, ir_func_t *fun, enum ir_arch arch);
 
 /* add IR instruction to IR block */
 void ir_blk_add(ir_blk_t *blk, ir_inst_t *inst);
+
+/* fixes IR function */
+void ir_fix(ir_func_t *func);
 
 #endif /* IR_H_ */

@@ -62,8 +62,9 @@ static void ir_turn_into_x64(ir_func_t *fun)
 	}
 }
 
-void ir_func_opt_x64(ir_func_t *fun)
+void ir_func_opt_x64(ir_func_t *fun, int opt_level)
 {
+	UNUSED(opt_level);
 	/* TODO: immediate inc/dec optimization */
 	ir_turn_into_x64(fun);
 	return;

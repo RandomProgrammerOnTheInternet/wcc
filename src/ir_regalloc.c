@@ -351,9 +351,15 @@ void ir_regalloc(LIST(reg_t *) allocated, int amount_)
 	return;
 }
 
-static void ir_simplify(ir_func_t *fun)
+static void ir_simplify(ir_func_t *fun, int amount)
 {
+	long *imm = calloc(amount, sizeof(long));
+	bool *are_imm = calloc(amount, sizeof(bool));
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		for(size_t i = 0; i < (size_t)amount; i++) {
+			are_imm[i] = false;
+			imm[i] = 0;
+		}
 		ir_blk_t *blk = fun->blocks[i];
 
 		ir_inst_t *nop = ir_inst_make(IR_INST_NOP, NULL, NULL, NULL, 0);
@@ -387,6 +393,24 @@ static void ir_simplify(ir_func_t *fun)
 				removed = 1;
 				goto end;
 			}
+
+			/* seed immediate values */
+			if(ins->type == IR_INST_IMM) {
+				/* remove useless immediate loads */
+				if(are_imm[ins->r0->rr] &&
+				   ins->imm == (uint64_t)imm[ins->r0->rr]) {
+					prev->next = nxt;
+					ir_inst_delete(ins);
+					ins = nxt;
+					removed = 1;
+					goto end;
+				}
+				are_imm[ins->r0->rr] = 1;
+				imm[ins->r0->rr] = ins->imm;
+			} else if(ins->r0) {
+				are_imm[ins->r0->rr] = 0;
+			}
+
 end:
 			if(!removed) {
 				prev = ins;
@@ -395,7 +419,12 @@ end:
 		blk->insts = blk->insts->next;
 		ir_inst_delete(nop);
 	}
+
+	free(imm);
+	free(are_imm);
 }
+
+extern int debug;
 
 /* do register allocation all in one */
 void ir_finalize(ir_func_t *fun, int amount)
@@ -404,7 +433,17 @@ void ir_finalize(ir_func_t *fun, int amount)
 	LIST(reg_t *) allocated = ir_blk_reglive(fun);
 	ir_regalloc(allocated, amount);
 	ir_regalloc_spill(fun, allocated);
-	ir_simplify(fun);
+	ir_fix(fun);
+	ir_simplify(fun, amount);
+	ir_fix(fun);
+	if(debug) {
+		printf("Final IR:\n");
+		printf("\tvirtual:\n");
+		ir_dump(fun, 'v');
+		printf("\treal:\n");
+		ir_dump(fun, 'r');
+		printf("====\n");
+	}
 
 	/* free objects */
 	for(size_t i = 0; i < list_len(allocated); i++) {

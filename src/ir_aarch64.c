@@ -1,8 +1,9 @@
 #include "ir_aarch64.h"
 
-void ir_func_opt_aarch64(ir_func_t *fun)
+void ir_func_opt_aarch64(ir_func_t *fun, int opt_level)
 {
 	UNUSED(fun);
+	UNUSED(opt_level);
 	return;
 }
 
@@ -40,6 +41,19 @@ static void load_imm(FILE *f, int reg, uint64_t imm_)
 	load_imm_lane(f, reg, (imm >> 48) & 0xffff, 48, &keep);
 
 	return;
+}
+
+static int load_fp_imm_x0(FILE *f, long off)
+{
+	if((-off) >= 65535) {
+		ERROR("cannot emit code: stack size larger than 64K");
+	}
+	if((-off) < 255) {
+		return 0;
+	}
+
+	fprintf(f, "\tmovn x0, #%llu\n", (uint64_t)(-off));
+	return 1;
 }
 
 /* intentionally limiting amount of registers to 5 here to test
@@ -162,14 +176,22 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			}
 			break;
 		case IR_INST_LEAS:
-			fprintf(f, "\tsub x%d, fp, #%lld\n", r0, ins->imm);
+			if(load_fp_imm_x0(f, (int64_t)ins->imm)) {
+				fprintf(f, "\tadd x%d, fp, x0\n", r0);
+			} else {
+				fprintf(f, "\tsub x%d, fp, #%lld\n", r0, ins->imm);
+			}
 			break;
 		case IR_INST_LOAD:
 			fprintf(f, "\tldr x%d, [x%d]\n", r0, r1);
 			break;
 		case IR_INST_LOADS:
 		case IR_INST_LOADSS:
-			fprintf(f, "\tldr x%d, [fp, #%lld]\n", r0, (int64_t)ins->imm);
+			if(load_fp_imm_x0(f, (int64_t)ins->imm)) {
+				fprintf(f, "\tldr x%d, [fp, x0]\n", r0);
+			} else {
+				fprintf(f, "\tldr x%d, [fp, #%lld]\n", r0, (int64_t)ins->imm);
+			}
 			break;
 
 		case IR_INST_STORE:
@@ -177,7 +199,11 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			break;
 		case IR_INST_STORES:
 		case IR_INST_STORESS:
-			fprintf(f, "\tstr x%d, [fp, #%lld]\n", r1, (int64_t)ins->imm);
+			if(load_fp_imm_x0(f, (int64_t)ins->imm)) {
+				fprintf(f, "\tstr x%d, [fp, x0]\n", r1);
+			} else {
+				fprintf(f, "\tstr x%d, [fp, #%lld]\n", r1, (int64_t)ins->imm);
+			}
 			break;
 
 		default:

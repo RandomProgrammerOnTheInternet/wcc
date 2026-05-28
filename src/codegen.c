@@ -393,7 +393,7 @@ static void calc_stack_needed(obj_t *fn)
 }
 
 /* generates code for a function */
-void codegen_func(FILE *f, obj_t *fn, enum ir_arch backend)
+void codegen_func(FILE *f, obj_t *fn, int opt_level, enum ir_arch backend)
 {
 	ENSURE(fn->is_func, "tried to generate code for a variable");
 	ir_func_t *func = ir_func_make("_main");
@@ -411,8 +411,8 @@ void codegen_func(FILE *f, obj_t *fn, enum ir_arch backend)
 	// ir_dump(func, 'v');
 	// putchar('\n');
 
-	ir_opt(func);
-	ir_finalize(func, 3);
+	ir_opt(func, opt_level, backend);
+	ir_finalize(func, 5);
 	// ir_dump(func, 'r');
 
 	ir_func_emit(f, func, backend);

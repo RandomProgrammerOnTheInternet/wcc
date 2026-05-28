@@ -27,6 +27,13 @@ int ir_inst_is_cmp(enum ins_type type)
 		   type == IR_INST_LT;
 }
 
+/* is this instruction foldable? */
+static int ir_inst_is_foldable(enum ins_type type)
+{
+	return ir_inst_is_cmp(type) || type == IR_INST_ADD || type == IR_INST_SUB ||
+		   type == IR_INST_MUL || type == IR_INST_DIV;
+}
+
 /* reset register counter */
 void reg_reset_counter(void)
 {
@@ -233,6 +240,60 @@ void ir_func_delete(ir_func_t *fun)
 	return;
 }
 
+static void ir_fix_ins(ir_inst_t *ins)
+{
+	reg_t *r0 = ins->r0;
+	reg_t *r1 = ins->r1;
+	reg_t *r2 = ins->r2;
+#define FIX(t, R0, R1, R2) \
+	case IR_INST_##t:      \
+		r0 = R0;           \
+		r1 = R1;           \
+		r2 = R2;           \
+		break
+#define xx NULL
+	switch(ins->type) {
+		FIX(NOP, xx, xx, xx);
+		FIX(MOV, r0, r1, xx);
+		FIX(IMM, r0, xx, xx);
+		FIX(NEG, r0, r1, xx);
+		FIX(BREQ, xx, r1, r2);
+		FIX(BRNE, xx, r1, r2);
+		FIX(BRLT, xx, r1, r2);
+		FIX(BRLE, xx, r1, r2);
+		FIX(LOAD, r0, r1, xx);
+		FIX(STORE, xx, r1, r2);
+		FIX(LEAS, r0, xx, xx);
+		FIX(LOADS, r0, xx, xx);
+		FIX(STORES, xx, r1, xx);
+		FIX(LOADSS, r0, xx, xx);
+		FIX(STORESS, xx, r1, xx);
+		FIX(BR, xx, r1, xx);
+		FIX(JMP, xx, xx, xx);
+		FIX(RET, xx, r1, xx);
+	default:
+		break;
+	}
+#undef FIX
+#undef xx
+
+	ins->r0 = r0;
+	ins->r1 = r1;
+	ins->r2 = r2;
+}
+
+/* fixes IR function */
+void ir_fix(ir_func_t *func)
+{
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			ir_fix_ins(ins);
+		}
+	}
+	return;
+}
+
 /* print IR instruction */
 void ir_print_inst(ir_inst_t *ins, int mode)
 {
@@ -286,11 +347,13 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 	case IR_INST_STORE:
 		out("store %%r%ld, %%r%ld", r1, r2);
 	case IR_INST_LOADS:
-	case IR_INST_LOADSS:
 		out("%%r%ld = loads #%ld", r0, (long)imm);
+	case IR_INST_LOADSS:
+		out("%%r%ld = loadss #%ld", r0, (long)imm);
 	case IR_INST_STORES:
+		out("stores #%ld, %%r%ld", (long)imm, r1);
 	case IR_INST_STORESS:
-		out("stores %%r%ld, #%ld", r1, (long)imm);
+		out("storess #%ld, %%r%ld", (long)imm, r1);
 	case IR_INST_BR:
 		out("br %%r%ld, BB%ld, BB%ld", r1, ins->true_blk->num,
 			ins->false_blk->num);
@@ -342,15 +405,80 @@ void ir_dump(ir_func_t *fun, int mode)
 	return;
 }
 
-/* mark immediate registers */
-static void ir_markimms(ir_func_t *func)
+/* constant folding */
+static void ir_fold(ir_func_t *func)
 {
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
 			if(ins->type == IR_INST_IMM) {
+				ins->r1 = NULL;
+set_imm:
 				ins->r0->imm = ins->imm;
 				ins->r0->insty = IR_INST_IMM;
+				continue;
+			}
+
+			/* fold */
+			if(ins->type == IR_INST_MOV && ins->r1->insty == IR_INST_IMM) {
+				ins->type = IR_INST_IMM;
+				ins->imm = ins->r1->imm;
+				ins->r1 = NULL;
+				goto set_imm;
+				continue;
+			}
+
+			if(ins->type == IR_INST_NEG && ins->r1->insty == IR_INST_IMM) {
+				ins->type = IR_INST_IMM;
+				ins->imm = -(long)ins->r1->imm;
+				ins->r1 = NULL;
+				goto set_imm;
+				continue;
+			}
+
+			/* fold 3-sources */
+			if(ir_inst_is_foldable(ins->type) && ins->r1 && ins->r2 &&
+			   ins->r1->insty == IR_INST_IMM && ins->r2->insty == IR_INST_IMM) {
+				int oldtype = ins->type;
+				ins->type = IR_INST_IMM;
+				long a1 = ins->r1->imm;
+				long a2 = ins->r2->imm;
+				ins->r1 = NULL;
+				ins->r2 = NULL;
+				switch(oldtype) {
+				case IR_INST_ADD:
+					ins->imm = a1 + a2;
+					break;
+				case IR_INST_SUB:
+					ins->imm = a1 - a2;
+					break;
+				case IR_INST_MUL:
+					ins->imm = a1 * a2;
+					break;
+				case IR_INST_DIV:
+					/* define division by zero to be zero */
+					if(a2 == 0) {
+						a1 = 0;
+						a2 = 1;
+					}
+					ins->imm = a1 / a2;
+					break;
+				case IR_INST_EQ:
+					ins->imm = a1 == a2;
+					break;
+				case IR_INST_NE:
+					ins->imm = a1 != a2;
+					break;
+				case IR_INST_LT:
+					ins->imm = a1 < a2;
+					break;
+				case IR_INST_LE:
+					ins->imm = a1 <= a2;
+					break;
+				default:
+					break;
+				}
+				goto set_imm;
 				continue;
 			}
 
@@ -574,18 +702,47 @@ void ir_nopremover(ir_func_t *fun)
 extern int debug;
 
 /* optimizes a function */
-void ir_opt(ir_func_t *func)
+void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 {
-	if(debug) {
-		ir_dump(func, 'v');
+	if(opt_level >= 1) {
+		if(debug) {
+			printf("Before common opts:\n");
+			ir_dump(func, 'v');
+			printf("****\n");
+		}
+		ir_fold(func);
+		ir_stackopt(func);
+		ir_nopremover(func);
+		ir_fix(func);
+		ir_branchopt(func);
+		ir_nopremover(func);
+		ir_fix(func);
+		ir_fold(func);
+		if(debug) {
+			printf("After common opts:\n");
+			ir_dump(func, 'v');
+			printf("****\n");
+		}
 	}
-	ir_markimms(func);
-	ir_stackopt(func);
-	ir_nopremover(func);
-	ir_branchopt(func);
-	ir_nopremover(func);
+
+	/* apply arch specific opts */
+	switch(arch) {
+	case IR_ARCH_AARCH64_APPLE:
+		ir_func_opt_aarch64(func, opt_level);
+		break;
+	case IR_ARCH_X64_SYSV:
+		ir_func_opt_x64(func, opt_level);
+		break;
+	default:
+		break;
+	}
+
+	ir_fix(func);
+
 	if(debug) {
+		printf("After arch opts:\n");
 		ir_dump(func, 'v');
+		printf("****\n");
 	}
 	return;
 }

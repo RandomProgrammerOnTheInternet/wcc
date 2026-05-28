@@ -8,14 +8,14 @@ Generates code for aarch64 & x86_64. I have not tested if the x86_64 backend wor
 ## Usage
 
 ```
-wcc version 0.0.1 build May 26 2026
+wcc version 0.0.1 build May 27 2026
 Usage: ./bin/wcc <input file> [-o <output asm file>] [-t <arch>-<abi>] [-d] [-?/--help]
   -o <output>:          file to output assembly to (stdout is default)
   -t <arch>-<abi>:      target architecture, abi
-                        only aarch64-apple, x64-sysv
-                        are supported.
+                        only aarch64-apple, x64-sysv are supported.
   -d:                   enable debug IR printing
-  -?, --help:           this page 
+  -O0/1/2/3:            optimization level (default: 0)
+  -?, --help:           this page
 ```
 
 ## Build

@@ -28,6 +28,6 @@ void codegen_enter(FILE *f, size_t stack_need);
 void codegen_leave(FILE *f);
 
 /* generates code for a function */
-void codegen_func(FILE *f, obj_t *fn, enum ir_arch backend);
+void codegen_func(FILE *f, obj_t *fn, int opt_level, enum ir_arch backend);
 
 #endif /* CODEGEN_H_ */

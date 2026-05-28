@@ -3,6 +3,7 @@
 
 #include "base.h"
 #include "lex.h"
+#include "type.h"
 
 /* parser */
 
@@ -76,6 +77,7 @@ typedef struct node {
 	struct node *lhs, *rhs;
 	struct node *next; /* next tree */
 	struct node *body; /* inner block */
+	type_t *typ; /* type of this node */
 
 	token_t *tok; /* first token of this node */
 

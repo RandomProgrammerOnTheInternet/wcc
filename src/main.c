@@ -10,6 +10,7 @@
 #include "arena.h"
 
 int debug = 0;
+int opt_level = 0;
 
 char *next_arg(int max, int *argc, char *argv[])
 {
@@ -79,9 +80,9 @@ static void help(char *pname)
 	printf(
 		"  -o <output>:\t\tfile to output assembly to (stdout is default)\n");
 	printf("  -t <arch>-<abi>:\ttarget architecture, abi\n");
-	printf("                  \tonly aarch64-apple, x64-sysv\n");
-	printf("                  \tare supported.\n");
+	printf("                  \tonly aarch64-apple, x64-sysv are supported.\n");
 	printf("  -d:\t\t\tenable debug IR printing\n");
+	printf("  -O0/1/2/3:\t\toptimization level (default: 0)\n");
 	printf("  -?, --help:\t\tthis page\n");
 	return;
 }
@@ -145,6 +146,16 @@ int main(int argc, char *argv[])
 			}
 			continue;
 		}
+		if(starts_with((char *)arg, "-O")) {
+			char *num = (char *)arg + 2;
+			if(num && *num >= '0' && *num <= '3') {
+				opt_level = *num - '0';
+			} else {
+				WARN("unknown optimization level '%s', defaulting to 0", arg);
+				opt_level = 0;
+			}
+			continue;
+		}
 
 		ERROR("unknown argument '%s'", arg);
 	}
@@ -164,7 +175,7 @@ int main(int argc, char *argv[])
 	token_t *head = lex_do(prog);
 	token_t *cur = head;
 	obj_t *prog_node = parse_do(cur);
-	codegen_func(emit_to, prog_node, arch);
+	codegen_func(emit_to, prog_node, opt_level, arch);
 
 	free(prog);
 
