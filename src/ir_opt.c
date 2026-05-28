@@ -71,6 +71,16 @@ static int ir_mov_elim(ir_func_t *func)
 				changed = 1;
 				ins->r2 = ins->r2->lhs;
 			}
+
+			if(ins->type == IR_INST_CALL) {
+				for(size_t i = 0; i < list_len(ins->call_args); i++) {
+					reg_t *r = ins->call_args[i];
+					if(r->insty == IR_INST_MOV) {
+						changed = 1;
+						ins->call_args[i] = ins->call_args[i]->lhs;
+					}
+				}
+			}
 		}
 	}
 	return changed;
@@ -187,16 +197,16 @@ set_imm:
 					   ins->type == IR_INST_GT || ins->type == IR_INST_GE) {
 						switch(ins->type) {
 						case IR_INST_LT:
-							ins->type = IR_INST_GE;
-							break;
-						case IR_INST_LE:
 							ins->type = IR_INST_GT;
 							break;
+						case IR_INST_LE:
+							ins->type = IR_INST_GE;
+							break;
 						case IR_INST_GT:
-							ins->type = IR_INST_LE;
+							ins->type = IR_INST_LT;
 							break;
 						case IR_INST_GE:
-							ins->type = IR_INST_LT;
+							ins->type = IR_INST_LE;
 							break;
 						default:
 							break;
@@ -325,6 +335,15 @@ static int ir_stackopt(ir_func_t *func)
 			if(ins->r2 && ins->r2->stack_loc && ins->type != IR_INST_LOAD &&
 			   ins->type != IR_INST_STORE) {
 				ins->r2->stack_loc = false;
+			}
+
+			if(ins->type == IR_INST_CALL) {
+				for(size_t i = 0; i < list_len(ins->call_args); i++) {
+					reg_t *r = ins->call_args[i];
+					if(r && r->stack_loc) {
+						r->stack_loc = false;
+					}
+				}
 			}
 
 			/* edge case */

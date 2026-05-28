@@ -187,10 +187,6 @@ LIST(reg_t *) ir_blk_reglive(ir_func_t *fun)
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-			if(ins->type == IR_INST_NOP) {
-				ins_count++;
-				continue;
-			}
 			reg_update_counter(ins->r0, ins_count);
 			if(ins->r0 && ins->r0->def == 0) {
 				ins->r0->def = ins_count;
@@ -201,9 +197,11 @@ LIST(reg_t *) ir_blk_reglive(ir_func_t *fun)
 
 			if(ins->type == IR_INST_CALL) {
 				for(size_t j = 0; j < list_len(ins->call_args); j++) {
-					reg_update_counter(ins->call_args[i], ins_count);
+					reg_t *reg = ins->call_args[j];
+					reg_update_counter(reg, ins_count);
 				}
 			}
+
 			ins_count++;
 		}
 		for(size_t j = 0; j < list_len(blk->regs_out); j++) {
@@ -254,28 +252,19 @@ static void rewrite_ins(ir_inst_t *ins_prev, ir_inst_t *ins)
 	if(ins->type == IR_INST_LOADSS || ins->type == IR_INST_STORESS) {
 		return;
 	}
+
 	if(ins->r0 && ins->r0->spilld) {
 		rewrite_store_spill(ins);
 	}
 
 	if(ins->r1 && ins->r1->spilld) {
 		rewrite_load_spill(ins_prev, ins, ins->r1);
-		ins_prev = ins->next;
+		ins_prev = ins_prev->next;
 	}
 
 	if(ins->r2 && ins->r2->spilld) {
 		rewrite_load_spill(ins_prev, ins, ins->r2);
-		ins_prev = ins->next;
-	}
-
-	if(ins->type == IR_INST_CALL) {
-		for(size_t i = 0; i < list_len(ins->call_args); i++) {
-			reg_t *arg = ins->call_args[i];
-			if(arg && arg->spilld) {
-				rewrite_load_spill(ins_prev, ins, arg);
-				ins_prev = ins->next;
-			}
-		}
+		ins_prev = ins_prev->next;
 	}
 
 	return;
@@ -298,6 +287,7 @@ void ir_regalloc_spill(ir_func_t *fun, LIST(reg_t *) allocated)
 	}
 
 	/* rewriting */
+
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
 		ir_inst_t *nop = ir_inst_make(IR_INST_NOP, NULL, NULL, NULL, 0);
@@ -360,6 +350,7 @@ void ir_regalloc(LIST(reg_t *) allocated, int amount_)
 		r->rr = spill;
 		regs[spill]->spilld = true;
 		regs[spill]->rr = amount;
+		regs[spill] = r;
 	}
 
 	free(regs);
@@ -441,7 +432,7 @@ static long ir_eval_strat_cost(ir_func_t *fun, int amount, int callee_cost,
 static bool ir_choose_alloc_strat(ir_func_t *fun, int amount, int callee_cost,
 								  int caller_cost)
 {
-	bool *used = calloc(amount, sizeof(bool));
+	bool *used = zcalloc(amount, sizeof(bool));
 	fun->alloc_used = used;
 	long cost_caller =
 		ir_eval_strat_cost(fun, amount, callee_cost, caller_cost, false, used);
@@ -463,8 +454,8 @@ static bool ir_choose_alloc_strat(ir_func_t *fun, int amount, int callee_cost,
 
 static void ir_simplify(ir_func_t *fun, int amount)
 {
-	long *imm = calloc(amount, sizeof(long));
-	bool *are_imm = calloc(amount, sizeof(bool));
+	long *imm = zcalloc(amount, sizeof(long));
+	bool *are_imm = zcalloc(amount, sizeof(bool));
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		for(size_t i = 0; i < (size_t)amount; i++) {
 			are_imm[i] = false;
@@ -494,31 +485,12 @@ static void ir_simplify(ir_func_t *fun, int amount)
 				goto end;
 			}
 
-			/* remove useless insts where thing stored is never used
-			 * beyond this inst */
 			if(ins->r0 && ins->r0->def == ins->r0->last_use) {
 				prev->next = nxt;
 				ir_inst_delete(ins);
 				ins = nxt;
 				removed = 1;
 				goto end;
-			}
-
-			/* seed immediate values */
-			if(ins->type == IR_INST_IMM) {
-				/* remove useless immediate loads */
-				if(are_imm[ins->r0->rr] &&
-				   ins->imm == (uint64_t)imm[ins->r0->rr]) {
-					prev->next = nxt;
-					ir_inst_delete(ins);
-					ins = nxt;
-					removed = 1;
-					goto end;
-				}
-				are_imm[ins->r0->rr] = 1;
-				imm[ins->r0->rr] = ins->imm;
-			} else if(ins->r0) {
-				are_imm[ins->r0->rr] = 0;
 			}
 
 end:
@@ -542,6 +514,7 @@ void ir_finalize(ir_func_t *fun, int amount, enum ir_arch arch)
 	ir_blk_reguse(fun);
 	LIST(reg_t *) allocated = ir_blk_reglive(fun);
 	ir_regalloc(allocated, amount);
+	ir_fix(fun);
 	ir_regalloc_spill(fun, allocated);
 	ir_fix(fun);
 	ir_simplify(fun, amount);
@@ -565,8 +538,7 @@ void ir_finalize(ir_func_t *fun, int amount, enum ir_arch arch)
 		break;
 	}
 
-	fun->alloc_strat =
-		ir_choose_alloc_strat(fun, amount, callee_cost, caller_cost);
+	(void)ir_choose_alloc_strat(fun, amount, callee_cost, caller_cost);
 	if(debug) {
 		printf("Final IR:\n");
 		printf("\tvirtual:\n");

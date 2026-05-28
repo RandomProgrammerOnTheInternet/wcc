@@ -76,7 +76,7 @@ enum ins_type {
 	IR_INST_BR, /* br %r1, false-blk, true-blk */
 	IR_INST_JMP, /* jmp blk */
 	IR_INST_RET, /* ret (%r1) */
-	IR_INST_CALL, /* (%r0) = call %a1, %a2, ... */
+	IR_INST_CALL, /* (%r0) = call Function, %a1, %a2, ... */
 };
 
 /* a "register" */
@@ -115,6 +115,8 @@ typedef struct ir_inst {
 	uint64_t imm; /* immediate, if needed */
 	struct ir_blk *false_blk, *true_blk; /* for br */
 	LIST(reg_t *) call_args; /* for call */
+	char *fname; /* for call */
+	bool nospill;
 } ir_inst_t;
 
 /* IR block (collection of instructions, >= 1 entry and only <= 2 exits) */
@@ -192,6 +194,7 @@ DEF_INS(brgei, reg_t *r1, long imm, ir_blk_t *falseblk, ir_blk_t *trueblk);
 
 DEF_INS(jmp, ir_blk_t *blk);
 DEF_INS(ret, reg_t *r1);
+DEF_INS(call, reg_t *res, char *fname, LIST(reg_t *) args);
 
 #undef DEF_INS
 #undef INSNAME

@@ -111,6 +111,7 @@ ir_inst_t *ir_inst_make(enum ins_type type, reg_t *r0, reg_t *r1, reg_t *r2,
 	ins->false_blk = NULL;
 	ins->true_blk = NULL;
 	ins->imm = imm;
+	ins->nospill = false;
 
 	return ins;
 }
@@ -207,6 +208,18 @@ ir_inst_t *ins_br(reg_t *on, ir_blk_t *falseb, ir_blk_t *trueb)
 	return ins;
 }
 
+ir_inst_t *ins_call(reg_t *res, char *fname, LIST(reg_t *) args)
+{
+	ir_inst_t *ins = ir_inst_make(IR_INST_CALL, res, NULL, NULL, 0);
+	ins->fname = fname;
+	ins->call_args = list_make(reg_t *);
+	for(size_t i = 0; i < list_len(args); i++) {
+		list_append(ins->call_args, args[i]);
+	}
+	ins->call_args = args;
+	return ins;
+}
+
 ir_inst_t *ins_jmp(ir_blk_t *blk)
 {
 	ir_inst_t *ins = ir_inst_make(IR_INST_JMP, NULL, NULL, NULL, 0);
@@ -217,6 +230,9 @@ ir_inst_t *ins_jmp(ir_blk_t *blk)
 /* delete an IR instruction */
 void ir_inst_delete(ir_inst_t *ins)
 {
+	if(ins->type == IR_INST_CALL) {
+		list_delete(ins->call_args);
+	}
 	free(ins);
 	return;
 }
@@ -449,6 +465,15 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 	case IR_INST_BR:
 		out("br %%r%ld, BB%ld, BB%ld", r1, ins->true_blk->num,
 			ins->false_blk->num);
+	case IR_INST_CALL: {
+		if(ins->r0) {
+			printf("%%r%ld = ", r0);
+		}
+		printf("call %s", ins->fname);
+		for(size_t i = 0; i < list_len(ins->call_args); i++) {
+			printf(", %%r%ld", ins->call_args[i]->vr);
+		}
+	}; break;
 	case IR_INST_BREQ:
 		out("br.eq %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);

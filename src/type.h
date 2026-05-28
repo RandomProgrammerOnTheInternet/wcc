@@ -19,6 +19,7 @@ extern type_t *TY_INT;
 extern type_t *TY_PTR;
 
 bool type_is_int(type_t *ty);
+bool type_is_ptr(type_t *ty);
 
 type_t *type_ptr_to(type_t *ty);
 

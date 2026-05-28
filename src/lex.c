@@ -35,7 +35,8 @@ void token_delete_all(token_t *root)
 /* checks if a `tok`'s content is equal to `content` */
 int token_eq(token_t *tok, char *content)
 {
-	return strncmp(tok->loc, content, tok->len) == 0 && content[tok->len] == 0;
+	return tok && content && strncmp(tok->loc, content, tok->len) == 0 &&
+		   content[tok->len] == 0;
 }
 
 /* skips `tok` and returns next token if `tok`'s content is equal to `content` */
@@ -61,7 +62,7 @@ int islexpunct(int c)
 {
 	return c == '+' || c == '-' || c == '*' || c == '/' || c == ')' ||
 		   c == '(' || c == '>' || c == '<' || c == ';' || c == '=' ||
-		   c == '{' || c == '}' || c == '&' || c == '*';
+		   c == '{' || c == '}' || c == '&' || c == '*' || c == ',';
 }
 
 /* is this (other) character an identifier? */

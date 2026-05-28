@@ -14,6 +14,11 @@ bool type_is_int(type_t *ty)
 	return ty->kind == TYPE_INT;
 }
 
+bool type_is_ptr(type_t *ty)
+{
+	return ty->kind == TYPE_PTR;
+}
+
 type_t *type_ptr_to(type_t *ty)
 {
 	type_t *typtr = scr_alloc(sizeof(type_t));
@@ -57,7 +62,8 @@ void type_propagate(node_t *node)
 	case NODE_LT:
 	case NODE_VAR:
 	case NODE_NUM:
-		node->typ = TY_INT;
+	case NODE_FUNCALL:
+		node->type = TY_INT;
 		break;
 	case NODE_ADD:
 	case NODE_SUB:
@@ -65,13 +71,13 @@ void type_propagate(node_t *node)
 	case NODE_DIV:
 	case NODE_NEG:
 	case NODE_ASSIGN:
-		node->typ = node->lhs->typ;
+		node->type = node->lhs->type;
 		break;
 	case NODE_ADDR:
-		node->typ = type_ptr_to(node->lhs->typ);
+		node->type = type_ptr_to(node->lhs->type);
 		break;
 	case NODE_DEREF:
-		node->typ = type_deref(node->lhs->typ);
+		node->type = type_deref(node->lhs->type);
 		break;
 	default:
 		break;

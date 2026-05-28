@@ -9,7 +9,8 @@
 
 /* current grammar:
 
-prim = "(" expr ")" | ident | num
+prim = "(" expr ")" | ident args? | num
+funcall = ident "(" (assign ("," assign)*)? ")"
 unary = ("+" | "-" | "*" | "&") unary
 		| primary
 mul = unary ("*" unary | "/" unary)*
@@ -55,6 +56,7 @@ enum node_kind {
 	NODE_FOR, /* for */
 	NODE_ADDR, /* & */
 	NODE_DEREF, /* * */
+	NODE_FUNCALL,
 };
 
 /* a variable */
@@ -79,7 +81,7 @@ typedef struct node {
 	struct node *lhs, *rhs;
 	struct node *next; /* next tree */
 	struct node *body; /* inner block */
-	type_t *typ; /* type of this node */
+	type_t *type; /* type of this node */
 
 	token_t *tok; /* first token of this node */
 
@@ -92,6 +94,8 @@ typedef struct node {
 	struct node *init;
 	struct node *inc;
 
+	char *fname; /* function name, for NODE_FUNCALL */
+	struct node *fargs; /* function arguments */
 	obj_t *var; /* for NODE_VAR */
 	uint64_t num; /* for NODE_NUM */
 } node_t;

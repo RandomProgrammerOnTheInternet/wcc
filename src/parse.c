@@ -143,6 +143,71 @@ static node_t *parse_stmt(token_t *tok, token_t **rest);
 static node_t *parse_assign(token_t *tok, token_t **rest);
 static node_t *parse_compound_stmt(token_t *tok, token_t **rest);
 
+/* overloaded `+` operator w/ pointers */
+static node_t *node_add(node_t *lhs, node_t *rhs, token_t *tok)
+{
+	/* type both args */
+	type_propagate(lhs);
+	type_propagate(rhs);
+
+	/* default */
+	if(type_is_int(lhs->type) && type_is_int(rhs->type)) {
+		return node_bin(NODE_ADD, lhs, rhs, tok);
+	}
+
+	/* if int + ptr, swap */
+	if(type_is_int(lhs->type)) {
+		node_t *tmp = lhs;
+		lhs = rhs;
+		rhs = tmp;
+	}
+
+	/* ptr + ptr is invalid */
+	if(type_is_ptr(lhs->type) && type_is_ptr(rhs->type)) {
+		compile_err(tok->loc, "cannot add two pointers");
+		return NULL;
+	}
+
+	/* must be ptr + int now */
+	/* pointer arithmetic is fun so the int is multiplied by pointer base size */
+	node_t *mul =
+		node_bin(NODE_MUL, node_num(lhs->type->to->size, NULL), rhs, tok);
+	return node_bin(NODE_ADD, lhs, mul, tok);
+}
+
+/* overloaded `-` operator w/ pointers
+ * Ctrl+C Ctrl+V `node_add` */
+static node_t *node_sub(node_t *lhs, node_t *rhs, token_t *tok)
+{
+	/* type both args */
+	type_propagate(lhs);
+	type_propagate(rhs);
+
+	/* default */
+	if(type_is_int(lhs->type) && type_is_int(rhs->type)) {
+		return node_bin(NODE_SUB, lhs, rhs, tok);
+	}
+
+	/* if int - ptr, swap */
+	if(type_is_int(lhs->type)) {
+		node_t *tmp = lhs;
+		lhs = rhs;
+		rhs = tmp;
+	}
+
+	/* ptr - ptr is invalid */
+	if(type_is_ptr(lhs->type) && type_is_ptr(rhs->type)) {
+		compile_err(tok->loc, "cannot add two pointers");
+		return NULL;
+	}
+
+	/* must be ptr - int now */
+	/* pointer arithmetic is fun so the int is multiplied by pointer base size */
+	node_t *mul =
+		node_bin(NODE_MUL, node_num(lhs->type->to->size, NULL), rhs, tok);
+	return node_bin(NODE_SUB, lhs, mul, tok);
+}
+
 static node_t *parse_compound_stmt(token_t *tok, token_t **rest)
 {
 	node_t node = { 0 };
@@ -284,12 +349,12 @@ static node_t *parse_add(token_t *tok, token_t **rest)
 	node_t *node = parse_mul(tok, &tok);
 parse:
 	if(token_eq(tok, "+")) {
-		node = node_bin(NODE_ADD, node, parse_mul(tok->next, &tok), tok);
+		node = node_add(node, parse_mul(tok->next, &tok), tok);
 		goto parse;
 	}
 
 	if(token_eq(tok, "-")) {
-		node = node_bin(NODE_SUB, node, parse_mul(tok->next, &tok), tok);
+		node = node_sub(node, parse_mul(tok->next, &tok), tok);
 		goto parse;
 	}
 
@@ -376,8 +441,34 @@ static node_t *parse_prim(token_t *tok, token_t **rest)
 		return node;
 	}
 
-	/* ident case */
+	/* ident args? case */
 	if(tok->kind == TOK_IDENT) {
+		/* function call */
+		if(token_eq(tok->next, "(")) {
+			node_t *fun = node_make(NODE_FUNCALL, tok);
+			fun->fname = mystrndup(tok->loc, tok->len);
+			fun->fargs = NULL;
+			tok = tok->next;
+			tok = token_skip(tok, "(");
+
+			node_t head = {};
+			node_t *cur = &head;
+
+			while(!token_eq(tok, ")")) {
+				if(cur != &head)
+					tok = token_skip(tok, ",");
+				cur->next = parse_assign(tok, &tok);
+				cur = cur->next;
+			}
+
+			fun->fargs = head.next;
+
+			tok = token_skip(tok, ")");
+			*rest = tok;
+			return fun;
+		}
+
+		/* variable */
 		obj_t *obj = find_var(tok);
 		if(!obj) {
 			obj =

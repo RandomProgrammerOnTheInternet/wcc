@@ -129,6 +129,11 @@ void compile_warn_node(void *node, const char *fmt, ...);
 /* does string `thing` start with `with`? */
 int starts_with(char *thing, char *with);
 
+/* strdup() but portable */
+char *mystrdup(char *str);
+/* strndup() but portable */
+char *mystrndup(char *str, size_t n);
+
 #if defined(__x86_64__) || defined(_M_X64)
 #define DEFAULT_BACKEND IR_ARCH_X64_SYSV
 #endif /* x86 */

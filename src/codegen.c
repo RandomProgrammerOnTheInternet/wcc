@@ -73,6 +73,12 @@ static void emit_jmp(ir_blk_t *blk)
 	return;
 }
 
+static void emit_call(reg_t *res, char *fname, LIST(reg_t *) args)
+{
+	ir_blk_add(outblk, ins_call(res, fname, args));
+	return;
+}
+
 static ir_blk_t *emit_blk(void)
 {
 	ir_blk_t *blk = ir_blk_make(NULL);
@@ -113,7 +119,6 @@ reg_t *codegen_expr(node_t *node)
 	switch(node->kind) {
 	case NODE_NUM: {
 		reg_t *imm = reg_make();
-
 		emit_imm(imm, node->num);
 		return imm;
 	}
@@ -144,6 +149,19 @@ reg_t *codegen_expr(node_t *node)
 		reg_t *rval = codegen_expr(node->rhs);
 		emit_store(lval, rval);
 		return rval;
+	};
+	case NODE_FUNCALL: {
+		LIST(reg_t *) callargs = list_make(reg_t *);
+		node_t *arg = node->fargs;
+		for(; arg; arg = arg->next) {
+			reg_t *argres = codegen_expr(arg);
+			reg_t *newreg = reg_make();
+			emit_mov(newreg, argres);
+			list_append(callargs, newreg);
+		}
+		reg_t *res = reg_make();
+		emit_call(res, node->fname, callargs);
+		return res;
 	};
 	default:
 		break;

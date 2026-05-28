@@ -2,6 +2,8 @@
 
 passing=1
 
+cc one.c -c -o one.o -O3
+
 assert() {
   
   expect="$1"
@@ -16,7 +18,7 @@ assert() {
     return
   fi
   
-  cc -o prog prog.s && ./prog
+  cc -o prog prog.s one.o && ./prog
   status="$?"
   rm prog prog.s
   
@@ -45,7 +47,9 @@ assert 11 "regalloc_test.c"
 assert 3 "for.c"
 assert 42 "while.c"
 assert 123 "do_while.c"
-assert 4 "ref_deref.c"
+assert 6 "ref_deref.c"
+assert 1 "call.c"
+assert 156 "call_many.c"
 
 if [ "$passing" = "1" ]; then
   echo "all tests passed"

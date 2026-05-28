@@ -162,10 +162,8 @@ static int load_fp_imm_x0(FILE *f, long off)
 	return 1;
 }
 
-/* intentionally limiting amount of registers to 5 here to test
- * the register allocator. */
-static int arm_reg[5] = { 9, 10, 11, 12, 13 };
-static const int arm_reg_count = 5;
+static int arm_reg[10] = { 19, 20, 21, 22, 23, 24, 25, 26, 27, 28 };
+static const int arm_reg_count = 10;
 
 static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 									  long last_i)
@@ -177,6 +175,36 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		int r1 = ins->r1 && ins->r1->rr >= 0 ? arm_reg[ins->r1->rr] : -1;
 		int r2 = ins->r2 && ins->r2->rr >= 0 ? arm_reg[ins->r2->rr] : -1;
 		switch(ins->type) {
+		case IR_INST_CALL: {
+			size_t stack_indx = 0;
+			size_t space_needed = 0;
+			if(list_len(ins->call_args) > 8) {
+				space_needed = 8 * (list_len(ins->call_args) - 8);
+				fprintf(f, "\tsub sp, sp, #%zu\n", space_needed);
+				stack_indx = space_needed - 8;
+			}
+			for(size_t i = 0; i < list_len(ins->call_args); i++) {
+				int arg = arm_reg[ins->call_args[i]->rr];
+				if(ins->call_args[i]->spilld) {
+					fprintf(f, "\tldr x%d, [fp, #%ld]\n", arg,
+							ins->call_args[i]->var->off);
+				}
+				if(i <= 7) {
+					fprintf(f, "\tmov x%zu, x%d\n", i,
+							arm_reg[ins->call_args[i]->rr]);
+				} else {
+					ENSURE(stack_indx >= 0, "negative stack index, somehow");
+					fprintf(f, "\tstr x%d, [sp, #%zu]\n",
+							arm_reg[ins->call_args[i]->rr], stack_indx);
+					stack_indx -= 8;
+				}
+			}
+			fprintf(f, "\tbl _%s\n", ins->fname);
+			fprintf(f, "\tmov x%d, x0\n", r0);
+			if(space_needed) {
+				fprintf(f, "\tadd sp, sp, #%zu\n", space_needed);
+			}
+		} break;
 		case IR_INST_BREQI:
 		case IR_INST_BRNEI:
 		case IR_INST_BRLTI:
@@ -377,9 +405,9 @@ cmp_main:
 
 static int ir_func_save_regs(FILE *f, ir_func_t *fun)
 {
-	bool *used_copy = calloc(arm_reg_count, sizeof(bool));
+	bool *used_copy = zcalloc(arm_reg_count, sizeof(bool));
 	memcpy(used_copy, fun->alloc_used, arm_reg_count * sizeof(bool));
-	ENSURE(!fun->alloc_strat, "todo: caller default strat");
+
 	/* save all registers needing to be saved */
 	int reg1 = -1;
 	int reg2 = -1;

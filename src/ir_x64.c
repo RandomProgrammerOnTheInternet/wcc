@@ -177,8 +177,7 @@ void ir_func_opt_x64(ir_func_t *fun, int opt_level)
 	return;
 }
 
-/* todo: some of these are argument registers, have to save them for later */
-static const char *x64_reg[5] = { "rdi", "rsi", "rdx", "rcx", "r8" };
+static const char *x64_reg[5] = { "rbx", "r12", "r13", "r14", "r15" };
 
 static int64_t i64abs(int64_t v)
 {
@@ -200,6 +199,13 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		const char *r2 = ins->r2 && ins->r2->rr >= 0 ? x64_reg[ins->r2->rr] :
 													   NULL;
 		switch(ins->type) {
+		case IR_INST_CALL:
+			if(list_len(ins->call_args) >= 1) {
+				ERROR("i dont wanna deal with x64 abi rn");
+			}
+			fprintf(f, "\tcall %s\n", ins->fname);
+			fprintf(f, "\tmov %s, rax\n", r0);
+			break;
 		case IR_INST_BREQI:
 		case IR_INST_BRNEI:
 		case IR_INST_BRLTI:
