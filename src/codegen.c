@@ -1,9 +1,9 @@
 #include "codegen.h"
 #include "parse.h"
 #include <stdlib.h>
-#include "ir.h"
-#include "ir_regalloc.h"
-#include "ir_opt.h"
+#include "ir/ir.h"
+#include "ir/ir_regalloc.h"
+#include "ir/ir_opt.h"
 
 static ir_func_t *fun;
 static ir_blk_t *outblk;
