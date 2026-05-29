@@ -93,7 +93,7 @@ typedef struct reg {
 	long last_use; /* when this reg was last used */
 	bool spilld; /* is this reg spilled? */
 	uint64_t imm; /* immediate associated with this reg */
-	obj_t *var; /* variable of register */
+	long off; /* stack offset of register */
 	/* for optimization: */
 	bool stack_loc; /* is this register from a leas instruction? */
 	long stack_off; /* if so, it's offset */

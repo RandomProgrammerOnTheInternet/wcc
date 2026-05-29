@@ -97,6 +97,8 @@ count:
 dirs:
 	@# Create bin dir
 	@mkdir -p $(BINDIR)
+	@mkdir -p $(BINDIR)/zz
+	@mkdir -p $(BINDIR)/ir
 
 # compile each single file
 $(BINDIR)/%.o: src/%.c

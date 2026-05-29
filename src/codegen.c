@@ -160,7 +160,6 @@ static reg_t *calc_addr(node_t *node)
 	if(node->kind == NODE_VAR) {
 		long placement = -node->var->off;
 		reg_t *addr = reg_make();
-		addr->var = node->var;
 		emit_leas(addr, placement);
 		return addr;
 	}
@@ -212,7 +211,6 @@ reg_t *codegen_expr(node_t *node)
 	}
 	case NODE_ASSIGN: {
 		reg_t *lval = calc_addr(node->lhs);
-		lval->var = node->var;
 		reg_t *rval = codegen_expr(node->rhs);
 		emit_store_sz(type, lval, rval);
 		return rval;

@@ -302,7 +302,7 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 				int arg = arm_reg[ins->call_args[i]->rr];
 				if(ins->call_args[i]->spilld) {
 					fprintf(f, "\tldr x%d, [fp, #%ld]\n", arg,
-							ins->call_args[i]->var->off);
+							ins->call_args[i]->off);
 				}
 				if(i <= 7) {
 					fprintf(f, "\tmov x%zu, x%d\n", i,

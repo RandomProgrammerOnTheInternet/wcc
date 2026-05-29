@@ -262,7 +262,7 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 				if(ins->call_args[i]->spilld) {
 					fprintf(f, "\tmov %s, [rbp - %lld]\n",
 							x64_reg[ins->call_args[i]->rr],
-							i64abs(ins->call_args[i]->var->off));
+							i64abs(ins->call_args[i]->off));
 				}
 				if(i < 6) {
 					fprintf(f, "\tmov %s, %s\n", arg_reg[i],

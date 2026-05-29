@@ -227,8 +227,7 @@ static int spill_register(reg_t **regs, int amount)
 static void rewrite_load_spill(ir_inst_t *ins_prev, ir_inst_t *ins, reg_t *reg)
 {
 	ASSERT(reg->spilld, "tried to spill a non-spilled register");
-	ir_inst_t *inst =
-		ir_inst_make(IR_INST_LOADSS, reg, NULL, NULL, reg->var->off);
+	ir_inst_t *inst = ir_inst_make(IR_INST_LOADSS, reg, NULL, NULL, reg->off);
 	inst->size = 8;
 	ins_prev->next = inst;
 	inst->next = ins;
@@ -240,7 +239,7 @@ static void rewrite_store_spill(ir_inst_t *ins)
 {
 	ASSERT(ins->r0->spilld, "tried to spill a non-spilled register");
 	ir_inst_t *inst =
-		ir_inst_make(IR_INST_STORESS, NULL, ins->r0, NULL, ins->r0->var->off);
+		ir_inst_make(IR_INST_STORESS, NULL, ins->r0, NULL, ins->r0->off);
 	inst->size = 8;
 	ir_inst_t *nxt = ins->next;
 	ins->next = inst;
@@ -284,8 +283,7 @@ void ir_regalloc_spill(ir_func_t *fun, LIST(reg_t *) allocated)
 		reg_t *r = allocated[i];
 		off -= 8;
 		fun->stack_needed += 8;
-		r->var = obj_make(strdup("_spilld"), TY_LONG, false);
-		r->var->off = off;
+		r->off = off;
 	}
 
 	/* rewriting */
@@ -574,10 +572,6 @@ void ir_finalize(ir_func_t *fun, int amount, enum ir_arch arch)
 	for(size_t i = 0; i < list_len(allocated); i++) {
 		if(!allocated[i]->spilld) {
 			continue;
-		}
-
-		if(allocated[i]->var) {
-			obj_delete(allocated[i]->var);
 		}
 	}
 
