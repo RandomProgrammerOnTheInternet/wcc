@@ -1,3 +1,4 @@
+// not meant to be tested by the `wcc` compiler!!!
 long one(void)
 {
 	return 1;

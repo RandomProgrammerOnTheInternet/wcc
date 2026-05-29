@@ -178,6 +178,7 @@ void ir_func_opt_x64(ir_func_t *fun, int opt_level)
 }
 
 static const char *x64_reg[5] = { "rbx", "r12", "r13", "r14", "r15" };
+static const int x64_reg_count = 5;
 
 static int64_t i64abs(int64_t v)
 {
@@ -186,6 +187,8 @@ static int64_t i64abs(int64_t v)
 	}
 	return v;
 }
+
+static const char *arg_reg[6] = { "rdi", "rsi", "rdx", "rcx", "r8", "r9" };
 
 static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 								 long last_i)
@@ -199,13 +202,30 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		const char *r2 = ins->r2 && ins->r2->rr >= 0 ? x64_reg[ins->r2->rr] :
 													   NULL;
 		switch(ins->type) {
-		case IR_INST_CALL:
-			if(list_len(ins->call_args) >= 1) {
-				ERROR("i dont wanna deal with x64 abi rn");
+		case IR_INST_CALL: {
+			size_t stack_used = 0;
+			for(size_t i = 0; i < list_len(ins->call_args); i++) {
+				if(ins->call_args[i]->spilld) {
+					fprintf(f, "\tmov %s, [rbp - %lld]\n",
+							x64_reg[ins->call_args[i]->rr],
+							i64abs(ins->call_args[i]->var->off));
+				}
+				if(i < 6) {
+					fprintf(f, "\tmov %s, %s\n", arg_reg[i],
+							x64_reg[ins->call_args[i]->rr]);
+				} else {
+					fprintf(f, "\tpush %s\n", x64_reg[ins->call_args[i]->rr]);
+					stack_used += 8;
+				}
 			}
 			fprintf(f, "\tcall %s\n", ins->fname);
-			fprintf(f, "\tmov %s, rax\n", r0);
-			break;
+			if(r0) {
+				fprintf(f, "\tmov %s, rax\n", r0);
+			}
+			if(stack_used) {
+				fprintf(f, "\tsub rsp, %zu\n", stack_used);
+			}
+		} break;
 		case IR_INST_BREQI:
 		case IR_INST_BRNEI:
 		case IR_INST_BRLTI:
@@ -431,15 +451,34 @@ cmp_main:
 	return;
 }
 
+static void ir_func_save_regs(FILE *f, ir_func_t *fun)
+{
+	/* luckily x86_64 is CISC, ez */
+	for(size_t i = 0; i < x64_reg_count; i++) {
+		if(fun->alloc_used[i]) {
+			fprintf(f, "\tpush %s\n", x64_reg[i]);
+		}
+	}
+	return;
+}
+
+static void ir_func_restore_regs(FILE *f, ir_func_t *fun)
+{
+	for(size_t i = x64_reg_count - 1; i >= 0; i--) {
+		if(fun->alloc_used[i]) {
+			fprintf(f, "\tpop %s\n", x64_reg[i]);
+		}
+
+		if(i == 0) {
+			break;
+		}
+	}
+	return;
+}
+
 void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 {
 	char *name = fun->name;
-	char *og_name = name;
-	/* big no no on x64 */
-	if(starts_with(name, "_")) {
-		name = name + 1;
-		fun->name = name;
-	}
 	/* correct syntax */
 	fprintf(f, ".intel_syntax noprefix\n");
 	fprintf(f, ".global %s\n", name);
@@ -449,6 +488,7 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 	/* enter stack frame */
 	size_t alignd = align_to(fun->stack_needed, 16);
 	fprintf(f, "\tpush rbp\n");
+	ir_func_save_regs(f, fun);
 	fprintf(f, "\tmov rbp, rsp\n");
 	if(alignd) {
 		fprintf(f, "\tsub rsp, %zu\n", alignd);
@@ -462,9 +502,9 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 	/* leave stack frame */
 	fprintf(f, "%s_ret:\n", name);
 	fprintf(f, "\tmov rsp, rbp\n");
+	ir_func_restore_regs(f, fun);
 	fprintf(f, "\tpop rbp\n");
 	fprintf(f, "\tret\n");
 
-	fun->name = og_name;
 	return;
 }

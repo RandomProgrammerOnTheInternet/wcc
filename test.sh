@@ -2,7 +2,7 @@
 
 passing=1
 
-cc one.c -c -o one.o -O3
+cc test/one.c -c -o one.o -O3
 
 assert() {
   

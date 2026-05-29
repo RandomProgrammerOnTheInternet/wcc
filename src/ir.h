@@ -72,6 +72,10 @@ enum ins_type {
 	IR_INST_LOADSS, /* %r0 = loadss #imm */
 	IR_INST_STORESS, /* stores %r1, #imm */
 
+	/* sign extensions */
+	IR_INST_ZEXT, /* %r0 = zext %r1 */
+	IR_INST_SEXT, /* %r0 = sext %r1 */
+
 	/* basic block stuff */
 	IR_INST_BR, /* br %r1, false-blk, true-blk */
 	IR_INST_JMP, /* jmp blk */
@@ -117,6 +121,7 @@ typedef struct ir_inst {
 	LIST(reg_t *) call_args; /* for call */
 	char *fname; /* for call */
 	bool nospill;
+	size_t size; /* load/store/zext/sext size */
 } ir_inst_t;
 
 /* IR block (collection of instructions, >= 1 entry and only <= 2 exits) */
@@ -150,6 +155,8 @@ typedef struct ir_func {
 
 DEF_INS(nop, void);
 DEF_INS(mov, reg_t *r0, reg_t *r1);
+DEF_INS(zext, reg_t *r0, reg_t *r1);
+DEF_INS(sext, reg_t *r0, reg_t *r1);
 DEF_INS(imm, reg_t *r0, uint64_t imm);
 DEF_INS(add, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(sub, reg_t *r0, reg_t *r2, reg_t *r3);

@@ -341,7 +341,7 @@ static void calc_stack_needed(obj_t *fn)
 void codegen_func(FILE *f, obj_t *fn, int opt_level, enum ir_arch backend)
 {
 	ENSURE(fn->is_func, "tried to generate code for a variable");
-	ir_func_t *func = ir_func_make("_main");
+	ir_func_t *func = ir_func_make("main");
 	fun = func;
 
 	ir_blk_t *blk = ir_blk_make(NULL);
@@ -357,7 +357,7 @@ void codegen_func(FILE *f, obj_t *fn, int opt_level, enum ir_arch backend)
 	// putchar('\n');
 
 	ir_opt(func, opt_level, backend);
-	ir_finalize(func, 5, backend);
+	ir_finalize(func, backend == IR_ARCH_AARCH64_APPLE ? 10 : 5, backend);
 	// ir_dump(func, 'r');
 
 	ir_func_emit(f, func, backend);

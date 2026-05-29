@@ -200,7 +200,9 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 				}
 			}
 			fprintf(f, "\tbl _%s\n", ins->fname);
-			fprintf(f, "\tmov x%d, x0\n", r0);
+			if(ins->r0) {
+				fprintf(f, "\tmov x%d, x0\n", r0);
+			}
 			if(space_needed) {
 				fprintf(f, "\tadd sp, sp, #%zu\n", space_needed);
 			}
@@ -474,9 +476,9 @@ static void ir_func_restore_regs(FILE *f, ir_func_t *fun, int save)
 
 void ir_func_emit_aarch64_apple(FILE *f, ir_func_t *fun)
 {
-	fprintf(f, ".globl %s\n", fun->name);
+	fprintf(f, ".globl _%s\n", fun->name);
 	fprintf(f, ".p2align 2\n");
-	fprintf(f, "%s:\n", fun->name);
+	fprintf(f, "_%s:\n", fun->name);
 	/* enter stack frame */
 	size_t alignd = align_to(fun->stack_needed, 16);
 	fprintf(f, "\tstp fp, lr, [sp, #-16]!\n");
