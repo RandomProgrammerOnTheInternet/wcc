@@ -1,8 +1,8 @@
 #ifndef LEX_H_
 #define LEX_H_
 
-#include "base.h"
-#include "arena.h"
+#include "zz/base.h"
+#include "zz/arena.h"
 #include <ctype.h>
 
 /* -- token -- */

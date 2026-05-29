@@ -1,13 +1,13 @@
 #include "ir.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include "base.h"
+#include "zz/base.h"
+#include "zz/arena.h"
 #include <ctype.h>
 #include <stdarg.h>
 #include "lex.h"
 #include "parse.h"
 #include "codegen.h"
-#include "arena.h"
 
 int debug = 0;
 int opt_level = 0;

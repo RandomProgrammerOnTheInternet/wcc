@@ -1,5 +1,5 @@
 #include "parse.h"
-#include "base.h"
+#include "zz/base.h"
 #include "lex.h"
 #include "type.h"
 
@@ -38,6 +38,11 @@ void node_delete_all(node_t *root)
 	del(root->elze);
 	del(root->init);
 	del(root->inc);
+	del(root->fargs);
+
+	if(root->fname) {
+		free(root->fname);
+	}
 
 #undef del
 	node_delete(root);

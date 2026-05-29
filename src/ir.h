@@ -2,10 +2,10 @@
 #ifndef IR_H_
 #define IR_H_
 
-#include "base.h"
+#include "zz/base.h"
+#include "zz/list.h"
 #include "lex.h"
 #include "parse.h"
-#include "list.h"
 
 enum ins_type {
 	IR_INST_NOP, /* does nothing */

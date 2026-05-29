@@ -1,7 +1,7 @@
 #ifndef TYPE_H_
 #define TYPE_H_
 
-#include "base.h"
+#include "zz/base.h"
 #include "lex.h"
 
 enum type_kind {

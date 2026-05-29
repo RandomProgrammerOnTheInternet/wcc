@@ -1,7 +1,7 @@
 #ifndef CODEGEN_H_
 #define CODEGEN_H_
 
-#include "base.h"
+#include "zz/base.h"
 #include "lex.h"
 #include "parse.h"
 #include "ir.h"

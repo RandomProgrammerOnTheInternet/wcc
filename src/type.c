@@ -1,5 +1,5 @@
 #include "type.h"
-#include "arena.h"
+#include "zz/arena.h"
 #include "parse.h"
 
 type_t REAL_TY_INT =
