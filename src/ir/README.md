@@ -8,4 +8,4 @@ The register allocation algorithm was inspired by 9cc's.
 
 ## Want to integrate it in your own project?
 
-I recommend you not. If you insist, look at `src/codegen.c` to see how it is used. You also need to define a variable named `debug` somewhere. Keep it at zero.
+I recommend you not. If you insist, look at `src/codegen.c` to see how it is used. You also need to define a variable named `debug` somewhere. Keep it at zero. You also need `zz`.
