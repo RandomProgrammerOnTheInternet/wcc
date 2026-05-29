@@ -2,7 +2,7 @@
 #define IR_X64_H_
 
 #include "ir.h"
-#include "ir_regalloc.h"
+#include "regalloc.h"
 
 void ir_func_opt_x64(ir_func_t *fun, int opt_level);
 void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun);

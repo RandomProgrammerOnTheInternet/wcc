@@ -2,8 +2,8 @@
 #include "parse.h"
 #include <stdlib.h>
 #include "ir/ir.h"
-#include "ir/ir_regalloc.h"
-#include "ir/ir_opt.h"
+#include "ir/regalloc.h"
+#include "ir/opt.h"
 
 static ir_func_t *fun;
 static ir_blk_t *outblk;

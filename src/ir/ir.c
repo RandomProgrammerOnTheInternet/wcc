@@ -1,9 +1,9 @@
 #include "ir.h"
-#include "ir_regalloc.h"
-#include "ir_aarch64.h"
-#include "ir_x64.h"
+#include "regalloc.h"
+#include "opt.h"
+#include "aarch64.h"
+#include "x64.h"
 #include "zz/arena.h"
-#include "ir_opt.h"
 
 static long counter(int reset)
 {

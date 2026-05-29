@@ -1,5 +1,5 @@
-#include "ir_aarch64.h"
 #include "ir.h"
+#include "aarch64.h"
 
 static int unpromote(enum ins_type type)
 {

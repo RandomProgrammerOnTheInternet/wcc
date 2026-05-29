@@ -1,4 +1,5 @@
 #include "ir.h"
+#include "x64.h"
 
 static int unpromote(enum ins_type type)
 {

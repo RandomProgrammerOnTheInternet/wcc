@@ -1,4 +1,4 @@
-# `wcc` IR backend (name pending)
+# `wcc` IR backend (name pending, please suggest)
 
 IR backend for `wcc`. The IR is not 100% complete but almost everything is in place.
 

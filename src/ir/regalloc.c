@@ -1,6 +1,6 @@
 #include "ir.h"
 #include "parse.h"
-#include "ir_regalloc.h"
+#include "regalloc.h"
 #include "type.h"
 
 /* simple linear search */
