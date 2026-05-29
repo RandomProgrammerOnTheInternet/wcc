@@ -72,6 +72,7 @@ typedef struct obj {
 	struct node *body; /* body of the function */
 	struct obj *vars; /* variables of the function */
 	size_t stack_size; /* total size of this function's stack frame */
+	bool addressed; /* is this variable addressed? (used for optimization) */
 } obj_t;
 
 /* an AST node */

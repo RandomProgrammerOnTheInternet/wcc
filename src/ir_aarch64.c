@@ -175,6 +175,41 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		int r1 = ins->r1 && ins->r1->rr >= 0 ? arm_reg[ins->r1->rr] : -1;
 		int r2 = ins->r2 && ins->r2->rr >= 0 ? arm_reg[ins->r2->rr] : -1;
 		switch(ins->type) {
+		case IR_INST_ZEXT:
+			switch(ins->size) {
+			case 1:
+				fprintf(f, "\tuxtb x%d, x%d\n", r0, r1);
+				break;
+			case 2:
+				fprintf(f, "\tuxth x%d, x%d\n", r0, r1);
+				break;
+			case 4:
+				/* this uses w registers don't misread it */
+				fprintf(f, "\tmov w%d, w%d\n", r0, r1);
+				break;
+			case 8:
+			default:
+				fprintf(f, "\tmov x%d, x%d\n", r0, r1);
+				break;
+			}
+			break;
+		case IR_INST_SEXT:
+			switch(ins->size) {
+			case 1:
+				fprintf(f, "\tsxtb x%d, x%d\n", r0, r1);
+				break;
+			case 2:
+				fprintf(f, "\tsxth x%d, x%d\n", r0, r1);
+				break;
+			case 4:
+				fprintf(f, "\tsxtw w%d, w%d\n", r0, r1);
+				break;
+			case 8:
+			default:
+				fprintf(f, "\tmov x%d, x%d\n", r0, r1);
+				break;
+			}
+			break;
 		case IR_INST_CALL: {
 			size_t stack_indx = 0;
 			size_t space_needed = 0;

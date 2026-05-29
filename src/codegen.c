@@ -35,15 +35,41 @@ DEF_INS(gt, GT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(ge, GE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(neg, NEG, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
 DEF_INS(leas, LEAS, r0, NULL, NULL, imm, reg_t *r0, long imm);
-DEF_INS(load, LOAD, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
-DEF_INS(loads, LOADS, r0, NULL, NULL, imm, reg_t *r0, long imm);
-DEF_INS(store, STORE, NULL, r0, r1, 0, reg_t *r0, reg_t *r1);
-DEF_INS(stores, STORES, r0, NULL, NULL, imm, reg_t *r0, long imm);
 DEF_INS(ret, RET, NULL, r1, NULL, 0, reg_t *r1);
 
 #undef DEF_INS
-#undef INSNAME
 #undef MAKE
+
+#define INSNAME2(x) ins_##x
+#define GEN_LOAD(name)                                        \
+	static UNUSEDA void INSNAME(name)(reg_t * r0, reg_t * r1) \
+	{                                                         \
+		ir_inst_t *inst = INSNAME2(name)(r0, r1);             \
+		ir_blk_add(outblk, inst);                             \
+		return;                                               \
+	}
+
+GEN_LOAD(loadb);
+GEN_LOAD(loadw);
+GEN_LOAD(loadl);
+GEN_LOAD(load);
+
+#undef GEN_LOAD
+
+#define GEN_STORE(name)                                       \
+	static UNUSEDA void INSNAME(name)(reg_t * r1, reg_t * r2) \
+	{                                                         \
+		ir_inst_t *inst = INSNAME2(name)(r1, r2);             \
+		ir_blk_add(outblk, inst);                             \
+		return;                                               \
+	}
+
+GEN_STORE(storeb);
+GEN_STORE(storew);
+GEN_STORE(storel);
+GEN_STORE(store);
+
+#undef GEN_STORE
 
 #define GEN_BRCMP(c, name)                                              \
 	static UNUSEDA void emit_##name(reg_t *r1, reg_t *r2, ir_blk_t *fb, \
@@ -58,7 +84,25 @@ GEN_BRCMP(IR_INST_BRNE, brne);
 GEN_BRCMP(IR_INST_BRLT, brlt);
 GEN_BRCMP(IR_INST_BRLE, brle);
 
+#define DEF_INS(name)                                         \
+	static UNUSEDA void INSNAME(name)(reg_t * r0, reg_t * r1) \
+	{                                                         \
+		ir_inst_t *ins = INSNAME2(name)(r0, r1);              \
+		ir_blk_add(outblk, ins);                              \
+		return;                                               \
+	}
+
+DEF_INS(zextb);
+DEF_INS(sextb);
+DEF_INS(zextw);
+DEF_INS(sextw);
+DEF_INS(zextl);
+DEF_INS(sextl);
+
 #undef GEN_BRCMP
+#undef INSNAME
+#undef INSNAME2
+#undef DEF_INS
 
 /* odd one(s) out */
 static void emit_br(reg_t *on, ir_blk_t *trueblk, ir_blk_t *falseblk)
@@ -136,6 +180,7 @@ reg_t *codegen_expr(node_t *node)
 		return val;
 	};
 	case NODE_ADDR: {
+		node->lhs->var->addressed = true;
 		return calc_addr(node->lhs);
 	}
 	case NODE_DEREF: {

@@ -155,8 +155,6 @@ typedef struct ir_func {
 
 DEF_INS(nop, void);
 DEF_INS(mov, reg_t *r0, reg_t *r1);
-DEF_INS(zext, reg_t *r0, reg_t *r1);
-DEF_INS(sext, reg_t *r0, reg_t *r1);
 DEF_INS(imm, reg_t *r0, uint64_t imm);
 DEF_INS(add, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(sub, reg_t *r0, reg_t *r2, reg_t *r3);
@@ -184,6 +182,18 @@ DEF_INS(load, reg_t *r0, reg_t *r1);
 DEF_INS(loads, reg_t *r0, long imm);
 DEF_INS(store, reg_t *r0, reg_t *r1);
 DEF_INS(stores, reg_t *r0, long imm);
+DEF_INS(loadl, reg_t *r0, reg_t *r1);
+DEF_INS(loadsl, reg_t *r0, long imm);
+DEF_INS(storel, reg_t *r0, reg_t *r1);
+DEF_INS(storesl, reg_t *r0, long imm);
+DEF_INS(loadb, reg_t *r0, reg_t *r1);
+DEF_INS(loadsb, reg_t *r0, long imm);
+DEF_INS(storeb, reg_t *r0, reg_t *r1);
+DEF_INS(storesb, reg_t *r0, long imm);
+DEF_INS(loadw, reg_t *r0, reg_t *r1);
+DEF_INS(loadsw, reg_t *r0, long imm);
+DEF_INS(storew, reg_t *r0, reg_t *r1);
+DEF_INS(storesw, reg_t *r0, long imm);
 DEF_INS(br, reg_t *r1, ir_blk_t *falseblk, ir_blk_t *trueblk);
 DEF_INS(breq, reg_t *r1, reg_t *r2, ir_blk_t *falseblk, ir_blk_t *trueblk);
 DEF_INS(brne, reg_t *r1, reg_t *r2, ir_blk_t *falseblk, ir_blk_t *trueblk);
@@ -202,6 +212,13 @@ DEF_INS(brgei, reg_t *r1, long imm, ir_blk_t *falseblk, ir_blk_t *trueblk);
 DEF_INS(jmp, ir_blk_t *blk);
 DEF_INS(ret, reg_t *r1);
 DEF_INS(call, reg_t *res, char *fname, LIST(reg_t *) args);
+
+DEF_INS(zextb, reg_t *r0, reg_t *r1);
+DEF_INS(sextb, reg_t *r0, reg_t *r1);
+DEF_INS(zextw, reg_t *r0, reg_t *r1);
+DEF_INS(sextw, reg_t *r0, reg_t *r1);
+DEF_INS(zextl, reg_t *r0, reg_t *r1);
+DEF_INS(sextl, reg_t *r0, reg_t *r1);
 
 #undef DEF_INS
 #undef INSNAME

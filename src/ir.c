@@ -154,10 +154,6 @@ DEF_INS(gei, GE, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
 
 DEF_INS(neg, NEG, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
 DEF_INS(leas, LEAS, r0, NULL, NULL, imm, reg_t *r0, long imm);
-DEF_INS(load, LOAD, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
-DEF_INS(loads, LOADS, r0, NULL, NULL, imm, reg_t *r0, long imm);
-DEF_INS(store, STORE, NULL, r0, r1, 0, reg_t *r0, reg_t *r1);
-DEF_INS(stores, STORES, r0, NULL, NULL, imm, reg_t *r0, long imm);
 DEF_INS(ret, RET, NULL, r1, NULL, 0, reg_t *r1);
 
 #undef DEF_INS
@@ -165,6 +161,65 @@ DEF_INS(ret, RET, NULL, r1, NULL, 0, reg_t *r1);
 #undef MAKE
 
 /* the odd one(s) out */
+
+#define GEN_LOAD(c, name, s)                               \
+	ir_inst_t *ins_##name(reg_t *r0, reg_t *r1)            \
+	{                                                      \
+		ir_inst_t *ins = ir_inst_make(c, r0, r1, NULL, 0); \
+		ins->size = s;                                     \
+		return ins;                                        \
+	}
+
+GEN_LOAD(IR_INST_LOAD, loadb, 1);
+GEN_LOAD(IR_INST_LOAD, loadw, 2);
+GEN_LOAD(IR_INST_LOAD, loadl, 4);
+GEN_LOAD(IR_INST_LOAD, load, 8);
+
+#undef GEN_LOAD
+
+#define GEN_STORE(c, name, s)                              \
+	ir_inst_t *ins_##name(reg_t *r1, reg_t *r2)            \
+	{                                                      \
+		ir_inst_t *ins = ir_inst_make(c, NULL, r1, r2, 0); \
+		ins->size = s;                                     \
+		return ins;                                        \
+	}
+
+GEN_STORE(IR_INST_STORE, storeb, 1);
+GEN_STORE(IR_INST_STORE, storew, 2);
+GEN_STORE(IR_INST_STORE, storel, 4);
+GEN_STORE(IR_INST_STORE, store, 8);
+#undef GEN_STORE
+
+#define GEN_LOADS(c, name, s)                                  \
+	ir_inst_t *ins_##name(reg_t *r0, long imm)                 \
+	{                                                          \
+		ir_inst_t *ins = ir_inst_make(c, r0, NULL, NULL, imm); \
+		ins->size = s;                                         \
+		return ins;                                            \
+	}
+
+GEN_LOADS(IR_INST_LOADS, loadsb, 1);
+GEN_LOADS(IR_INST_LOADS, loadsw, 2);
+GEN_LOADS(IR_INST_LOADS, loadsl, 4);
+GEN_LOADS(IR_INST_LOADS, loads, 8);
+
+#undef GEN_LOADS
+
+#define GEN_STORES(c, name, s)                                 \
+	ir_inst_t *ins_##name(reg_t *r1, long imm)                 \
+	{                                                          \
+		ir_inst_t *ins = ir_inst_make(c, NULL, r1, NULL, imm); \
+		ins->size = s;                                         \
+		return ins;                                            \
+	}
+
+GEN_STORES(IR_INST_STORES, storesb, 1);
+GEN_STORES(IR_INST_STORES, storesw, 2);
+GEN_STORES(IR_INST_STORES, storesl, 4);
+GEN_STORES(IR_INST_STORES, stores, 8);
+
+#undef GEN_STORES
 
 #define GEN_BRCMP(c, name)                                                  \
 	ir_inst_t *ins_##name(reg_t *r1, reg_t *r2, ir_blk_t *fb, ir_blk_t *tb) \
@@ -199,6 +254,23 @@ GEN_BRCMPI(IR_INST_BRGEI, brgei);
 
 #undef GEN_BRCMP
 #undef GEN_BRCMPI
+
+#define GEN_EXT(c, name, s)                                 \
+	ir_inst_t *ins_##name(reg_t *r0, reg_t *r1)             \
+	{                                                       \
+		ir_inst_t *inst = ir_inst_make(c, r0, r1, NULL, 0); \
+		inst->size = s;                                     \
+		return inst;                                        \
+	}
+
+GEN_EXT(IR_INST_ZEXT, zextb, 1);
+GEN_EXT(IR_INST_ZEXT, sextb, 1);
+GEN_EXT(IR_INST_ZEXT, zextw, 2);
+GEN_EXT(IR_INST_ZEXT, sextw, 2);
+GEN_EXT(IR_INST_ZEXT, zextl, 4);
+GEN_EXT(IR_INST_ZEXT, sextl, 4);
+
+#undef GEN_EXT
 
 ir_inst_t *ins_br(reg_t *on, ir_blk_t *falseb, ir_blk_t *trueb)
 {
@@ -345,6 +417,8 @@ static void ir_fix_ins(ir_inst_t *ins)
 		FIX(LEI, r0, r1, xx);
 		FIX(GTI, r0, r1, xx);
 		FIX(GEI, r0, r1, xx);
+		FIX(ZEXT, r0, r1, xx);
+		FIX(SEXT, r0, r1, xx);
 		FIX(LOAD, r0, r1, xx);
 		FIX(STORE, xx, r1, r2);
 		FIX(LEAS, r0, xx, xx);
@@ -396,9 +470,6 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		r1 = ins->r1 ? (long)ins->r1->vr : -1;
 		r2 = ins->r2 ? (long)ins->r2->vr : -1;
 	}
-	// #define r0 (long)ins->r0->rr
-	// #define r1 (long)ins->r1->rr
-	// #define r2 (long)ins->r2->rr
 	uint64_t imm = ins->imm;
 
 	switch(ins->type) {

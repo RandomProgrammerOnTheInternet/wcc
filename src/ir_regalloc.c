@@ -512,6 +512,7 @@ extern int debug;
 void ir_finalize(ir_func_t *fun, int amount, enum ir_arch arch)
 {
 	ir_blk_reguse(fun);
+	ir_blk_fixup_entry(fun);
 	LIST(reg_t *) allocated = ir_blk_reglive(fun);
 	ir_regalloc(allocated, amount);
 	ir_fix(fun);

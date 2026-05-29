@@ -340,7 +340,7 @@ static int ir_stackopt(ir_func_t *func)
 			if(ins->type == IR_INST_CALL) {
 				for(size_t i = 0; i < list_len(ins->call_args); i++) {
 					reg_t *r = ins->call_args[i];
-					if(r && r->stack_loc) {
+					if(r && r->stack_loc && i >= 6) {
 						r->stack_loc = false;
 					}
 				}
