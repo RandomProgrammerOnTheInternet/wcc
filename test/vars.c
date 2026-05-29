@@ -1,24 +1,24 @@
 {
-	b0 = 42;
-	q = (b0 == 42);
-	a = 1;
-	b = a + 1;
-	c = b + 1;
-	d = c + 1;
-	e = d + 1;
-	f = (e == 5);
-	a0 = 1;
-	b1 = 2;
-	c1 = b1 > a0;
-	g = (c1 == 1);
-	foo = 2;
-	bar = 2;
-	foobarres = (foo + bar == 4);
-	doo = 4;
-	scooby = doo;
-	thing = 12;
-	result = (scooby * doo) - thing;
-	resultres = (result / 2) == 2;
+	long b0 = 42;
+	long q = (b0 == 42);
+	long a = 1;
+	long b = a + 1;
+	long c = b + 1;
+	long d = c + 1;
+	long e = d + 1;
+	long f = (e == 5);
+	long a0 = 1;
+	long b1 = 2;
+	long c1 = b1 > a0;
+	long g = (c1 == 1);
+	long foo = 2;
+	long bar = 2;
+	long foobarres = (foo + bar == 4);
+	long doo = 4;
+	long scooby = doo;
+	long thing = 12;
+	long result = (scooby * doo) - thing;
+	long resultres = (result / 2) == 2;
 
 	return (q + f + g + foobarres + resultres) == 5;
 }

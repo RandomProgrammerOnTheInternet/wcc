@@ -1,7 +1,7 @@
 #include "ir.h"
 #include "parse.h"
-#include <limits.h>
 #include "ir_regalloc.h"
+#include "type.h"
 
 /* simple linear search */
 static int has_reg(LIST(reg_t *) list, reg_t *target)
@@ -229,6 +229,7 @@ static void rewrite_load_spill(ir_inst_t *ins_prev, ir_inst_t *ins, reg_t *reg)
 	ASSERT(reg->spilld, "tried to spill a non-spilled register");
 	ir_inst_t *inst =
 		ir_inst_make(IR_INST_LOADSS, reg, NULL, NULL, reg->var->off);
+	inst->size = 8;
 	ins_prev->next = inst;
 	inst->next = ins;
 	return;
@@ -240,6 +241,7 @@ static void rewrite_store_spill(ir_inst_t *ins)
 	ASSERT(ins->r0->spilld, "tried to spill a non-spilled register");
 	ir_inst_t *inst =
 		ir_inst_make(IR_INST_STORESS, NULL, ins->r0, NULL, ins->r0->var->off);
+	inst->size = 8;
 	ir_inst_t *nxt = ins->next;
 	ins->next = inst;
 	inst->next = nxt;
@@ -282,7 +284,7 @@ void ir_regalloc_spill(ir_func_t *fun, LIST(reg_t *) allocated)
 		reg_t *r = allocated[i];
 		off -= 8;
 		fun->stack_needed += 8;
-		r->var = obj_make(strdup("_spilld"), false);
+		r->var = obj_make(strdup("_spilld"), TY_LONG, false);
 		r->var->off = off;
 	}
 
@@ -318,7 +320,7 @@ void ir_regalloc(LIST(reg_t *) allocated, int amount_)
 	/* register allocation: simple linear scan */
 
 	/* real registers */
-	reg_t **regs = zcalloc(amount, sizeof(reg_t *));
+	reg_t **regs = zcalloc((size_t)amount_, sizeof(reg_t *));
 
 	for(size_t i = 0; i < list_len(allocated); i++) {
 		reg_t *r = allocated[i];
@@ -485,12 +487,31 @@ static void ir_simplify(ir_func_t *fun, int amount)
 				goto end;
 			}
 
+			/* remove useless insts where thing stored is never used
+			 * beyond this inst */
 			if(ins->r0 && ins->r0->def == ins->r0->last_use) {
 				prev->next = nxt;
 				ir_inst_delete(ins);
 				ins = nxt;
 				removed = 1;
 				goto end;
+			}
+
+			/* seed immediate values */
+			if(ins->type == IR_INST_IMM) {
+				/* remove useless immediate loads */
+				if(are_imm[ins->r0->rr] &&
+				   ins->imm == (uint64_t)imm[ins->r0->rr]) {
+					prev->next = nxt;
+					ir_inst_delete(ins);
+					ins = nxt;
+					removed = 1;
+					goto end;
+				}
+				are_imm[ins->r0->rr] = 1;
+				imm[ins->r0->rr] = ins->imm;
+			} else if(ins->r0) {
+				are_imm[ins->r0->rr] = 0;
 			}
 
 end:

@@ -120,7 +120,8 @@ typedef struct ir_inst {
 	struct ir_blk *false_blk, *true_blk; /* for br */
 	LIST(reg_t *) call_args; /* for call */
 	char *fname; /* for call */
-	bool nospill;
+	bool noopt; /* is this inst volatile? */
+	bool sext; /* sign extend this load? */
 	size_t size; /* load/store/zext/sext size */
 } ir_inst_t;
 

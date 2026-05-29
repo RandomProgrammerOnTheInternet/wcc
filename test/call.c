@@ -1,5 +1,5 @@
 {
-	a = one();
-	b = one() + one() + one() + one() + one();
+	long a = one();
+	long b = one() + one() + one() + one() + one();
 	return (a + b) == 6;
 }

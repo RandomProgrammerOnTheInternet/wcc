@@ -111,7 +111,8 @@ ir_inst_t *ir_inst_make(enum ins_type type, reg_t *r0, reg_t *r1, reg_t *r2,
 	ins->false_blk = NULL;
 	ins->true_blk = NULL;
 	ins->imm = imm;
-	ins->nospill = false;
+	ins->noopt = false;
+	ins->sext = false;
 
 	return ins;
 }
@@ -264,11 +265,11 @@ GEN_BRCMPI(IR_INST_BRGEI, brgei);
 	}
 
 GEN_EXT(IR_INST_ZEXT, zextb, 1);
-GEN_EXT(IR_INST_ZEXT, sextb, 1);
+GEN_EXT(IR_INST_SEXT, sextb, 1);
 GEN_EXT(IR_INST_ZEXT, zextw, 2);
-GEN_EXT(IR_INST_ZEXT, sextw, 2);
+GEN_EXT(IR_INST_SEXT, sextw, 2);
 GEN_EXT(IR_INST_ZEXT, zextl, 4);
-GEN_EXT(IR_INST_ZEXT, sextl, 4);
+GEN_EXT(IR_INST_SEXT, sextl, 4);
 
 #undef GEN_EXT
 
@@ -284,10 +285,6 @@ ir_inst_t *ins_call(reg_t *res, char *fname, LIST(reg_t *) args)
 {
 	ir_inst_t *ins = ir_inst_make(IR_INST_CALL, res, NULL, NULL, 0);
 	ins->fname = fname;
-	ins->call_args = list_make(reg_t *);
-	for(size_t i = 0; i < list_len(args); i++) {
-		list_append(ins->call_args, args[i]);
-	}
 	ins->call_args = args;
 	return ins;
 }
@@ -452,6 +449,8 @@ void ir_fix(ir_func_t *func)
 	return;
 }
 
+char size_suf[9] = { [1] = 'b', [2] = 'w', [4] = 'l', [8] = 'q' };
+
 /* print IR instruction */
 void ir_print_inst(ir_inst_t *ins, int mode)
 {
@@ -471,6 +470,8 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		r2 = ins->r2 ? (long)ins->r2->vr : -1;
 	}
 	uint64_t imm = ins->imm;
+	char suf = size_suf[ins->size];
+	char ext = ins->sext ? 'x' : ' ';
 
 	switch(ins->type) {
 	case IR_INST_NOP:
@@ -522,17 +523,21 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 	case IR_INST_GEI:
 		out("%%r%ld = cmpi.ge %%r%ld, #%lld", r0, r1, imm);
 	case IR_INST_LOAD:
-		out("%%r%ld = load %%r%ld", r0, r1);
+		out("%%r%ld = load%c%c %%r%ld", r0, suf, ext, r1);
 	case IR_INST_STORE:
-		out("store %%r%ld, %%r%ld", r1, r2);
+		out("store%c %%r%ld, %%r%ld", suf, r1, r2);
 	case IR_INST_LOADS:
-		out("%%r%ld = loads #%ld", r0, (long)imm);
+		out("%%r%ld = loads%c%c #%ld", r0, suf, ext, (long)imm);
 	case IR_INST_LOADSS:
-		out("%%r%ld = loadss #%ld", r0, (long)imm);
+		out("%%r%ld = loadss%c%c #%ld", r0, suf, ext, (long)imm);
 	case IR_INST_STORES:
-		out("stores #%ld, %%r%ld", (long)imm, r1);
+		out("stores%c #%ld, %%r%ld", suf, (long)imm, r1);
 	case IR_INST_STORESS:
-		out("storess #%ld, %%r%ld", (long)imm, r1);
+		out("storess%c #%ld, %%r%ld", suf, (long)imm, r1);
+	case IR_INST_ZEXT:
+		out("%%r%ld = zext%c %%r%ld", r0, suf, r1);
+	case IR_INST_SEXT:
+		out("%%r%ld = sext%c %%r%ld", r0, suf, r1);
 	case IR_INST_BR:
 		out("br %%r%ld, BB%ld, BB%ld", r1, ins->true_blk->num,
 			ins->false_blk->num);

@@ -12,7 +12,7 @@
 prim = "(" expr ")" | ident args? | num
 funcall = ident "(" (assign ("," assign)*)? ")"
 unary = ("+" | "-" | "*" | "&") unary
-		| primary
+		| prim
 mul = unary ("*" unary | "/" unary)*
 add = mul ("+" mul | "-" mul)*
 relational = add ("<" add | "<=" add | ">" add | ">=" add)*
@@ -20,14 +20,21 @@ equality = relational ("==" relational | "!=" relational)*
 assign = equality ("=" assign)?
 expr = assign
 expr-stmt = expr? ";"
+declspec = "long" | "int"
+declarator = "*"* ident
+initalizer = expr
+init-declarator = declarator
+				| declarator "=" initalizer
+declaration = declspec init-declarator ("," init-declarator)* ";"
 stmt = "return" expr ";"
       | "if" "(" expr ")" stmt ("else" stmt)?
       | "for" "(" expr-stmt expr? ";" expr? ")" stmt
+      | "for" "(" declaration expr? ";" expr? ")" stmt
       | "while" "(" expr ")" stmt
       | "do" stmt "while" "(" expr ")" ";"
 	  | "{" compound-stmt
 	  | expr-stmt
-compound-stmt = stmt* "}"
+compound-stmt = (declaration | stmt)* "}"
 prog = stmt*
 
 */
@@ -67,12 +74,13 @@ typedef struct obj {
 	struct obj *next; /* linked list */
 	long off; /* place on stack frame */
 	char *name; /* name of variable */
+	type_t *type; /* type of this var */
+	bool addressed; /* is this variable addressed? (used for optimization) */
 
 	bool is_func; /* is this object af function? */
 	struct node *body; /* body of the function */
 	struct obj *vars; /* variables of the function */
 	size_t stack_size; /* total size of this function's stack frame */
-	bool addressed; /* is this variable addressed? (used for optimization) */
 } obj_t;
 
 /* an AST node */
@@ -127,7 +135,7 @@ node_t *node_var(obj_t *var, token_t *tok);
 /* -- variables/objects -- */
 
 /* create an object with a name `name` */
-obj_t *obj_make(char *name, bool is_func);
+obj_t *obj_make(char *name, type_t *type, bool is_func);
 
 /* delete an object */
 void obj_delete(obj_t *obj);

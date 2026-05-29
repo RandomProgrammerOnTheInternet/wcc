@@ -570,7 +570,8 @@ static int ir_stackreduce(ir_func_t *func)
 			nxt = ins->next;
 
 			if(ins && nxt && ins->type == IR_INST_STORES &&
-			   nxt->type == IR_INST_LOADS && ins->imm == nxt->imm) {
+			   nxt->type == IR_INST_LOADS && ins->imm == nxt->imm &&
+			   !ins->noopt && !nxt->noopt) {
 				reg_t *r1 = ins->r1;
 				reg_t *r2 = nxt->r0;
 				changed = 1;

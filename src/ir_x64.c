@@ -178,6 +178,10 @@ void ir_func_opt_x64(ir_func_t *fun, int opt_level)
 }
 
 static const char *x64_reg[5] = { "rbx", "r12", "r13", "r14", "r15" };
+static const char *x64_reg8[5] = { "bl", "r12b", "r13b", "r14b", "r15b" };
+static const char *x64_reg16[5] = { "bx", "r12w", "r13w", "r14w", "r15w" };
+static const char *x64_reg32[5] = { "ebx", "r12d", "r13d", "r14d", "r15d" };
+
 static const int x64_reg_count = 5;
 
 static int64_t i64abs(int64_t v)
@@ -201,7 +205,57 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 													   NULL;
 		const char *r2 = ins->r2 && ins->r2->rr >= 0 ? x64_reg[ins->r2->rr] :
 													   NULL;
+		const char *r0b = ins->r0 && ins->r0->rr >= 0 ? x64_reg8[ins->r0->rr] :
+														NULL;
+		const char *r1b = ins->r1 && ins->r1->rr >= 0 ? x64_reg8[ins->r1->rr] :
+														NULL;
+		const char *r2b = ins->r2 && ins->r2->rr >= 0 ? x64_reg8[ins->r2->rr] :
+														NULL;
+		const char *r0w = ins->r0 && ins->r0->rr >= 0 ? x64_reg16[ins->r0->rr] :
+														NULL;
+		const char *r1w = ins->r1 && ins->r1->rr >= 0 ? x64_reg16[ins->r1->rr] :
+														NULL;
+		const char *r2w = ins->r2 && ins->r2->rr >= 0 ? x64_reg16[ins->r2->rr] :
+														NULL;
+		const char *r0d = ins->r0 && ins->r0->rr >= 0 ? x64_reg32[ins->r0->rr] :
+														NULL;
+		const char *r1d = ins->r1 && ins->r1->rr >= 0 ? x64_reg32[ins->r1->rr] :
+														NULL;
+		const char *r2d = ins->r2 && ins->r2->rr >= 0 ? x64_reg32[ins->r2->rr] :
+														NULL;
 		switch(ins->type) {
+		case IR_INST_ZEXT: {
+			switch(ins->size) {
+			case 8:
+				fprintf(f, "mov %s, %s\n", r0, r1);
+				break;
+			case 4:
+				fprintf(f, "mov %s, %s\n", r0d, r1d);
+				break;
+			case 2:
+				fprintf(f, "movzx %s, %s\n", r0d, r1w);
+				break;
+			case 1:
+				fprintf(f, "movzx %s, %s\n", r0d, r1b);
+				break;
+			}
+		}; break;
+		case IR_INST_SEXT: {
+			switch(ins->size) {
+			case 8:
+				fprintf(f, "mov %s, %s\n", r0, r1);
+				break;
+			case 4:
+				fprintf(f, "movsxd %s, %s\n", r0, r1d);
+				break;
+			case 2:
+				fprintf(f, "movsx %s, %s\n", r0, r1w);
+				break;
+			case 1:
+				fprintf(f, "movsx %s, %s\n", r0, r1b);
+				break;
+			}
+		}; break;
 		case IR_INST_CALL: {
 			size_t stack_used = 0;
 			for(size_t i = 0; i < list_len(ins->call_args); i++) {
@@ -313,7 +367,7 @@ brcmp_main:
 			break;
 		case IR_INST_IMM:
 			if(ins->imm == 0) {
-				fprintf(f, "\txor %s, %s\n", r0, r0);
+				fprintf(f, "\txor %s, %s\n", r0d, r0d);
 			} else {
 				fprintf(f, "\tmov %s, %lld\n", r0, (int64_t)ins->imm);
 			}
@@ -423,19 +477,52 @@ cmp_main:
 		case IR_INST_LEAS:
 			fprintf(f, "\tlea %s, [rbp - %lld]\n", r0, (int64_t)ins->imm);
 			break;
-		case IR_INST_LOAD:
-			fprintf(f, "\tmov %s, [%s]\n", r0, r1);
-			break;
+		case IR_INST_LOAD: {
+			if(!ins->sext) {
+				switch(ins->size) {
+				case 8:
+					fprintf(f, "\tmov %s, [%s]\n", r0, r1);
+					break;
+				case 4:
+					fprintf(f, "\tmov %s, dword ptr [%s]\n", r0d, r1);
+					break;
+				case 2:
+					fprintf(f, "\tmovzx %s, word ptr [%s]\n", r0d, r1);
+					break;
+				case 1:
+					fprintf(f, "\tmovzx %s, byte ptr [%s]\n", r0d, r1);
+					break;
+				}
+			} else {
+				switch(ins->size) {
+				case 8:
+					fprintf(f, "\tmov %s, [%s]\n", r0, r1);
+					break;
+				case 4:
+					fprintf(f, "\tmovsxd %s, dword ptr [%s]\n", r0, r1);
+					break;
+				case 2:
+					fprintf(f, "\tmovsx %s, word ptr [%s]\n", r0, r1);
+					break;
+				case 1:
+					fprintf(f, "\tmovsx %s, byte ptr [%s]\n", r0, r1);
+					break;
+				}
+			}
+		} break;
 		case IR_INST_LOADS:
 		case IR_INST_LOADSS:
+			ERROR("todo x64");
 			fprintf(f, "\tmov %s, [rbp - %lld]\n", r0,
 					i64abs((int64_t)ins->imm));
 			break;
 		case IR_INST_STORE:
+			ERROR("todo x64");
 			fprintf(f, "\tmov [%s], %s\n", r1, r2);
 			break;
 		case IR_INST_STORES:
 		case IR_INST_STORESS:
+			ERROR("todo x64");
 			fprintf(f, "\tmov [rbp - %lld], %s\n", i64abs((int64_t)ins->imm),
 					r1);
 			break;

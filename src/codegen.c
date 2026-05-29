@@ -71,6 +71,27 @@ GEN_STORE(store);
 
 #undef GEN_STORE
 
+static UNUSEDA void emit_load_sz(type_t *typ, reg_t *r0, reg_t *r1)
+{
+	reg_t *new_r0 = r0;
+
+	ir_inst_t *ins = ins_load(new_r0, r1);
+	if(typ->size < 8 && type_is_signed(typ)) {
+		ins->sext = true;
+	}
+	ins->size = typ->size;
+	ir_blk_add(outblk, ins);
+	return;
+}
+
+static UNUSEDA void emit_store_sz(type_t *typ, reg_t *r1, reg_t *r2)
+{
+	ir_inst_t *ins = ins_store(r1, r2);
+	ins->size = typ->size;
+	ir_blk_add(outblk, ins);
+	return;
+}
+
 #define GEN_BRCMP(c, name)                                              \
 	static UNUSEDA void emit_##name(reg_t *r1, reg_t *r2, ir_blk_t *fb, \
 									ir_blk_t *tb)                       \
@@ -155,6 +176,7 @@ static reg_t *calc_addr(node_t *node)
 /* generates code given AST tree */
 reg_t *codegen_expr(node_t *node)
 {
+	type_t *type = node->type;
 	if(!node) {
 		ERROR("null node passed");
 	}
@@ -175,8 +197,7 @@ reg_t *codegen_expr(node_t *node)
 	case NODE_VAR: {
 		reg_t *addr = calc_addr(node);
 		reg_t *val = reg_make();
-		val->var = node->var;
-		emit_load(val, addr);
+		emit_load_sz(type, val, addr);
 		return val;
 	};
 	case NODE_ADDR: {
@@ -186,13 +207,14 @@ reg_t *codegen_expr(node_t *node)
 	case NODE_DEREF: {
 		reg_t *expr = codegen_expr(node->lhs);
 		reg_t *val = reg_make();
-		emit_load(val, expr);
+		emit_load_sz(type, val, expr);
 		return val;
 	}
 	case NODE_ASSIGN: {
 		reg_t *lval = calc_addr(node->lhs);
+		lval->var = node->var;
 		reg_t *rval = codegen_expr(node->rhs);
-		emit_store(lval, rval);
+		emit_store_sz(type, lval, rval);
 		return rval;
 	};
 	case NODE_FUNCALL: {
@@ -200,9 +222,7 @@ reg_t *codegen_expr(node_t *node)
 		node_t *arg = node->fargs;
 		for(; arg; arg = arg->next) {
 			reg_t *argres = codegen_expr(arg);
-			reg_t *newreg = reg_make();
-			emit_mov(newreg, argres);
-			list_append(callargs, newreg);
+			list_append(callargs, argres);
 		}
 		reg_t *res = reg_make();
 		emit_call(res, node->fname, callargs);
@@ -374,9 +394,9 @@ static void calc_stack_needed(obj_t *fn)
 		if(obj->is_func) {
 			continue;
 		}
-		space += 8;
+		space += (size_t)obj->type->size;
 		obj->off = off;
-		off -= 8;
+		off -= (long)obj->type->size;
 	}
 	fn->stack_size = space;
 	return;
@@ -398,12 +418,8 @@ void codegen_func(FILE *f, obj_t *fn, int opt_level, enum ir_arch backend)
 	fun->stack_needed = fn->stack_size;
 	codegen_expr_stmt(fn->body);
 
-	// ir_dump(func, 'v');
-	// putchar('\n');
-
 	ir_opt(func, opt_level, backend);
 	ir_finalize(func, backend == IR_ARCH_AARCH64_APPLE ? 10 : 5, backend);
-	// ir_dump(func, 'r');
 
 	ir_func_emit(f, func, backend);
 

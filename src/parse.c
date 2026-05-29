@@ -1,4 +1,5 @@
 #include "parse.h"
+#include "base.h"
 #include "lex.h"
 #include "type.h"
 
@@ -75,13 +76,14 @@ node_t *node_var(obj_t *var, token_t *tok)
 {
 	node_t *node = node_make(NODE_VAR, tok);
 	node->var = var;
+	node->type = var->type;
 	return node;
 }
 
 /* -- variables/objects -- */
 
 /* create an object with a name `name` */
-obj_t *obj_make(char *name, bool is_func)
+obj_t *obj_make(char *name, type_t *type, bool is_func)
 {
 	/* also inserts it into locals linked list */
 	obj_t *obj = scr_alloc(sizeof(obj_t));
@@ -92,6 +94,7 @@ obj_t *obj_make(char *name, bool is_func)
 	obj->is_func = is_func;
 	obj->name = name;
 	obj->off = 0;
+	obj->type = type;
 	return obj;
 }
 
@@ -142,6 +145,124 @@ static node_t *parse_expr_stmt(token_t *tok, token_t **rest);
 static node_t *parse_stmt(token_t *tok, token_t **rest);
 static node_t *parse_assign(token_t *tok, token_t **rest);
 static node_t *parse_compound_stmt(token_t *tok, token_t **rest);
+static type_t *parse_declspec(token_t *tok, token_t **rest);
+static node_t *parse_initalizer(token_t *tok, token_t **rest);
+static type_t *parse_declarator(type_t *root, token_t *tok, token_t **rest);
+static node_t *parse_init_declarator(type_t *root, token_t *tok,
+									 token_t **rest);
+static node_t *parse_declaration(token_t *tok, token_t **rest);
+
+static bool is_declspec(token_t *tok)
+{
+	if(token_eq(tok, "long") || token_eq(tok, "int")) {
+		return true;
+	}
+	return false;
+}
+
+static type_t *parse_declspec(token_t *tok, token_t **rest)
+{
+	if(token_eq(tok, "long")) {
+		tok = token_skip(tok, "long");
+		*rest = tok;
+		return TY_LONG;
+	}
+
+	if(token_eq(tok, "int")) {
+		tok = token_skip(tok, "int");
+		*rest = tok;
+		return TY_INT;
+	}
+
+	compile_err(tok->loc, "invalid declaration specifier type '%.*s'", tok->len,
+				tok->loc);
+	return NULL;
+}
+
+static node_t *parse_initalizer(token_t *tok, token_t **rest)
+{
+	return parse_expr(tok, rest);
+}
+
+static type_t *parse_declarator(type_t *root, token_t *tok, token_t **rest)
+{
+	type_t *decltype = root;
+	while(token_eq(tok, "*")) {
+		tok = token_skip(tok, "*");
+		decltype = type_ptr_to(decltype);
+	}
+
+	if(tok->kind != TOK_IDENT) {
+		compile_err(tok->loc, "expected an identifier");
+	}
+
+	decltype->ident = tok;
+	tok = tok->next;
+
+	*rest = tok;
+	return decltype;
+}
+
+static node_t *parse_init_declarator(type_t *root, token_t *tok, token_t **rest)
+{
+	type_t *decltype = parse_declarator(root, tok, &tok);
+
+	obj_t *lval = obj_make(
+		mystrndup(decltype->ident->loc, decltype->ident->len), decltype, false);
+
+	/* if not assigned to it's fine, just create the object (declaration) and return */
+	if(!token_eq(tok, "=")) {
+		*rest = tok;
+		UNUSED(lval);
+		return NULL;
+	}
+
+	/* else assign something to it */
+	token_t *eqsign = tok;
+	tok = token_skip(tok, "=");
+	node_t *initalizer = parse_initalizer(tok, &tok);
+	node_t *assignment = node_bin(NODE_ASSIGN, node_var(lval, decltype->ident),
+								  initalizer, eqsign);
+	assignment->var = lval;
+
+	*rest = tok;
+	return assignment;
+}
+
+static node_t *parse_declaration(token_t *tok, token_t **rest)
+{
+	type_t *decltype_base = parse_declspec(tok, &tok);
+
+	node_t head = { 0 };
+	node_t *cur = &head;
+	node_t *init_decl_list = parse_init_declarator(decltype_base, tok, &tok);
+
+	if(init_decl_list) {
+		cur->next = node_unary(NODE_EXPR_STMT, init_decl_list, tok);
+		cur = cur->next;
+	}
+
+	/* process more declarations */
+	while(token_eq(tok, ",")) {
+		tok = token_skip(tok, ",");
+		init_decl_list = parse_init_declarator(decltype_base, tok, &tok);
+
+		if(init_decl_list) {
+			cur->next = node_unary(NODE_EXPR_STMT, init_decl_list, tok);
+			cur = cur->next;
+		}
+	}
+
+	if(!token_eq(tok, ";")) {
+		compile_err(tok->loc, "expected a semicolon");
+	}
+
+	*rest = tok->next;
+	node_t *blk = node_make(NODE_BLOCK, tok);
+	blk->body = head.next;
+
+	return blk;
+}
 
 /* overloaded `+` operator w/ pointers */
 static node_t *node_add(node_t *lhs, node_t *rhs, token_t *tok)
@@ -214,9 +335,15 @@ static node_t *parse_compound_stmt(token_t *tok, token_t **rest)
 	node_t *cur = &node;
 	node_t *blk = node_make(NODE_BLOCK, tok);
 	while(!token_eq(tok, "}")) {
-		node_t *stmt = parse_stmt(tok, &tok);
-		cur->next = stmt;
-		cur = stmt;
+		/* TODO: this is a duct tape solution */
+		if(is_declspec(tok)) {
+			node_t *decl = parse_declaration(tok, &tok);
+			cur->next = decl;
+		} else {
+			node_t *stmt = parse_stmt(tok, &tok);
+			cur->next = stmt;
+		}
+		cur = cur->next;
 		type_propagate(cur);
 	}
 	tok = token_skip(tok, "}");
@@ -271,7 +398,12 @@ static node_t *parse_stmt(token_t *tok, token_t **rest)
 	if(tok->kind == TOK_KEYWORD && token_eq(tok, "for")) {
 		node_t *fornod = node_make(NODE_FOR, tok);
 		tok = token_skip(tok->next, "(");
-		node_t *init = parse_expr_stmt(tok, &tok);
+		node_t *init;
+		if(is_declspec(tok)) {
+			init = parse_declaration(tok, &tok);
+		} else {
+			init = parse_expr_stmt(tok, &tok);
+		}
 		node_t *cond = NULL;
 		node_t *inc = NULL;
 
@@ -471,8 +603,8 @@ static node_t *parse_prim(token_t *tok, token_t **rest)
 		/* variable */
 		obj_t *obj = find_var(tok);
 		if(!obj) {
-			obj =
-				obj_make(memdup_extra(tok->loc, tok->len, tok->len + 1), false);
+			compile_err(tok->loc, "unknown variable '%.*s'", tok->len,
+						tok->loc);
 		}
 		node_t *node = node_var(obj, tok);
 		*rest = tok->next;
@@ -486,7 +618,7 @@ static node_t *parse_prim(token_t *tok, token_t **rest)
 		return node;
 	}
 
-	compile_err(tok->loc, "expected a expression");
+	compile_err(tok->loc, "expected an expression");
 
 	return NULL;
 }
@@ -518,7 +650,7 @@ obj_t *parse_do(token_t *toks)
 {
 	token_t *tok = token_skip(toks, "{");
 
-	obj_t *f = obj_make("_main", true);
+	obj_t *f = obj_make("main", NULL, true);
 
 	f->body = parse_compound_stmt(tok, &tok);
 	f->vars = locals;

@@ -50,6 +50,7 @@ assert 123 "do_while.c"
 assert 6 "ref_deref.c"
 assert 1 "call.c"
 assert 156 "call_many.c"
+assert 2 "types.c"
 
 if [ "$passing" = "1" ]; then
   echo "all tests passed"

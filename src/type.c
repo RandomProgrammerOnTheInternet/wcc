@@ -3,20 +3,31 @@
 #include "parse.h"
 
 type_t REAL_TY_INT =
-	(type_t){ .kind = TYPE_INT, .size = 8, .align = 8, .to = NULL };
+	(type_t){ .kind = TYPE_INT, .size = 4, .align = 4, .to = NULL };
 type_t *TY_INT = &REAL_TY_INT;
+
+type_t REAL_TY_LONG =
+	(type_t){ .kind = TYPE_LONG, .size = 8, .align = 8, .to = NULL };
+type_t *TY_LONG = &REAL_TY_LONG;
+
 type_t REAL_TY_PTR =
 	(type_t){ .kind = TYPE_PTR, .size = 8, .align = 8, .to = NULL };
 type_t *TY_PTR = &REAL_TY_PTR;
 
 bool type_is_int(type_t *ty)
 {
-	return ty->kind == TYPE_INT;
+	return ty->kind == TYPE_INT || ty->kind == TYPE_LONG;
 }
 
 bool type_is_ptr(type_t *ty)
 {
 	return ty->kind == TYPE_PTR;
+}
+
+bool type_is_signed(type_t *ty)
+{
+	/* all integers are signed right now */
+	return type_is_int(ty);
 }
 
 type_t *type_ptr_to(type_t *ty)
@@ -32,7 +43,7 @@ static type_t *type_deref(type_t *ty)
 	if(ty->kind == TYPE_PTR) {
 		return ty->to;
 	} else {
-		return TY_INT;
+		return TY_LONG;
 	}
 }
 
@@ -54,16 +65,21 @@ void type_propagate(node_t *node)
 	for(node_t *b = node->body; b; b = b->next) {
 		type_propagate(b);
 	}
+	for(node_t *b = node->fargs; b; b = b->next) {
+		type_propagate(b);
+	}
 
 	switch(node->kind) {
 	case NODE_EQ:
 	case NODE_LE:
 	case NODE_NE:
 	case NODE_LT:
-	case NODE_VAR:
 	case NODE_NUM:
 	case NODE_FUNCALL:
-		node->type = TY_INT;
+		node->type = TY_LONG;
+		break;
+	case NODE_VAR:
+		node->type = node->var->type;
 		break;
 	case NODE_ADD:
 	case NODE_SUB:

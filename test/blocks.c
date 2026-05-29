@@ -1,9 +1,9 @@
 {
-	a = 1;
+	long a = 1;
 	{
-		a = 2;
+		long a = 2;
 		{
-			b = 3;
+			long b = 3;
 		}
 	}
 	return (b + a) - 1;

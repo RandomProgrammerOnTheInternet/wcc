@@ -165,6 +165,84 @@ static int load_fp_imm_x0(FILE *f, long off)
 static int arm_reg[10] = { 19, 20, 21, 22, 23, 24, 25, 26, 27, 28 };
 static const int arm_reg_count = 10;
 
+static INLINE void vload(FILE *f, size_t size, bool ext, int reg_to,
+						 char *addr_fmt, va_list va)
+{
+	switch(size) {
+	case 8:
+		fprintf(f, "\tldr x%d, ", reg_to);
+		vfprintf(f, addr_fmt, va);
+		fprintf(f, "\n");
+		break;
+	case 4:
+		fprintf(f, ext ? "\tldrsw x%d, " : "\tldr w%d, ", reg_to);
+		vfprintf(f, addr_fmt, va);
+		fprintf(f, "\n");
+		break;
+	case 2:
+		fprintf(f, ext ? "\tldrsh x%d, " : "\tldrh w%d, ", reg_to);
+		vfprintf(f, addr_fmt, va);
+		fprintf(f, "\n");
+		break;
+	case 1:
+		fprintf(f, ext ? "\tldrsb x%d, " : "\tldrb w%d, ", reg_to);
+		vfprintf(f, addr_fmt, va);
+		fprintf(f, "\n");
+		break;
+	default:
+		break;
+	}
+	return;
+}
+
+static INLINE void vstore(FILE *f, size_t size, int reg_to, char *addr_fmt,
+						  va_list va)
+{
+	switch(size) {
+	case 8:
+		fprintf(f, "\tstr x%d, ", reg_to);
+		vfprintf(f, addr_fmt, va);
+		fprintf(f, "\n");
+		break;
+	case 4:
+		fprintf(f, "\tstr w%d, ", reg_to);
+		vfprintf(f, addr_fmt, va);
+		fprintf(f, "\n");
+		break;
+	case 2:
+		fprintf(f, "\tstrh w%d, ", reg_to);
+		vfprintf(f, addr_fmt, va);
+		fprintf(f, "\n");
+		break;
+	case 1:
+		fprintf(f, "\tstrb w%d, ", reg_to);
+		vfprintf(f, addr_fmt, va);
+		fprintf(f, "\n");
+		break;
+	default:
+		break;
+	}
+}
+
+static void load(FILE *f, size_t size, bool ext, int reg_to, char *addr_fmt,
+				 ...)
+{
+	va_list va;
+	va_start(va, addr_fmt);
+	vload(f, size, ext, reg_to, addr_fmt, va);
+	va_end(va);
+	return;
+}
+
+static void store(FILE *f, size_t size, int reg_to, char *addr_fmt, ...)
+{
+	va_list va;
+	va_start(va, addr_fmt);
+	vstore(f, size, reg_to, addr_fmt, va);
+	va_end(va);
+	return;
+}
+
 static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 									  long last_i)
 {
@@ -174,14 +252,16 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		int r0 = ins->r0 && ins->r0->rr >= 0 ? arm_reg[ins->r0->rr] : -1;
 		int r1 = ins->r1 && ins->r1->rr >= 0 ? arm_reg[ins->r1->rr] : -1;
 		int r2 = ins->r2 && ins->r2->rr >= 0 ? arm_reg[ins->r2->rr] : -1;
+		size_t sz = ins->size;
+		int64_t imm = (int64_t)ins->imm;
 		switch(ins->type) {
 		case IR_INST_ZEXT:
 			switch(ins->size) {
 			case 1:
-				fprintf(f, "\tuxtb x%d, x%d\n", r0, r1);
+				fprintf(f, "\tuxtb w%d, w%d\n", r0, r1);
 				break;
 			case 2:
-				fprintf(f, "\tuxth x%d, x%d\n", r0, r1);
+				fprintf(f, "\tuxth w%d, w%d\n", r0, r1);
 				break;
 			case 4:
 				/* this uses w registers don't misread it */
@@ -196,13 +276,13 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_SEXT:
 			switch(ins->size) {
 			case 1:
-				fprintf(f, "\tsxtb x%d, x%d\n", r0, r1);
+				fprintf(f, "\tsxtb w%d, w%d\n", r0, r1);
 				break;
 			case 2:
-				fprintf(f, "\tsxth x%d, x%d\n", r0, r1);
+				fprintf(f, "\tsxth w%d, w%d\n", r0, r1);
 				break;
 			case 4:
-				fprintf(f, "\tsxtw w%d, w%d\n", r0, r1);
+				fprintf(f, "\tsxtw x%d, x%d\n", r0, r1);
 				break;
 			case 8:
 			default:
@@ -248,7 +328,7 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_BRLEI:
 		case IR_INST_BRGTI:
 		case IR_INST_BRGEI:
-			fprintf(f, "\tcmp x%d, #%lld\n", r1, (int64_t)ins->imm);
+			fprintf(f, "\tcmp x%d, #%lld\n", r1, imm);
 			goto brcmp_main;
 		case IR_INST_BREQ:
 		case IR_INST_BRNE:
@@ -358,7 +438,7 @@ brcmp_main:
 		case IR_INST_LEI:
 		case IR_INST_GTI:
 		case IR_INST_GEI:
-			fprintf(f, "\tcmp x%d, #%lld\n", r1, (int64_t)ins->imm);
+			fprintf(f, "\tcmp x%d, #%lld\n", r1, imm);
 			goto cmp_main;
 		case IR_INST_EQ:
 		case IR_INST_NE:
@@ -399,33 +479,33 @@ cmp_main:
 			}
 			break;
 		case IR_INST_LEAS:
-			if(load_fp_imm_x0(f, (int64_t)ins->imm)) {
+			if(load_fp_imm_x0(f, imm)) {
 				fprintf(f, "\tadd x%d, fp, x0\n", r0);
 			} else {
-				fprintf(f, "\tsub x%d, fp, #%lld\n", r0, ins->imm);
+				fprintf(f, "\tsub x%d, fp, #%lld\n", r0, imm);
 			}
 			break;
 		case IR_INST_LOAD:
-			fprintf(f, "\tldr x%d, [x%d]\n", r0, r1);
+			load(f, sz, ins->sext, r0, "[x%d]", r1);
 			break;
 		case IR_INST_LOADS:
 		case IR_INST_LOADSS:
-			if(load_fp_imm_x0(f, (int64_t)ins->imm)) {
-				fprintf(f, "\tldr x%d, [fp, x0]\n", r0);
+			if(load_fp_imm_x0(f, imm)) {
+				load(f, sz, ins->sext, r0, "[fp, x0]");
 			} else {
-				fprintf(f, "\tldr x%d, [fp, #%lld]\n", r0, (int64_t)ins->imm);
+				load(f, sz, ins->sext, r0, "[fp, #%lld]", imm);
 			}
 			break;
 
 		case IR_INST_STORE:
-			fprintf(f, "\tstr x%d, [x%d]\n", r2, r1);
+			store(f, sz, r2, "[x%d]", r1);
 			break;
 		case IR_INST_STORES:
 		case IR_INST_STORESS:
-			if(load_fp_imm_x0(f, (int64_t)ins->imm)) {
-				fprintf(f, "\tstr x%d, [fp, x0]\n", r1);
+			if(load_fp_imm_x0(f, imm)) {
+				store(f, sz, r1, "[fp, x0]");
 			} else {
-				fprintf(f, "\tstr x%d, [fp, #%lld]\n", r1, (int64_t)ins->imm);
+				store(f, sz, r1, "[fp, #%lld]", imm);
 			}
 			break;
 
