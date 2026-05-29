@@ -595,13 +595,13 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		max_tolerated_change = 0;
 		break;
 	case 1:
-		max_tolerated_change = 2;
-		break;
-	case 2:
 		max_tolerated_change = 4;
 		break;
+	case 2:
+		max_tolerated_change = 16;
+		break;
 	case 3:
-		max_tolerated_change = 8;
+		max_tolerated_change = 256; /* mimic the nature of -O3 */
 		break;
 	default:
 		max_tolerated_change = 0;
