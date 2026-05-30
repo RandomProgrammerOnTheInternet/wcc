@@ -43,4 +43,4 @@ $ make help
 ```sh
 $ make count
 ```
-Swag Point Counter: `4821`
+Swag Point Counter: `5050`
