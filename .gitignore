@@ -12,3 +12,4 @@ oldsrc
 .clang-format
 prog
 prog.s
+*.s

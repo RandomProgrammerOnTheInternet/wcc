@@ -501,6 +501,13 @@ static void ir_simplify(ir_func_t *fun, int amount)
 				goto end;
 			}
 
+			/* if call ins, and the val is not used at all, remove
+			 * the storing */
+			if(ins->r0 && ins->r0->def == ins->r0->last_use &&
+			   ins->type == IR_INST_CALL) {
+				ins->r0 = NULL;
+			}
+
 			/* seed immediate values */
 			if(ins->type == IR_INST_IMM) {
 				/* remove useless immediate loads */
