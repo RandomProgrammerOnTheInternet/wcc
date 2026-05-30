@@ -6,6 +6,8 @@
 #include "ir/opt.h"
 
 static ir_func_t *fun;
+static obj_t *fun_obj;
+long blk_num;
 static ir_blk_t *outblk;
 
 #define MAKE(ty, r0, r1, r2, imm) ir_inst_make(IR_INST_##ty, r0, r1, r2, imm)
@@ -138,7 +140,7 @@ static void emit_jmp(ir_blk_t *blk)
 	return;
 }
 
-static void emit_call(reg_t *res, char *fname, LIST(reg_t *) args)
+static void emit_call(reg_t *res, char *fname, LIST(callreg_t *) args)
 {
 	ir_blk_add(outblk, ins_call(res, fname, args));
 	return;
@@ -147,7 +149,7 @@ static void emit_call(reg_t *res, char *fname, LIST(reg_t *) args)
 static ir_blk_t *emit_blk(void)
 {
 	ir_blk_t *blk = ir_blk_make(NULL);
-	blk->num = list_len(fun->blocks);
+	blk->num = blk_num++;
 	list_append(fun->blocks, blk);
 	return blk;
 }
@@ -216,11 +218,13 @@ reg_t *codegen_expr(node_t *node)
 		return rval;
 	};
 	case NODE_FUNCALL: {
-		LIST(reg_t *) callargs = list_make(reg_t *);
+		LIST(callreg_t *) callargs = list_make(reg_t *);
 		node_t *arg = node->fargs;
 		for(; arg; arg = arg->next) {
 			reg_t *argres = codegen_expr(arg);
-			list_append(callargs, argres);
+			callreg_t *callreg =
+				callreg_make(argres, ARG_CLASS_INTEGER, arg->type->size);
+			list_append(callargs, callreg);
 		}
 		reg_t *res = reg_make();
 		emit_call(res, node->fname, callargs);
@@ -286,7 +290,11 @@ void codegen_expr_stmt(node_t *node)
 		break;
 	case NODE_RET: {
 		reg_t *retval = codegen_expr(node->lhs);
-		emit_ret(retval);
+		reg_t *ext = reg_make();
+		ir_inst_t *ins = ins_zextl(ext, retval);
+		ins->size = fun_obj->type->to->size;
+		ir_blk_add(outblk, ins);
+		emit_ret(ext);
 		break;
 	}
 	case NODE_BLOCK:
@@ -321,7 +329,7 @@ void codegen_expr_stmt(node_t *node)
 		outblk = resume;
 	}; break;
 	case NODE_FOR: {
-		/* initalizer */
+		/* initializer */
 		codegen_expr_stmt(node->init);
 
 		ir_blk_t *condchk = emit_blk(); /* check if need to go loop or resume */
@@ -387,14 +395,15 @@ void codegen_expr_stmt(node_t *node)
 static void calc_stack_needed(obj_t *fn)
 {
 	size_t space = 0;
-	long off = -8;
-	for(obj_t *obj = fn->vars; obj; obj = obj->next) {
-		if(obj->is_func) {
+	long off = 0;
+	for(size_t i = 0; i < list_len(fn->vars); i++) {
+		obj_t *obj = fn->vars[i];
+		if(obj->is_func || obj->skip) {
 			continue;
 		}
 		space += (size_t)obj->type->size;
-		obj->off = off;
 		off -= (long)obj->type->size;
+		obj->off = off;
 	}
 	fn->stack_size = space;
 	return;
@@ -403,24 +412,41 @@ static void calc_stack_needed(obj_t *fn)
 /* generates code for a function */
 void codegen_func(FILE *f, obj_t *fn, int opt_level, enum ir_arch backend)
 {
-	ENSURE(fn->is_func, "tried to generate code for a variable");
-	ir_func_t *func = ir_func_make("main");
-	fun = func;
+	obj_t *cur_fn = fn;
+	blk_num = 0;
+	while(cur_fn) {
+		ENSURE(cur_fn->is_func, "tried to generate code for a variable");
+		reg_reset_counter();
+		ir_func_t *func = ir_func_make(cur_fn->name);
+		fun = func;
+		fun_obj = cur_fn;
+		func->args = list_make(callreg_t *);
+		type_propagate(cur_fn->body);
 
-	ir_blk_t *blk = ir_blk_make(NULL);
-	blk->num = 0;
-	outblk = blk;
-	list_append(func->blocks, blk);
+		ir_blk_t *blk = emit_blk();
+		outblk = blk;
 
-	calc_stack_needed(fn);
-	fun->stack_needed = fn->stack_size;
-	codegen_expr_stmt(fn->body);
+		calc_stack_needed(cur_fn);
 
-	ir_opt(func, opt_level, backend);
-	ir_finalize(func, backend == IR_ARCH_AARCH64_APPLE ? 10 : 5, backend);
+		obj_t *fnargs = cur_fn->args;
+		for(; fnargs; fnargs = fnargs->next) {
+			reg_t *reg = reg_make();
+			reg->off = fnargs->off;
+			callreg_t *r =
+				callreg_make(reg, ARG_CLASS_INTEGER, fnargs->type->size);
+			list_append(func->args, r);
+		}
 
-	ir_func_emit(f, func, backend);
+		fun->stack_needed = align_to(cur_fn->stack_size, 16);
+		codegen_expr_stmt(cur_fn->body);
 
-	ir_func_delete(func);
+		ir_opt(func, opt_level, backend);
+		ir_finalize(func, backend == IR_ARCH_AARCH64_APPLE ? 10 : 5, backend);
+
+		ir_func_emit(f, func, backend);
+
+		ir_func_delete(func);
+		cur_fn = cur_fn->next;
+	}
 	return;
 }

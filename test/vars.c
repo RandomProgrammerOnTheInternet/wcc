@@ -1,3 +1,4 @@
+int main()
 {
 	long b0 = 42;
 	long q = (b0 == 42);

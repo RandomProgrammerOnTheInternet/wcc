@@ -38,11 +38,21 @@ type_t *type_ptr_to(type_t *ty)
 	return typtr;
 }
 
+type_t *type_func_to(type_t *ret_ty)
+{
+	type_t *typtr = scr_alloc(sizeof(type_t));
+	typtr->size = typtr->align = 0;
+	typtr->kind = TYPE_FUNC;
+	typtr->to = ret_ty;
+	return typtr;
+}
+
 static type_t *type_deref(type_t *ty)
 {
 	if(ty->kind == TYPE_PTR) {
 		return ty->to;
 	} else {
+		compile_err(ty->ident->loc, "tried to dereference non-pointer");
 		return TY_LONG;
 	}
 }

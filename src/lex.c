@@ -145,6 +145,26 @@ token_t *lex_do(char *prog)
 			break;
 		}
 
+		/* if we encounter a //, it is a single line comment.
+		 * go to next newline */
+		if(*prog == '/' && *(prog + 1) == '/') {
+			while(*prog != '\n') {
+				prog++;
+			}
+			continue;
+		}
+
+		/* if we see a /\*, it is a multi-line comment.
+		 * skip all characters until we see a */
+		if(*prog == '/' && *(prog + 1) == '*') {
+			char *end = strstr(prog, "*/");
+			if(!end) {
+				compile_err(prog, "unclosed multi-line comment");
+			}
+			prog = end + 2;
+			continue;
+		}
+
 		/* tokenize number */
 		if(isdigit(*prog)) {
 			char *num = prog;

@@ -7,38 +7,6 @@
 
 /* parser */
 
-/* current grammar:
-
-prim = "(" expr ")" | ident args? | num
-funcall = ident "(" (assign ("," assign)*)? ")"
-unary = ("+" | "-" | "*" | "&") unary
-		| prim
-mul = unary ("*" unary | "/" unary)*
-add = mul ("+" mul | "-" mul)*
-relational = add ("<" add | "<=" add | ">" add | ">=" add)*
-equality = relational ("==" relational | "!=" relational)*
-assign = equality ("=" assign)?
-expr = assign
-expr-stmt = expr? ";"
-declspec = "long" | "int"
-declarator = "*"* ident
-initalizer = expr
-init-declarator = declarator
-				| declarator "=" initalizer
-declaration = declspec init-declarator ("," init-declarator)* ";"
-stmt = "return" expr ";"
-      | "if" "(" expr ")" stmt ("else" stmt)?
-      | "for" "(" expr-stmt expr? ";" expr? ")" stmt
-      | "for" "(" declaration expr? ";" expr? ")" stmt
-      | "while" "(" expr ")" stmt
-      | "do" stmt "while" "(" expr ")" ";"
-	  | "{" compound-stmt
-	  | expr-stmt
-compound-stmt = (declaration | stmt)* "}"
-prog = stmt*
-
-*/
-
 enum node_kind {
 	NODE_ADD, /* addition + */
 	NODE_SUB, /* subtraction - */
@@ -76,10 +44,12 @@ typedef struct obj {
 	char *name; /* name of variable */
 	type_t *type; /* type of this var */
 	bool addressed; /* is this variable addressed? (used for optimization) */
+	bool skip; /* has this variable been turned into a register? */
 
 	bool is_func; /* is this object af function? */
 	struct node *body; /* body of the function */
-	struct obj *vars; /* variables of the function */
+	LIST(struct obj *) vars; /* variables of the function */
+	struct obj *args; /* arguments to function */
 	size_t stack_size; /* total size of this function's stack frame */
 } obj_t;
 
@@ -104,7 +74,7 @@ typedef struct node {
 	struct node *inc;
 
 	char *fname; /* function name, for NODE_FUNCALL */
-	struct node *fargs; /* function arguments */
+	struct node *fargs; /* function arguments, for NODE_FUNCALL */
 	obj_t *var; /* for NODE_VAR */
 	uint64_t num; /* for NODE_NUM */
 } node_t;
@@ -140,8 +110,8 @@ obj_t *obj_make(char *name, type_t *type, bool is_func);
 /* delete an object */
 void obj_delete(obj_t *obj);
 
-/* deletes all objects in linked list */
-void obj_delete_all(obj_t *root);
+/* deletes all objects in list */
+void obj_delete_all(LIST(obj_t *) objs);
 
 /* does the parsing */
 obj_t *parse_do(token_t *toks);

@@ -8,6 +8,7 @@ enum type_kind {
 	TYPE_INT, /* int */
 	TYPE_LONG, /* long */
 	TYPE_PTR, /* a pointer */
+	TYPE_FUNC, /* a function */
 };
 
 typedef struct type {
@@ -27,6 +28,7 @@ bool type_is_ptr(type_t *ty);
 bool type_is_signed(type_t *ty);
 
 type_t *type_ptr_to(type_t *ty);
+type_t *type_func_to(type_t *ret_ty);
 
 struct node;
 void type_propagate(struct node *node);

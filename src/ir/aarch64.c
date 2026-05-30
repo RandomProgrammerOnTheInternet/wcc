@@ -149,7 +149,7 @@ static void load_imm(FILE *f, int reg, uint64_t imm_)
 	return;
 }
 
-static int load_fp_imm_x0(FILE *f, long off)
+static int load_fp_imm_x10(FILE *f, long off, bool save)
 {
 	if((-off) >= 65535) {
 		ERROR("cannot emit code: stack size larger than 64K");
@@ -158,7 +158,11 @@ static int load_fp_imm_x0(FILE *f, long off)
 		return 0;
 	}
 
-	fprintf(f, "\tmovn x0, #%llu\n", (uint64_t)(-off));
+	if(save) {
+		fprintf(f, "\tstr x10, [sp, #-16]!\n");
+	}
+
+	fprintf(f, "\tmovn x10, #%llu\n", (uint64_t)(-off));
 	return 1;
 }
 
@@ -243,11 +247,60 @@ static void store(FILE *f, size_t size, int reg_to, char *addr_fmt, ...)
 	return;
 }
 
+static void ir_ins_abi_call_aarch64(FILE *f, ir_func_t *func, ir_blk_t *blk,
+									ir_inst_t *ins, LIST(callreg_t *) args,
+									int r0, int r1, int r2)
+{
+	UNUSED(func);
+	UNUSED(blk);
+	UNUSED(r1);
+	UNUSED(r2);
+	size_t alen = list_len(args);
+	size_t stack_indx = 0;
+	size_t space_needed = 0;
+	if(alen > 8) {
+		for(size_t i = 8; i < alen; i++) {
+			stack_indx = space_needed;
+			space_needed += args[i]->size;
+		}
+		fprintf(f, "\tsub sp, sp, #%zu\n", space_needed);
+	}
+
+	for(size_t i = 0; i < alen; i++) {
+		reg_t *reg = args[i]->r;
+		int arg = arm_reg[reg->rr];
+		if(reg->spilld) {
+			if(load_fp_imm_x10(f, reg->off, false)) {
+				fprintf(f, "\tldr x%d, [fp, x10]\n", arg);
+			} else {
+				fprintf(f, "\tldr x%d, [fp, #%ld]\n", arg, reg->off);
+			}
+		}
+
+		if(i <= 7) {
+			fprintf(f, "\tmov x%zu, x%d\n", i, arm_reg[reg->rr]);
+		} else {
+			ENSURE(stack_indx >= 0, "negative stack index, somehow");
+			fprintf(f, "\tstr x%d, [sp, #%zu]\n", arm_reg[reg->rr], stack_indx);
+			stack_indx -= args[i]->size;
+		}
+	}
+	fprintf(f, "\tbl _%s\n", ins->fname);
+	if(ins->r0) {
+		fprintf(f, "\tmov x%d, x0\n", r0);
+	}
+	if(space_needed) {
+		fprintf(f, "\tadd sp, sp, #%zu\n", space_needed);
+	}
+
+	return;
+}
+
 static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 									  long last_i)
 {
 	/* todo: smarter basic block placement */
-	fprintf(f, "_BB%ld:\n", blk->num);
+	fprintf(f, ".BB%ld:\n", blk->num);
 	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
 		int r0 = ins->r0 && ins->r0->rr >= 0 ? arm_reg[ins->r0->rr] : -1;
 		int r1 = ins->r1 && ins->r1->rr >= 0 ? arm_reg[ins->r1->rr] : -1;
@@ -269,7 +322,9 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 				break;
 			case 8:
 			default:
-				fprintf(f, "\tmov x%d, x%d\n", r0, r1);
+				if(r0 != r1) {
+					fprintf(f, "\tmov x%d, x%d\n", r0, r1);
+				}
 				break;
 			}
 			break;
@@ -286,42 +341,16 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 				break;
 			case 8:
 			default:
-				fprintf(f, "\tmov x%d, x%d\n", r0, r1);
+				if(r0 != r1) {
+					fprintf(f, "\tmov x%d, x%d\n", r0, r1);
+				}
 				break;
 			}
 			break;
-		case IR_INST_CALL: {
-			size_t stack_indx = 0;
-			size_t space_needed = 0;
-			if(list_len(ins->call_args) > 8) {
-				space_needed = 8 * (list_len(ins->call_args) - 8);
-				fprintf(f, "\tsub sp, sp, #%zu\n", space_needed);
-				stack_indx = space_needed - 8;
-			}
-			for(size_t i = 0; i < list_len(ins->call_args); i++) {
-				int arg = arm_reg[ins->call_args[i]->rr];
-				if(ins->call_args[i]->spilld) {
-					fprintf(f, "\tldr x%d, [fp, #%ld]\n", arg,
-							ins->call_args[i]->off);
-				}
-				if(i <= 7) {
-					fprintf(f, "\tmov x%zu, x%d\n", i,
-							arm_reg[ins->call_args[i]->rr]);
-				} else {
-					ENSURE(stack_indx >= 0, "negative stack index, somehow");
-					fprintf(f, "\tstr x%d, [sp, #%zu]\n",
-							arm_reg[ins->call_args[i]->rr], stack_indx);
-					stack_indx -= 8;
-				}
-			}
-			fprintf(f, "\tbl _%s\n", ins->fname);
-			if(ins->r0) {
-				fprintf(f, "\tmov x%d, x0\n", r0);
-			}
-			if(space_needed) {
-				fprintf(f, "\tadd sp, sp, #%zu\n", space_needed);
-			}
-		} break;
+		case IR_INST_CALL:
+			ir_ins_abi_call_aarch64(f, fn, blk, ins, ins->call_args, r0, r1,
+									r2);
+			break;
 		case IR_INST_BREQI:
 		case IR_INST_BRNEI:
 		case IR_INST_BRLTI:
@@ -345,27 +374,27 @@ brcmp_main:
 			 * so invert the specified condition */
 			case IR_INST_BREQ:
 			case IR_INST_BREQI:
-				fprintf(f, "\tbne _BB%ld\n", ins->false_blk->num);
+				fprintf(f, "\tbne .BB%ld\n", ins->false_blk->num);
 				break;
 			case IR_INST_BRNE:
 			case IR_INST_BRNEI:
-				fprintf(f, "\tbeq _BB%ld\n", ins->false_blk->num);
+				fprintf(f, "\tbeq .BB%ld\n", ins->false_blk->num);
 				break;
 			case IR_INST_BRLT:
 			case IR_INST_BRLTI:
-				fprintf(f, "\tbge _BB%ld\n", ins->false_blk->num);
+				fprintf(f, "\tbge .BB%ld\n", ins->false_blk->num);
 				break;
 			case IR_INST_BRLE:
 			case IR_INST_BRLEI:
-				fprintf(f, "\tbgt _BB%ld\n", ins->false_blk->num);
+				fprintf(f, "\tbgt .BB%ld\n", ins->false_blk->num);
 				break;
 			case IR_INST_BRGT:
 			case IR_INST_BRGTI:
-				fprintf(f, "\tble _BB%ld\n", ins->false_blk->num);
+				fprintf(f, "\tble .BB%ld\n", ins->false_blk->num);
 				break;
 			case IR_INST_BRGE:
 			case IR_INST_BRGEI:
-				fprintf(f, "\tblt _BB%ld\n", ins->false_blk->num);
+				fprintf(f, "\tblt .BB%ld\n", ins->false_blk->num);
 				break;
 			}
 			if(ins->true_blk->num == blk->num + 1) {
@@ -373,18 +402,18 @@ brcmp_main:
 				break;
 			}
 			/* dang it */
-			fprintf(f, "\tb _BB%ld\n", ins->true_blk->num);
+			fprintf(f, "\tb .BB%ld\n", ins->true_blk->num);
 			break;
 		case IR_INST_BR:
 			fprintf(f, "\ttst x%d, x%d\n", r1, r1);
-			fprintf(f, "\tbeq _BB%ld\n", ins->false_blk->num);
+			fprintf(f, "\tbeq .BB%ld\n", ins->false_blk->num);
 			/* big brain optimization */
 			/* fallthrough to true block if in front of us */
 			if(ins->true_blk->num == blk->num + 1) {
 				break;
 			}
 			/* else don't */
-			fprintf(f, "\tb _BB%ld\n", ins->true_blk->num);
+			fprintf(f, "\tb .BB%ld\n", ins->true_blk->num);
 			break;
 		case IR_INST_JMP:
 			/* big brain optimization */
@@ -393,14 +422,14 @@ brcmp_main:
 				break;
 			}
 			/* else just jump */
-			fprintf(f, "\tb _BB%ld\n", ins->true_blk->num);
+			fprintf(f, "\tb .BB%ld\n", ins->true_blk->num);
 			break;
 		case IR_INST_RET:
 			if(r1 != -1) {
 				fprintf(f, "\tmov x0, x%d\n", r1);
 			}
 			if(blk->num != last_i) {
-				fprintf(f, "\tb %s_ret\n", fn->name);
+				fprintf(f, "\tb .L%s_ret\n", fn->name);
 			}
 			break;
 		case IR_INST_NOP:
@@ -479,8 +508,8 @@ cmp_main:
 			}
 			break;
 		case IR_INST_LEAS:
-			if(load_fp_imm_x0(f, imm)) {
-				fprintf(f, "\tadd x%d, fp, x0\n", r0);
+			if(load_fp_imm_x10(f, imm, false)) {
+				fprintf(f, "\tadd x%d, fp, x10\n", r0);
 			} else {
 				fprintf(f, "\tsub x%d, fp, #%lld\n", r0, imm);
 			}
@@ -489,11 +518,17 @@ cmp_main:
 			load(f, sz, ins->sext, r0, "[x%d]", r1);
 			break;
 		case IR_INST_LOADS:
-		case IR_INST_LOADSS:
-			if(load_fp_imm_x0(f, imm)) {
-				load(f, sz, ins->sext, r0, "[fp, x0]");
+			if(load_fp_imm_x10(f, imm, false)) {
+				load(f, sz, ins->sext, r0, "[fp, x10]");
 			} else {
 				load(f, sz, ins->sext, r0, "[fp, #%lld]", imm);
+			}
+			break;
+		case IR_INST_LOADSS:
+			if(load_fp_imm_x10(f, imm, false)) {
+				load(f, sz, ins->sext, r0, "[fp, x10]\t ; spilled load");
+			} else {
+				load(f, sz, ins->sext, r0, "[fp, #%lld]\t ; spilled load", imm);
 			}
 			break;
 
@@ -501,11 +536,17 @@ cmp_main:
 			store(f, sz, r2, "[x%d]", r1);
 			break;
 		case IR_INST_STORES:
-		case IR_INST_STORESS:
-			if(load_fp_imm_x0(f, imm)) {
-				store(f, sz, r1, "[fp, x0]");
+			if(load_fp_imm_x10(f, imm, false)) {
+				store(f, sz, r1, "[fp, x10]");
 			} else {
 				store(f, sz, r1, "[fp, #%lld]", imm);
+			}
+			break;
+		case IR_INST_STORESS:
+			if(load_fp_imm_x10(f, imm, false)) {
+				store(f, sz, r1, "[fp, x10]\t ; spilled store");
+			} else {
+				store(f, sz, r1, "[fp, #%lld]\t ; spilled store", imm);
 			}
 			break;
 
@@ -599,17 +640,64 @@ void ir_func_emit_aarch64_apple(FILE *f, ir_func_t *fun)
 	fprintf(f, "\tstp fp, lr, [sp, #-16]!\n");
 	int save = ir_func_save_regs(f, fun);
 	fprintf(f, "\tmov fp, sp\n");
+
+	size_t alen = list_len(fun->args);
+	size_t stack_indx = 0;
+	size_t space_needed = 0;
+	size_t stack_disp = 16;
+	for(size_t i = 0; i < arm_reg_count; i++) {
+		if(fun->alloc_used[i]) {
+			stack_disp += 8;
+		}
+	}
+	if(alen > 8) {
+		for(size_t i = 8; i < alen; i++) {
+			stack_indx = space_needed;
+			space_needed += fun->args[i]->size;
+		}
+	}
+
+	/* setup function frame */
+	for(size_t i = 0; i < list_len(fun->args); i++) {
+		callreg_t *arg = fun->args[i];
+		if(i < 8) {
+			if(load_fp_imm_x10(f, arg->r->off, false)) {
+				fprintf(f, "\tstr x%d, [fp, x10]\n", (int)i);
+			} else {
+				fprintf(f, "\tstr x%d, [fp, #%lld]\n", (int)i,
+						(int64_t)arg->r->off);
+			}
+		} else {
+			ENSURE(stack_indx >= 0, "negative stack index, somehow");
+
+			if(load_fp_imm_x10(f, -(int64_t)(stack_indx + stack_disp), false)) {
+				fprintf(f, "\tldr x10, [sp, x10]\n");
+			} else {
+				fprintf(f, "\tldr x10, [sp, #%zu]\n", stack_indx + stack_disp);
+			}
+
+			if(load_fp_imm_x10(f, arg->r->off, false)) {
+				fprintf(f, "\tstr x10, [fp, x10]\n");
+			} else {
+				fprintf(f, "\tstr x10, [fp, #%lld]\n", (int64_t)arg->r->off);
+			}
+
+			stack_indx -= arg->size;
+		}
+	}
+
 	if(alignd) {
 		fprintf(f, "\tsub sp, sp, #%zu\n", alignd);
 	}
 
 	size_t len = list_len(fun->blocks);
 	for(size_t i = 0; i < len; i++) {
-		ir_emit_blk_aarch64_apple(f, fun, fun->blocks[i], len - 1);
+		ir_emit_blk_aarch64_apple(f, fun, fun->blocks[i],
+								  (len - 1) + fun->blocks[0]->num);
 	}
 
 	/* leave stack frame */
-	fprintf(f, "%s_ret:\n", fun->name);
+	fprintf(f, ".L%s_ret:\n", fun->name);
 	fprintf(f, "\tmov sp, fp\n");
 	ir_func_restore_regs(f, fun, save);
 	fprintf(f, "\tldp fp, lr, [sp], #16\n");

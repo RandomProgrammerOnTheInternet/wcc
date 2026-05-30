@@ -1,7 +1,8 @@
+int main()
 {
 	long a = 1;
 	{
-		long a = 2;
+		a = 2;
 		{
 			long b = 3;
 		}

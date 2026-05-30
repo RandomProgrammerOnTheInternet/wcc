@@ -3,7 +3,7 @@
 #include "lex.h"
 #include "type.h"
 
-static obj_t *locals = NULL;
+static LIST(obj_t *) locals = NULL;
 
 /* makes a node */
 node_t *node_make(enum node_kind kind, token_t *tok)
@@ -90,11 +90,10 @@ node_t *node_var(obj_t *var, token_t *tok)
 /* create an object with a name `name` */
 obj_t *obj_make(char *name, type_t *type, bool is_func)
 {
-	/* also inserts it into locals linked list */
+	/* also inserts it into locals list */
 	obj_t *obj = scr_alloc(sizeof(obj_t));
 	if(!is_func) {
-		obj->next = locals;
-		locals = obj;
+		list_append(locals, obj);
 	}
 	obj->is_func = is_func;
 	obj->name = name;
@@ -107,8 +106,12 @@ obj_t *obj_make(char *name, type_t *type, bool is_func)
 static obj_t *find_var(token_t *tok)
 {
 	/* traverse linked list */
-	for(obj_t *obj = locals; obj; obj = obj->next) {
-		if(strlen(obj->name) == tok->len && *tok->loc == *obj->name &&
+	for(size_t i = 0; i < list_len(locals); i++) {
+		obj_t *obj = locals[i];
+		if(obj->is_func) {
+			continue;
+		}
+		if(strlen(obj->name) == tok->len &&
 		   strncmp(obj->name, tok->loc, tok->len) == 0) {
 			return obj;
 		}
@@ -123,16 +126,13 @@ void obj_delete(obj_t *obj)
 	// scr_free(obj);
 }
 
-/* deletes all objects in linked list */
-void obj_delete_all(obj_t *root)
+/* deletes all objects in list */
+void obj_delete_all(LIST(obj_t *) objs)
 {
-	obj_t *nxt = NULL;
-	obj_t *cur = root;
-	while(cur) {
-		nxt = cur->next;
-		obj_delete(cur);
-		cur = nxt;
+	for(size_t i = 0; i < list_len(objs); i++) {
+		obj_delete(objs[i]);
 	}
+	list_delete(objs);
 	return;
 }
 
@@ -151,11 +151,12 @@ static node_t *parse_stmt(token_t *tok, token_t **rest);
 static node_t *parse_assign(token_t *tok, token_t **rest);
 static node_t *parse_compound_stmt(token_t *tok, token_t **rest);
 static type_t *parse_declspec(token_t *tok, token_t **rest);
-static node_t *parse_initalizer(token_t *tok, token_t **rest);
+static node_t *parse_initializer(token_t *tok, token_t **rest);
 static type_t *parse_declarator(type_t *root, token_t *tok, token_t **rest);
 static node_t *parse_init_declarator(type_t *root, token_t *tok,
 									 token_t **rest);
 static node_t *parse_declaration(token_t *tok, token_t **rest);
+static type_t *parse_parameter_declaration(token_t *tok, token_t **rest);
 
 static bool is_declspec(token_t *tok)
 {
@@ -184,7 +185,7 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 	return NULL;
 }
 
-static node_t *parse_initalizer(token_t *tok, token_t **rest)
+static node_t *parse_initializer(token_t *tok, token_t **rest)
 {
 	return parse_expr(tok, rest);
 }
@@ -225,9 +226,9 @@ static node_t *parse_init_declarator(type_t *root, token_t *tok, token_t **rest)
 	/* else assign something to it */
 	token_t *eqsign = tok;
 	tok = token_skip(tok, "=");
-	node_t *initalizer = parse_initalizer(tok, &tok);
+	node_t *initializer = parse_initializer(tok, &tok);
 	node_t *assignment = node_bin(NODE_ASSIGN, node_var(lval, decltype->ident),
-								  initalizer, eqsign);
+								  initializer, eqsign);
 	assignment->var = lval;
 
 	*rest = tok;
@@ -339,6 +340,7 @@ static node_t *parse_compound_stmt(token_t *tok, token_t **rest)
 	node_t node = { 0 };
 	node_t *cur = &node;
 	node_t *blk = node_make(NODE_BLOCK, tok);
+	tok = token_skip(tok, "{");
 	while(!token_eq(tok, "}")) {
 		/* TODO: this is a duct tape solution */
 		if(is_declspec(tok)) {
@@ -460,9 +462,9 @@ static node_t *parse_stmt(token_t *tok, token_t **rest)
 		return dowhile;
 	}
 
-	/* "{" compound-stmt */
+	/*  compound-stmt */
 	if(token_eq(tok, "{")) {
-		node_t *compound_stmt = parse_compound_stmt(tok->next, &tok);
+		node_t *compound_stmt = parse_compound_stmt(tok, &tok);
 		*rest = tok;
 		return compound_stmt;
 	}
@@ -650,16 +652,87 @@ static node_t *parse_unary(token_t *tok, token_t **rest)
 	return parse_prim(tok, rest);
 }
 
+static type_t *parse_parameter_declaration(token_t *tok, token_t **rest)
+{
+	type_t *base = parse_declspec(tok, &tok);
+	type_t *complete = parse_declarator(base, tok, &tok);
+
+	*rest = tok;
+	return complete;
+}
+
+static obj_t *parse_function_def(token_t *tok, token_t **rest)
+{
+	locals = list_make(obj_t *);
+	type_t *ret_type = parse_declspec(tok, &tok);
+	type_t *decltype = parse_declarator(ret_type, tok, &tok);
+	obj_t *func =
+		obj_make(mystrndup(decltype->ident->loc, decltype->ident->len),
+				 type_func_to(decltype), true);
+
+	tok = token_skip(tok, "(");
+
+	if(token_eq(tok, ")")) {
+		tok = token_skip(tok, ")");
+		func->args = NULL;
+		goto end;
+	}
+
+	/* parse parameters */
+
+	obj_t head = {};
+	obj_t *cur = &head;
+
+	type_t *paramtype = parse_parameter_declaration(tok, &tok);
+	obj_t *param =
+		obj_make(mystrndup(paramtype->ident->loc, paramtype->ident->len),
+				 paramtype, false);
+	cur->next = param;
+	cur = cur->next;
+
+	while(token_eq(tok, ",")) {
+		tok = token_skip(tok, ",");
+		paramtype = parse_parameter_declaration(tok, &tok);
+		param =
+			obj_make(mystrndup(paramtype->ident->loc, paramtype->ident->len),
+					 paramtype, false);
+		cur->next = param;
+		cur = cur->next;
+	}
+
+	obj_t *params = head.next;
+	func->args = params;
+
+	tok = token_skip(tok, ")");
+
+end:
+	func->body = parse_compound_stmt(tok, &tok);
+	*rest = tok;
+	return func;
+}
+
 /* does the parsing */
 obj_t *parse_do(token_t *toks)
 {
-	token_t *tok = token_skip(toks, "{");
+	token_t *tok = toks;
 
+	/*
 	obj_t *f = obj_make("main", NULL, true);
 
 	f->body = parse_compound_stmt(tok, &tok);
 	f->vars = locals;
 	f->stack_size = -1;
 
-	return f;
+*/
+
+	obj_t head;
+	obj_t *cur = &head;
+	while(tok->kind != TOK_END) {
+		cur->next = parse_function_def(tok, &tok);
+		cur->next->vars = locals;
+		cur->next->stack_size = -1;
+		cur = cur->next;
+	}
+
+	return head.next;
 }

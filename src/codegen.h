@@ -3,8 +3,8 @@
 
 #include "zz/base.h"
 #include "lex.h"
-#include "parse.h"
 #include "ir/ir.h"
+#include "parse.h"
 
 /* generates code for a function */
 void codegen_func(FILE *f, obj_t *fn, int opt_level, enum ir_arch backend);

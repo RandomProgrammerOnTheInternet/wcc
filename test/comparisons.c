@@ -1,3 +1,4 @@
+int main()
 {
 	long a0, b0, c0, d0, e0, f0;
 	long a1, b1, c1, d1, e1, f1;

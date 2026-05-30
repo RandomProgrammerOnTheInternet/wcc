@@ -174,14 +174,19 @@ void scr_cleanup(void)
 
 void *scr_alloc(size_t size)
 {
-	return arena_alloc(&scratch, size);
+	void *mem = arena_alloc(&scratch, size);
+	ENSURE(mem, "failed to allocate %zu bytes of memory", size);
+	return mem;
 }
 
 void *scr_alloc_aligned(size_t size, size_t align)
 {
-	return arena_alloc_aligned(&scratch, size, align);
+	void *mem = arena_alloc_aligned(&scratch, size, align);
+	ENSURE(mem, "failed to allocate %zu bytes of memory", size);
+	return mem;
 }
 
+/* are these even used? */
 void *scr_realloc(void *ptr, size_t new_size)
 {
 	return arena_realloc(&scratch, ptr, new_size);

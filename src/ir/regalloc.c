@@ -1,7 +1,5 @@
 #include "ir.h"
-#include "parse.h"
 #include "regalloc.h"
-#include "type.h"
 
 /* simple linear search */
 static int has_reg(LIST(reg_t *) list, reg_t *target)
@@ -114,7 +112,7 @@ static void fill_ins_outs(ir_blk_t *blk)
 		/* call arguments */
 		if(inst->type == IR_INST_CALL) {
 			for(size_t i = 0; i < list_len(inst->call_args); i++) {
-				fill_ins_outs_reg(blk, inst->call_args[i]);
+				fill_ins_outs_reg(blk, inst->call_args[i]->r);
 			}
 		}
 	}
@@ -140,17 +138,24 @@ void ir_blk_fixup_entry(ir_func_t *fun)
 		return;
 	}
 	ir_blk_t *entry = fun->blocks[0];
-	ir_inst_t *head = entry->insts;
-	ir_inst_t *pre;
+	ir_inst_t *nop = ir_inst_make(IR_INST_NOP, NULL, NULL, NULL, 0);
+	nop->next = entry->insts;
+	entry->insts = nop;
+
+	ir_inst_t *prev = entry->insts;
+	ir_inst_t *cur = entry->insts->next;
 
 	for(size_t i = 0; i < list_len(entry->regs_in); i++) {
 		reg_t *reg = entry->regs_in[i];
-		pre = ir_inst_make(IR_INST_IMM, reg, NULL, NULL, 0);
-		pre->next = head;
-		head = pre;
+		ir_inst_t *def = ir_inst_make(IR_INST_IMM, reg, NULL, NULL, 0);
+		prev->next = def;
+		def->next = cur;
+		prev = cur;
+		cur = cur->next;
 	}
 
-	entry->insts = head;
+	entry->insts = entry->insts->next;
+	ir_inst_delete(nop);
 
 	/* recompute defs */
 	fill_defs(entry);
@@ -174,7 +179,7 @@ LIST(reg_t *) ir_blk_reglive(ir_func_t *fun)
 {
 	LIST(reg_t *) allocated = list_make(reg_t *);
 	/* the algorithm here is quite simple. basically,
-	 * we assume the blocks are layed out in order,
+	 * we assume the blocks are laid out in order,
 	 * and then for each instruction we increment a counter
 	 * and then that is the "Program Counter". We assign
 	 * register definitions & last uses based on that number.
@@ -197,7 +202,7 @@ LIST(reg_t *) ir_blk_reglive(ir_func_t *fun)
 
 			if(ins->type == IR_INST_CALL) {
 				for(size_t j = 0; j < list_len(ins->call_args); j++) {
-					reg_t *reg = ins->call_args[j];
+					reg_t *reg = ins->call_args[j]->r;
 					reg_update_counter(reg, ins_count);
 				}
 			}
@@ -384,7 +389,7 @@ static long ir_eval_strat_cost(ir_func_t *fun, int amount, int callee_cost,
 			size_t args = list_len(ins->call_args);
 			for(size_t i = 0; i < args; i++) {
 				if(ins->call_args[i]) {
-					used[ins->call_args[i]->rr] = 1;
+					used[ins->call_args[i]->r->rr] = 1;
 				}
 			}
 
@@ -487,7 +492,8 @@ static void ir_simplify(ir_func_t *fun, int amount)
 
 			/* remove useless insts where thing stored is never used
 			 * beyond this inst */
-			if(ins->r0 && ins->r0->def == ins->r0->last_use) {
+			if(ins->r0 && ins->r0->def == ins->r0->last_use &&
+			   ins->type != IR_INST_CALL) {
 				prev->next = nxt;
 				ir_inst_delete(ins);
 				ins = nxt;

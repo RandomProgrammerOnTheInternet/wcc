@@ -1,3 +1,4 @@
+int main()
 {
 	long a = 0, b = 42;
 	do {

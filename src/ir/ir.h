@@ -4,8 +4,6 @@
 
 #include "zz/base.h"
 #include "zz/list.h"
-#include "lex.h"
-#include "parse.h"
 
 enum ins_type {
 	IR_INST_NOP, /* does nothing */
@@ -103,6 +101,20 @@ typedef struct reg {
 	struct reg *rhs;
 } reg_t;
 
+/* ABI argument type */
+enum call_argtype {
+	ARG_CLASS_INTEGER,
+	ARG_CLASS_MEMORY,
+	ARG_CLASS_FLOAT,
+};
+
+/* call register */
+typedef struct callreg {
+	reg_t *r; /* the register */
+	enum call_argtype type; /* type of parameter */
+	size_t size; /* size of parameter */
+} callreg_t;
+
 enum ir_arch {
 	/* architecture-abi */
 	IR_ARCH_AARCH64_APPLE, /* aarch64-apple */
@@ -118,7 +130,7 @@ typedef struct ir_inst {
 	reg_t *r0, *r1, *r2; /* instruction args */
 	uint64_t imm; /* immediate, if needed */
 	struct ir_blk *false_blk, *true_blk; /* for br */
-	LIST(reg_t *) call_args; /* for call */
+	LIST(callreg_t *) call_args; /* for call */
 	char *fname; /* for call */
 	bool noopt; /* is this inst volatile? */
 	bool sext; /* sign extend this load? */
@@ -146,7 +158,8 @@ typedef struct ir_func {
 	LIST(ir_blk_t *) blocks; /* the collection of blocks */
 	size_t stack_needed; /* stack space needed for this function */
 	bool alloc_strat; /* false = prefer caller-save first, true = prefer callee-save first */
-	bool *alloc_used; /* used registers for allocation (for pushing/poping) */
+	bool *alloc_used; /* used registers for allocation (for push-ing/pop-ing) */
+	LIST(callreg_t *) args; /* arguments to this function */
 } ir_func_t;
 
 /* -- big list of instructions -- */
@@ -212,7 +225,7 @@ DEF_INS(brgei, reg_t *r1, long imm, ir_blk_t *falseblk, ir_blk_t *trueblk);
 
 DEF_INS(jmp, ir_blk_t *blk);
 DEF_INS(ret, reg_t *r1);
-DEF_INS(call, reg_t *res, char *fname, LIST(reg_t *) args);
+DEF_INS(call, reg_t *res, char *fname, LIST(callreg_t *) args);
 
 DEF_INS(zextb, reg_t *r0, reg_t *r1);
 DEF_INS(sextb, reg_t *r0, reg_t *r1);
@@ -227,7 +240,7 @@ DEF_INS(sextl, reg_t *r0, reg_t *r1);
 /* does this instruction terminate a block? */
 int ir_inst_is_term(enum ins_type type);
 
-/* is this instruction a comparision? */
+/* is this instruction a comparison? */
 int ir_inst_is_cmp(enum ins_type type);
 
 /* is this instruction associative? (F(B, C) == F(C, B)) */
@@ -238,6 +251,9 @@ int ir_inst_r2_imm(enum ins_type type);
 
 /* make a (new) register */
 reg_t *reg_make(void);
+
+/* make a (new) call register */
+callreg_t *callreg_make(reg_t *reg, enum call_argtype class, size_t size);
 
 /* delete a register */
 void reg_delete(reg_t *reg);

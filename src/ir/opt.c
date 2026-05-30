@@ -74,10 +74,10 @@ static int ir_mov_elim(ir_func_t *func)
 
 			if(ins->type == IR_INST_CALL) {
 				for(size_t i = 0; i < list_len(ins->call_args); i++) {
-					reg_t *r = ins->call_args[i];
+					reg_t *r = ins->call_args[i]->r;
 					if(r->insty == IR_INST_MOV) {
 						changed = 1;
-						ins->call_args[i] = ins->call_args[i]->lhs;
+						ins->call_args[i]->r = ins->call_args[i]->r->lhs;
 					}
 				}
 			}
@@ -339,7 +339,7 @@ static int ir_stackopt(ir_func_t *func)
 
 			if(ins->type == IR_INST_CALL) {
 				for(size_t i = 0; i < list_len(ins->call_args); i++) {
-					reg_t *r = ins->call_args[i];
+					reg_t *r = ins->call_args[i]->r;
 					if(r && r->stack_loc && i >= 6) {
 						r->stack_loc = false;
 					}
@@ -469,7 +469,7 @@ static int ir_optzero(ir_func_t *func)
 static int ir_branchopt(ir_func_t *func)
 {
 	int changed = 0;
-	/* scan comparisions */
+	/* scan comparisons */
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
@@ -523,7 +523,7 @@ static int ir_branchopt(ir_func_t *func)
 		}
 	}
 
-	/* eliminate comparisions that have been merged with branches */
+	/* eliminate comparisons that have been merged with branches */
 
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];

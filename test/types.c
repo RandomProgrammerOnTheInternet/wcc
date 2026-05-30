@@ -1,3 +1,4 @@
+int main()
 {
 	int a = 3;
 	long b = -1;

@@ -34,7 +34,7 @@ int ir_inst_is_term(enum ins_type type)
 		   type == IR_INST_BRGTI || type == IR_INST_BRGEI;
 }
 
-/* is this instruction a comparision? */
+/* is this instruction a comparison? */
 int ir_inst_is_cmp(enum ins_type type)
 {
 	return type == IR_INST_EQ || type == IR_INST_NE || type == IR_INST_LE ||
@@ -73,6 +73,17 @@ reg_t *reg_make(void)
 	reg->lhs = reg->rhs = NULL;
 
 	return reg;
+}
+
+/* make a (new) call register */
+callreg_t *callreg_make(reg_t *reg, enum call_argtype class, size_t size)
+{
+	callreg_t *callreg = scr_alloc(sizeof(callreg_t));
+	callreg->r = reg;
+	callreg->size = size;
+	callreg->type = class;
+
+	return callreg;
 }
 
 /* delete a register */
@@ -281,7 +292,7 @@ ir_inst_t *ins_br(reg_t *on, ir_blk_t *falseb, ir_blk_t *trueb)
 	return ins;
 }
 
-ir_inst_t *ins_call(reg_t *res, char *fname, LIST(reg_t *) args)
+ir_inst_t *ins_call(reg_t *res, char *fname, LIST(callreg_t *) args)
 {
 	ir_inst_t *ins = ir_inst_make(IR_INST_CALL, res, NULL, NULL, 0);
 	ins->fname = fname;
@@ -370,6 +381,7 @@ void ir_func_delete(ir_func_t *fun)
 		ir_blk_delete(blk);
 	}
 	list_delete(fun->blocks);
+	list_delete(fun->args);
 	free(fun->alloc_used);
 	free(fun);
 	return;
@@ -547,7 +559,9 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		}
 		printf("call %s", ins->fname);
 		for(size_t i = 0; i < list_len(ins->call_args); i++) {
-			printf(", %%r%ld", ins->call_args[i]->vr);
+			reg_t *r = ins->call_args[i]->r;
+			long n = mode == 'r' ? r->rr : r->vr;
+			printf(", %%r%ld", n);
 		}
 	}; break;
 	case IR_INST_BREQ:

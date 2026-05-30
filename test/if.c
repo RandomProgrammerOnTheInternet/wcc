@@ -1,3 +1,4 @@
+int main()
 {
 	if(42 >= 24) {
 		return 42;

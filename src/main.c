@@ -142,7 +142,7 @@ int main(int argc, char *argv[])
 				read_from_name = (char *)arg;
 				ENSURE(read_from, "failed to open file '%s'", arg);
 			} else {
-				ENSURE(2 + 2 == 3, "TODO: Multiple file compliation");
+				ENSURE(2 + 2 == 3, "TODO: Multiple file compilation");
 			}
 			continue;
 		}
@@ -165,7 +165,7 @@ int main(int argc, char *argv[])
 	}
 
 	if(arch == IR_ARCH_X64_SYSV) {
-		WARN("x64-sysv backend is expirimental");
+		WARN("x64-sysv backend is experimental");
 	}
 
 	if(!emit_to) {

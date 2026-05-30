@@ -106,7 +106,7 @@ static void degrade_large_imms(ir_func_t *fun)
 	}
 }
 
-/* is the instruction in form A = F(B, C) where it needs A and B to be seperate? */
+/* is the instruction in form A = F(B, C) where it needs A and B to be separate? */
 static bool ins_is_3source(enum ins_type t)
 {
 	/* ADD is not needed here because on x64 you can do lea A, [B+C] */
@@ -114,7 +114,7 @@ static bool ins_is_3source(enum ins_type t)
 		   t == IR_INST_MULI || t == IR_INST_DIVI;
 }
 
-/* is the instruction in form A = F(B) where it needs A and B to be seperate? */
+/* is the instruction in form A = F(B) where it needs A and B to be separate? */
 static bool ins_is_2source(enum ins_type t)
 {
 	return t == IR_INST_NEG;
@@ -206,24 +206,24 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 													   NULL;
 		const char *r2 = ins->r2 && ins->r2->rr >= 0 ? x64_reg[ins->r2->rr] :
 													   NULL;
-		const char *r0b = ins->r0 && ins->r0->rr >= 0 ? x64_reg8[ins->r0->rr] :
-														NULL;
+		const UNUSEDA char *r0b =
+			ins->r0 && ins->r0->rr >= 0 ? x64_reg8[ins->r0->rr] : NULL;
 		const char *r1b = ins->r1 && ins->r1->rr >= 0 ? x64_reg8[ins->r1->rr] :
 														NULL;
-		const char *r2b = ins->r2 && ins->r2->rr >= 0 ? x64_reg8[ins->r2->rr] :
-														NULL;
-		const char *r0w = ins->r0 && ins->r0->rr >= 0 ? x64_reg16[ins->r0->rr] :
-														NULL;
+		const UNUSEDA char *r2b =
+			ins->r2 && ins->r2->rr >= 0 ? x64_reg8[ins->r2->rr] : NULL;
+		const UNUSEDA char *r0w =
+			ins->r0 && ins->r0->rr >= 0 ? x64_reg16[ins->r0->rr] : NULL;
 		const char *r1w = ins->r1 && ins->r1->rr >= 0 ? x64_reg16[ins->r1->rr] :
 														NULL;
-		const char *r2w = ins->r2 && ins->r2->rr >= 0 ? x64_reg16[ins->r2->rr] :
-														NULL;
+		const UNUSEDA char *r2w =
+			ins->r2 && ins->r2->rr >= 0 ? x64_reg16[ins->r2->rr] : NULL;
 		const char *r0d = ins->r0 && ins->r0->rr >= 0 ? x64_reg32[ins->r0->rr] :
 														NULL;
 		const char *r1d = ins->r1 && ins->r1->rr >= 0 ? x64_reg32[ins->r1->rr] :
 														NULL;
-		const char *r2d = ins->r2 && ins->r2->rr >= 0 ? x64_reg32[ins->r2->rr] :
-														NULL;
+		const UNUSEDA char *r2d =
+			ins->r2 && ins->r2->rr >= 0 ? x64_reg32[ins->r2->rr] : NULL;
 		switch(ins->type) {
 		case IR_INST_ZEXT: {
 			switch(ins->size) {
@@ -260,16 +260,17 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_CALL: {
 			size_t stack_used = 0;
 			for(size_t i = 0; i < list_len(ins->call_args); i++) {
-				if(ins->call_args[i]->spilld) {
+				if(ins->call_args[i]->r->spilld) {
 					fprintf(f, "\tmov %s, [rbp - %lld]\n",
-							x64_reg[ins->call_args[i]->rr],
-							i64abs(ins->call_args[i]->off));
+							x64_reg[ins->call_args[i]->r->rr],
+							i64abs(ins->call_args[i]->r->off));
 				}
 				if(i < 6) {
 					fprintf(f, "\tmov %s, %s\n", arg_reg[i],
-							x64_reg[ins->call_args[i]->rr]);
+							x64_reg[ins->call_args[i]->r->rr]);
 				} else {
-					fprintf(f, "\tpush %s\n", x64_reg[ins->call_args[i]->rr]);
+					fprintf(f, "\tpush %s\n",
+							x64_reg[ins->call_args[i]->r->rr]);
 					stack_used += 8;
 				}
 			}
@@ -584,7 +585,8 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 
 	size_t len = list_len(fun->blocks);
 	for(size_t i = 0; i < len; i++) {
-		ir_emit_blk_x64_sysv(f, fun, fun->blocks[i], len - 1);
+		ir_emit_blk_x64_sysv(f, fun, fun->blocks[i],
+							 (len - 1) + fun->blocks[0]->num);
 	}
 
 	/* leave stack frame */
