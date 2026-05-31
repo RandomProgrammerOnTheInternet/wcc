@@ -1,6 +1,7 @@
 #ifndef PARSE_H_
 #define PARSE_H_
 
+#include "ir/ir.h"
 #include "zz/base.h"
 #include "lex.h"
 #include "type.h"
@@ -51,6 +52,7 @@ typedef struct obj {
 	LIST(struct obj *) vars; /* variables of the function */
 	struct obj *args; /* arguments to function */
 	size_t stack_size; /* total size of this function's stack frame */
+	reg_t *eq_reg; /* equivalent register, if used */
 } obj_t;
 
 /* an AST node */

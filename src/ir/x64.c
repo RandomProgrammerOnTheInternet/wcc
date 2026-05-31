@@ -649,6 +649,42 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 	fprintf(f, "\tpush rbp\n");
 	ir_func_save_regs(f, fun);
 	fprintf(f, "\tmov rbp, rsp\n");
+	size_t alen = list_len(fun->args);
+	size_t stack_indx = 0;
+	size_t space_needed = 0;
+	size_t stack_disp = 16;
+	for(size_t i = 0; i < x64_reg_count; i++) {
+		if(fun->alloc_used[i]) {
+			stack_disp += 8;
+		}
+	}
+	if(alen > 8) {
+		for(size_t i = 8; i < alen; i++) {
+			stack_indx = space_needed;
+			space_needed += fun->args[i]->size;
+		}
+	}
+	/* setup function frame */
+
+	for(size_t i = 0; i < list_len(fun->args); i++) {
+		callreg_t *arg = fun->args[i];
+		if(i < 6) {
+			fprintf(f, "\tmov [rbp - %lld], %s\n", i64abs((int64_t)arg->r->off),
+					arg_reg[i]);
+		} else {
+			ENSURE(stack_indx >= 0, "negative stack index, somehow");
+
+			// fprintf(f, "\tldr x10, [sp, #%zu]\n", stack_indx + stack_disp);
+			// fprintf(f, "\tstr x10, [fp, #%lld]\n", (int64_t)arg->r->off);
+
+			fprintf(f, "\tmov rax, [rsp + %zu]", stack_indx + stack_disp);
+			fprintf(f, "\tmov [rbp - %lld], rax\n",
+					i64abs((int64_t)arg->r->off));
+
+			stack_indx -= arg->size;
+		}
+	}
+
 	if(alignd) {
 		fprintf(f, "\tsub rsp, %zu\n", alignd);
 	}

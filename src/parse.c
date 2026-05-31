@@ -687,6 +687,7 @@ static obj_t *parse_function_def(token_t *tok, token_t **rest)
 	obj_t *param =
 		obj_make(mystrndup(paramtype->ident->loc, paramtype->ident->len),
 				 paramtype, false);
+	param->addressed = true;
 	cur->next = param;
 	cur = cur->next;
 
@@ -696,6 +697,7 @@ static obj_t *parse_function_def(token_t *tok, token_t **rest)
 		param =
 			obj_make(mystrndup(paramtype->ident->loc, paramtype->ident->len),
 					 paramtype, false);
+		param->addressed = true;
 		cur->next = param;
 		cur = cur->next;
 	}

@@ -42,17 +42,30 @@ static int promote_assoc_to_assoc_imm(enum ins_type type)
 }
 
 /* move elimination */
-static int ir_mov_elim(ir_func_t *func)
+static UNUSEDA int ir_mov_elim(ir_func_t *func)
 {
 	int changed = 0;
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-			if(ins->type == IR_INST_MOV) {
+			if(ins->type == IR_INST_MOV && ins->r1->no_mov_elim) {
+				ins->r0->no_mov_elim = true;
+			}
+
+			if(ins->type == IR_INST_MOV && !ins->r1->no_mov_elim &&
+			   !ins->r0->no_mov_elim) {
 				changed = 1;
 				ins->r0->insty = IR_INST_MOV;
 				ins->r0->lhs = ins->r1;
 				ins->type = IR_INST_NOP;
+				continue;
+			}
+
+			if(ins->type == IR_INST_MOV && ins->r1->insty == IR_INST_IMM &&
+			   !ins->r1->no_mov_elim && !ins->r0->no_mov_elim) {
+				ins->type = IR_INST_IMM;
+				changed = 1;
+				ins->imm = ins->r1->imm;
 				continue;
 			}
 
@@ -80,6 +93,12 @@ static int ir_mov_elim(ir_func_t *func)
 						ins->call_args[i]->r = ins->call_args[i]->r->lhs;
 					}
 				}
+			}
+
+			if(ins->type == IR_INST_IMM && !ins->r0->no_mov_elim) {
+				ins->r0->insty = IR_INST_IMM;
+				ins->r0->imm = ins->imm;
+				continue;
 			}
 		}
 	}
@@ -650,6 +669,8 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 
 		left--;
 	}
+
+	ir_nopremover(func);
 
 	if(debug) {
 		printf("After common opts:\n");

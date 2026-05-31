@@ -99,6 +99,7 @@ typedef struct reg {
 	enum ins_type insty;
 	struct reg *lhs;
 	struct reg *rhs;
+	bool no_mov_elim; /* do not move eliminate this reg */
 } reg_t;
 
 /* ABI argument type */

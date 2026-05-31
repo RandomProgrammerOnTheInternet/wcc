@@ -73,6 +73,15 @@ GEN_STORE(store);
 
 #undef GEN_STORE
 
+static UNUSEDA void emit_leas_var(reg_t *r0, long off, obj_t *var)
+{
+	ir_inst_t *ins = ins_leas(r0, off);
+	/* absolutely horrid code, but it will work */
+	ins->r0->rhs = (reg_t *)var;
+	ir_blk_add(outblk, ins);
+	return;
+}
+
 static UNUSEDA void emit_load_sz(type_t *typ, reg_t *r0, reg_t *r1)
 {
 	reg_t *new_r0 = r0;
@@ -162,7 +171,7 @@ static reg_t *calc_addr(node_t *node)
 	if(node->kind == NODE_VAR) {
 		long placement = -node->var->off;
 		reg_t *addr = reg_make();
-		emit_leas(addr, placement);
+		emit_leas_var(addr, placement, node->var);
 		return addr;
 	}
 	if(node->kind == NODE_DEREF) {
@@ -409,6 +418,69 @@ static void calc_stack_needed(obj_t *fn)
 	return;
 }
 
+/* variable optimization */
+/* optimize out load/stores, place it in own register */
+static void varopt(ir_func_t *func)
+{
+	// printf("BEFORE\n");
+	// ir_dump(func, 'v');
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(ins->type == IR_INST_LEAS) {
+				obj_t *obj = (obj_t *)ins->r0->rhs;
+				if(obj->addressed) {
+					/* can't optimize sorry */
+					obj->skip = false;
+					continue;
+				}
+
+				if(!obj->eq_reg) {
+					obj->eq_reg = reg_make();
+				}
+
+				obj->skip = true;
+
+				/* else make new reg, store in lhs */
+				ins->r0->lhs = obj->eq_reg;
+				ins->type = IR_INST_NOP;
+			}
+
+			if(ins->type == IR_INST_LOAD) {
+				obj_t *obj = (obj_t *)ins->r1->rhs;
+				if(!obj->skip || obj->addressed) {
+					continue;
+				}
+
+				reg_t *replacement = ins->r1->lhs;
+
+				/* rewrite %var = load %addr into %var = %var_reg */
+				ins->type = IR_INST_MOV;
+				ins->r1 = replacement;
+				continue;
+			}
+
+			if(ins->type == IR_INST_STORE) {
+				obj_t *obj = (obj_t *)ins->r1->rhs;
+				if(!obj->skip || obj->addressed) {
+					continue;
+				}
+
+				reg_t *replacement = ins->r1->lhs;
+
+				/* rewrite store %addr, %var into %var_reg = %var */
+				ins->type = IR_INST_MOV;
+				ins->r1 = ins->r2;
+				ins->r0 = replacement;
+				continue;
+			}
+		}
+	}
+	// printf("AFTER\n");
+	// ir_dump(fun, 'v');
+	return;
+}
+
 /* generates code for a function */
 void codegen_func(FILE *f, obj_t *fn, int opt_level, enum ir_arch backend)
 {
@@ -439,6 +511,32 @@ void codegen_func(FILE *f, obj_t *fn, int opt_level, enum ir_arch backend)
 
 		fun->stack_needed = align_to(cur_fn->stack_size, 16);
 		codegen_expr_stmt(cur_fn->body);
+
+		// varopt(func);
+
+		ir_inst_t *nop = ins_nop();
+		nop->next = fun->blocks[0]->insts;
+		fun->blocks[0]->insts = nop;
+		ir_inst_t *trail = nop;
+
+		for(size_t i = 0; i < list_len(cur_fn->vars); i++) {
+			obj_t *var = cur_fn->vars[i];
+			if(!var->skip) {
+				continue;
+			}
+
+			ir_inst_t *nxt = trail->next;
+			ir_inst_t *imml = ins_imm(var->eq_reg, 0);
+			var->eq_reg->no_mov_elim = true;
+			imml->next = nxt;
+			trail->next = imml;
+		}
+
+		fun->blocks[0]->insts = fun->blocks[0]->insts->next;
+		ir_inst_delete(nop);
+
+		calc_stack_needed(cur_fn);
+		fun->stack_needed = align_to(cur_fn->stack_size, 16);
 
 		ir_opt(func, opt_level, backend);
 		ir_finalize(func, backend == IR_ARCH_AARCH64_APPLE ? 10 : 5, backend);
