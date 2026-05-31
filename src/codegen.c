@@ -429,7 +429,7 @@ static void varopt(ir_func_t *func)
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
 			if(ins->type == IR_INST_LEAS) {
 				obj_t *obj = (obj_t *)ins->r0->rhs;
-				if(obj->addressed) {
+				if(!obj || obj->addressed) {
 					/* can't optimize sorry */
 					obj->skip = false;
 					continue;
@@ -448,7 +448,7 @@ static void varopt(ir_func_t *func)
 
 			if(ins->type == IR_INST_LOAD) {
 				obj_t *obj = (obj_t *)ins->r1->rhs;
-				if(!obj->skip || obj->addressed) {
+				if(!obj || !obj->skip || obj->addressed) {
 					continue;
 				}
 
@@ -462,7 +462,7 @@ static void varopt(ir_func_t *func)
 
 			if(ins->type == IR_INST_STORE) {
 				obj_t *obj = (obj_t *)ins->r1->rhs;
-				if(!obj->skip || obj->addressed) {
+				if(!obj || !obj->skip || obj->addressed) {
 					continue;
 				}
 

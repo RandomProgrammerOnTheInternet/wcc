@@ -23,9 +23,8 @@ int primes()
 		}
 	}
 
-	free(array);
-
 	print_num(max);
+	free(array);
 	return max;
 }
 

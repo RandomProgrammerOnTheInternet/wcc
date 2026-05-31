@@ -171,6 +171,9 @@ static void reg_update_counter(reg_t *reg, long ins_counter)
 	if(reg->last_use < ins_counter) {
 		reg->last_use = ins_counter;
 	}
+	if(reg->no_mov_elim) {
+		reg->last_use = INT64_MAX;
+	}
 	return;
 }
 

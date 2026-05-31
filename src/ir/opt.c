@@ -48,12 +48,7 @@ static UNUSEDA int ir_mov_elim(ir_func_t *func)
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-			if(ins->type == IR_INST_MOV && ins->r1->no_mov_elim) {
-				ins->r0->no_mov_elim = true;
-			}
-
-			if(ins->type == IR_INST_MOV && !ins->r1->no_mov_elim &&
-			   !ins->r0->no_mov_elim) {
+			if(ins->type == IR_INST_MOV && !ins->r0->no_mov_elim) {
 				changed = 1;
 				ins->r0->insty = IR_INST_MOV;
 				ins->r0->lhs = ins->r1;
@@ -62,7 +57,7 @@ static UNUSEDA int ir_mov_elim(ir_func_t *func)
 			}
 
 			if(ins->type == IR_INST_MOV && ins->r1->insty == IR_INST_IMM &&
-			   !ins->r1->no_mov_elim && !ins->r0->no_mov_elim) {
+			   !ins->r0->no_mov_elim) {
 				ins->type = IR_INST_IMM;
 				changed = 1;
 				ins->imm = ins->r1->imm;
@@ -125,6 +120,10 @@ set_imm:
 				changed = 1;
 				ins->r0->imm = 0;
 				ins->r0->insty = IR_INST_NOP;
+				continue;
+			}
+
+			if(ins->r0 && ins->r0->no_mov_elim) {
 				continue;
 			}
 
