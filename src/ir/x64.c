@@ -677,7 +677,7 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 			// fprintf(f, "\tldr x10, [sp, #%zu]\n", stack_indx + stack_disp);
 			// fprintf(f, "\tstr x10, [fp, #%lld]\n", (int64_t)arg->r->off);
 
-			fprintf(f, "\tmov rax, [rsp + %zu]", stack_indx + stack_disp);
+			fprintf(f, "\tmov rax, [rsp + %zu]\n", stack_indx + stack_disp);
 			fprintf(f, "\tmov [rbp - %lld], rax\n",
 					i64abs((int64_t)arg->r->off));
 
