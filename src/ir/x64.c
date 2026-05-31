@@ -658,8 +658,8 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 			stack_disp += 8;
 		}
 	}
-	if(alen > 8) {
-		for(size_t i = 8; i < alen; i++) {
+	if(alen > 6) {
+		for(size_t i = 6; i < alen; i++) {
 			stack_indx = space_needed;
 			space_needed += fun->args[i]->size;
 		}
