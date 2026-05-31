@@ -178,10 +178,12 @@ void ir_func_opt_x64(ir_func_t *fun, int opt_level)
 	return;
 }
 
-static const char *x64_reg[5] = { "rbx", "r12", "r13", "r14", "r15" };
-static const char *x64_reg8[5] = { "bl", "r12b", "r13b", "r14b", "r15b" };
-static const char *x64_reg16[5] = { "bx", "r12w", "r13w", "r14w", "r15w" };
-static const char *x64_reg32[5] = { "ebx", "r12d", "r13d", "r14d", "r15d" };
+static const char *x64_reg[6] = { "rbx", "r12", "r13", "r14", "r15", NULL };
+static const char *x64_reg8[6] = { "bl", "r12b", "r13b", "r14b", "r15b", NULL };
+static const char *x64_reg16[6] = { "bx", "r12w", "r13w", "r14w", "r15w", NULL };
+static const char *x64_reg32[6] = {
+	"ebx", "r12d", "r13d", "r14d", "r15d", NULL
+};
 
 static const int x64_reg_count = 5;
 
@@ -193,6 +195,95 @@ static int64_t i64abs(int64_t v)
 	return v;
 }
 
+static INLINE void vload(FILE *f, size_t size, bool ext, int reg_to,
+						 char *addr_fmt, va_list va)
+{
+	switch(size) {
+	case 8:
+	default:
+		fprintf(f, "\tmov %s, ", x64_reg[reg_to]);
+		vfprintf(f, addr_fmt, va);
+		fprintf(f, "\n");
+		break;
+	case 4:
+		if(ext) {
+			fprintf(f, "\tmovsxd %s, dword ptr ", x64_reg[reg_to]);
+		} else {
+			fprintf(f, "\tmov %s, dword ptr ", x64_reg32[reg_to]);
+		}
+		vfprintf(f, addr_fmt, va);
+		fprintf(f, "\n");
+		break;
+	case 2:
+		if(ext) {
+			fprintf(f, "\tmovsx %s, word ptr ", x64_reg[reg_to]);
+		} else {
+			fprintf(f, "\tmovzx %s, word ptr ", x64_reg32[reg_to]);
+		}
+		vfprintf(f, addr_fmt, va);
+		fprintf(f, "\n");
+		break;
+	case 1:
+		if(ext) {
+			fprintf(f, "\tmovsx %s, byte ptr ", x64_reg[reg_to]);
+		} else {
+			fprintf(f, "\tmovzx %s, byte ptr ", x64_reg32[reg_to]);
+		}
+		vfprintf(f, addr_fmt, va);
+		fprintf(f, "\n");
+		break;
+	}
+	return;
+}
+
+static INLINE void vstore(FILE *f, size_t size, int reg_to, char *addr_fmt,
+						  va_list va)
+{
+	switch(size) {
+	case 8:
+	default:
+		fprintf(f, "\tmov ");
+		vfprintf(f, addr_fmt, va);
+		fprintf(f, ", %s\n", x64_reg[reg_to]);
+		break;
+	case 4:
+		fprintf(f, "\tmov dword ptr ");
+		vfprintf(f, addr_fmt, va);
+		fprintf(f, ", %s\n", x64_reg32[reg_to]);
+		break;
+	case 2:
+		fprintf(f, "\tmov word ptr ");
+		vfprintf(f, addr_fmt, va);
+		fprintf(f, ", %s\n", x64_reg16[reg_to]);
+		break;
+	case 1:
+		fprintf(f, "\tmov byte ptr ");
+		vfprintf(f, addr_fmt, va);
+		fprintf(f, ", %s\n", x64_reg8[reg_to]);
+		break;
+	}
+	return;
+}
+
+static void load(FILE *f, size_t size, bool ext, int reg_to, char *addr_fmt,
+				 ...)
+{
+	va_list va;
+	va_start(va, addr_fmt);
+	vload(f, size, ext, reg_to, addr_fmt, va);
+	va_end(va);
+	return;
+}
+
+static void store(FILE *f, size_t size, int reg_to, char *addr_fmt, ...)
+{
+	va_list va;
+	va_start(va, addr_fmt);
+	vstore(f, size, reg_to, addr_fmt, va);
+	va_end(va);
+	return;
+}
+
 static const char *arg_reg[6] = { "rdi", "rsi", "rdx", "rcx", "r8", "r9" };
 
 static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
@@ -200,6 +291,18 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 {
 	fprintf(f, ".BB%ld:\n", blk->num);
 	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+		int r0i = -1;
+		UNUSEDA int r1i = -1;
+		int r2i = -1;
+		if(ins->r0 && ins->r0->rr >= 0) {
+			r0i = ins->r0->rr;
+		}
+		if(ins->r1 && ins->r1->rr >= 0) {
+			r1i = ins->r1->rr;
+		}
+		if(ins->r2 && ins->r2->rr >= 0) {
+			r2i = ins->r2->rr;
+		}
 		const char *r0 = ins->r0 && ins->r0->rr >= 0 ? x64_reg[ins->r0->rr] :
 													   NULL;
 		const char *r1 = ins->r1 && ins->r1->rr >= 0 ? x64_reg[ins->r1->rr] :
@@ -228,32 +331,32 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_ZEXT: {
 			switch(ins->size) {
 			case 8:
-				fprintf(f, "mov %s, %s\n", r0, r1);
+				fprintf(f, "\tmov %s, %s\n", r0, r1);
 				break;
 			case 4:
-				fprintf(f, "mov %s, %s\n", r0d, r1d);
+				fprintf(f, "\tmov %s, %s\n", r0d, r1d);
 				break;
 			case 2:
-				fprintf(f, "movzx %s, %s\n", r0d, r1w);
+				fprintf(f, "\tmovzx %s, %s\n", r0d, r1w);
 				break;
 			case 1:
-				fprintf(f, "movzx %s, %s\n", r0d, r1b);
+				fprintf(f, "\tmovzx %s, %s\n", r0d, r1b);
 				break;
 			}
 		}; break;
 		case IR_INST_SEXT: {
 			switch(ins->size) {
 			case 8:
-				fprintf(f, "mov %s, %s\n", r0, r1);
+				fprintf(f, "\tmov %s, %s\n", r0, r1);
 				break;
 			case 4:
-				fprintf(f, "movsxd %s, %s\n", r0, r1d);
+				fprintf(f, "\tmovsxd %s, %s\n", r0, r1d);
 				break;
 			case 2:
-				fprintf(f, "movsx %s, %s\n", r0, r1w);
+				fprintf(f, "\tmovsx %s, %s\n", r0, r1w);
 				break;
 			case 1:
-				fprintf(f, "movsx %s, %s\n", r0, r1b);
+				fprintf(f, "\tmovsx %s, %s\n", r0, r1b);
 				break;
 			}
 		}; break;
@@ -479,54 +582,21 @@ cmp_main:
 		case IR_INST_LEAS:
 			fprintf(f, "\tlea %s, [rbp - %lld]\n", r0, (int64_t)ins->imm);
 			break;
-		case IR_INST_LOAD: {
-			if(!ins->sext) {
-				switch(ins->size) {
-				case 8:
-					fprintf(f, "\tmov %s, [%s]\n", r0, r1);
-					break;
-				case 4:
-					fprintf(f, "\tmov %s, dword ptr [%s]\n", r0d, r1);
-					break;
-				case 2:
-					fprintf(f, "\tmovzx %s, word ptr [%s]\n", r0d, r1);
-					break;
-				case 1:
-					fprintf(f, "\tmovzx %s, byte ptr [%s]\n", r0d, r1);
-					break;
-				}
-			} else {
-				switch(ins->size) {
-				case 8:
-					fprintf(f, "\tmov %s, [%s]\n", r0, r1);
-					break;
-				case 4:
-					fprintf(f, "\tmovsxd %s, dword ptr [%s]\n", r0, r1);
-					break;
-				case 2:
-					fprintf(f, "\tmovsx %s, word ptr [%s]\n", r0, r1);
-					break;
-				case 1:
-					fprintf(f, "\tmovsx %s, byte ptr [%s]\n", r0, r1);
-					break;
-				}
-			}
-		} break;
+		case IR_INST_LOAD:
+			load(f, ins->size, ins->sext, r0i, "[%s]", r1);
+			break;
 		case IR_INST_LOADS:
 		case IR_INST_LOADSS:
-			ERROR("todo x64");
-			fprintf(f, "\tmov %s, [rbp - %lld]\n", r0,
-					i64abs((int64_t)ins->imm));
+			load(f, ins->size, ins->sext, r0i, "[rbp - %lld]",
+				 i64abs((int64_t)ins->imm));
+			break;
 			break;
 		case IR_INST_STORE:
-			ERROR("todo x64");
-			fprintf(f, "\tmov [%s], %s\n", r1, r2);
+			store(f, ins->size, r2i, "[%s]", r1);
 			break;
 		case IR_INST_STORES:
 		case IR_INST_STORESS:
-			ERROR("todo x64");
-			fprintf(f, "\tmov [rbp - %lld], %s\n", i64abs((int64_t)ins->imm),
-					r1);
+			store(f, ins->size, r1i, "[rbp - %lld]", i64abs((int64_t)ins->imm));
 			break;
 
 		default:
