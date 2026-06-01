@@ -142,6 +142,7 @@ void obj_delete_all(LIST(obj_t *) objs)
 static node_t *parse_mul(token_t *tok, token_t **rest);
 static node_t *parse_expr(token_t *tok, token_t **rest);
 static node_t *parse_prim(token_t *tok, token_t **rest);
+static node_t *parse_postfix(token_t *tok, token_t **rest);
 static node_t *parse_unary(token_t *tok, token_t **rest);
 static node_t *parse_relational(token_t *tok, token_t **rest);
 static node_t *parse_equality(token_t *tok, token_t **rest);
@@ -160,7 +161,9 @@ static type_t *parse_parameter_declaration(token_t *tok, token_t **rest);
 
 static bool is_declspec(token_t *tok)
 {
-	if(token_eq(tok, "long") || token_eq(tok, "int")) {
+	if(token_eq(tok, "void") || token_eq(tok, "char") ||
+	   token_eq(tok, "short") || token_eq(tok, "long") ||
+	   token_eq(tok, "int")) {
 		return true;
 	}
 	return false;
@@ -180,6 +183,23 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 		return TY_INT;
 	}
 
+	if(token_eq(tok, "short")) {
+		tok = token_skip(tok, "short");
+		*rest = tok;
+		return TY_SHORT;
+	}
+
+	if(token_eq(tok, "char")) {
+		tok = token_skip(tok, "char");
+		*rest = tok;
+		return TY_CHAR;
+	}
+
+	if(token_eq(tok, "void")) {
+		tok = token_skip(tok, "void");
+		*rest = tok;
+		return TY_VOID;
+	}
 	compile_err(tok->loc, "invalid declaration specifier type '%.*s'", tok->len,
 				tok->loc);
 	return NULL;
@@ -213,8 +233,15 @@ static node_t *parse_init_declarator(type_t *root, token_t *tok, token_t **rest)
 {
 	type_t *decltype = parse_declarator(root, tok, &tok);
 
-	obj_t *lval = obj_make(
-		mystrndup(decltype->ident->loc, decltype->ident->len), decltype, false);
+	obj_t *lval;
+	obj_t *found;
+
+	if((found = find_var(decltype->ident))) {
+		lval = found;
+	} else {
+		lval = obj_make(mystrndup(decltype->ident->loc, decltype->ident->len),
+						decltype, false);
+	}
 
 	/* if not assigned to it's fine, just create the object (declaration) and return */
 	if(!token_eq(tok, "=")) {
@@ -630,6 +657,27 @@ static node_t *parse_prim(token_t *tok, token_t **rest)
 	return NULL;
 }
 
+/* remember that x[y] is eq to *(x + y) */
+/* a[1][2] == *(a + 1)[2] == *(*(a + 1) + 2) */
+static node_t *parse_postfix(token_t *tok, token_t **rest)
+{
+	node_t *prim = parse_prim(tok, &tok);
+
+	while(token_eq(tok, "[")) {
+		token_t *marker = tok;
+		tok = token_skip(tok, "[");
+		token_t *marker_add = tok;
+		node_t *indx = parse_expr(tok, &tok);
+		tok = token_skip(tok, "]");
+
+		prim = node_unary(NODE_DEREF, node_add(prim, indx, marker_add), marker);
+	}
+
+	*rest = tok;
+
+	return prim;
+}
+
 static node_t *parse_unary(token_t *tok, token_t **rest)
 {
 	if(token_eq(tok, "+")) {
@@ -649,7 +697,7 @@ static node_t *parse_unary(token_t *tok, token_t **rest)
 		return node_unary(NODE_DEREF, parse_unary(tok->next, rest), tok);
 	}
 
-	return parse_prim(tok, rest);
+	return parse_postfix(tok, rest);
 }
 
 static type_t *parse_parameter_declaration(token_t *tok, token_t **rest)
@@ -717,16 +765,6 @@ end:
 obj_t *parse_do(token_t *toks)
 {
 	token_t *tok = toks;
-
-	/*
-	obj_t *f = obj_make("main", NULL, true);
-
-	f->body = parse_compound_stmt(tok, &tok);
-	f->vars = locals;
-	f->stack_size = -1;
-
-*/
-
 	obj_t head;
 	obj_t *cur = &head;
 	while(tok->kind != TOK_END) {

@@ -1,7 +1,8 @@
 prim = "(" expr ")" | ident args? | num
 funcall = ident "(" (assign ("," assign)*)? ")"
+postfix = prim ("[" expr "]")*
 unary = ("+" | "-" | "*" | "&") unary
-		| prim
+		| postfix
 mul = unary ("*" unary | "/" unary)*
 add = mul ("+" mul | "-" mul)*
 relational = add ("<" add | "<=" add | ">" add | ">=" add)*

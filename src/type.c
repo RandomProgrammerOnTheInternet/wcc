@@ -10,13 +10,26 @@ type_t REAL_TY_LONG =
 	(type_t){ .kind = TYPE_LONG, .size = 8, .align = 8, .to = NULL };
 type_t *TY_LONG = &REAL_TY_LONG;
 
+type_t REAL_TY_CHAR =
+	(type_t){ .kind = TYPE_CHAR, .size = 1, .align = 1, .to = NULL };
+type_t *TY_CHAR = &REAL_TY_CHAR;
+
+type_t REAL_TY_SHORT =
+	(type_t){ .kind = TYPE_SHORT, .size = 2, .align = 2, .to = NULL };
+type_t *TY_SHORT = &REAL_TY_SHORT;
+
+type_t REAL_TY_VOID =
+	(type_t){ .kind = TYPE_VOID, .size = 0, .align = 0, .to = NULL };
+type_t *TY_VOID = &REAL_TY_VOID;
+
 type_t REAL_TY_PTR =
 	(type_t){ .kind = TYPE_PTR, .size = 8, .align = 8, .to = NULL };
 type_t *TY_PTR = &REAL_TY_PTR;
 
 bool type_is_int(type_t *ty)
 {
-	return ty->kind == TYPE_INT || ty->kind == TYPE_LONG;
+	return ty->kind == TYPE_INT || ty->kind == TYPE_LONG ||
+		   ty->kind == TYPE_SHORT || ty->kind == TYPE_CHAR;
 }
 
 bool type_is_ptr(type_t *ty)
@@ -90,6 +103,9 @@ void type_propagate(node_t *node)
 		break;
 	case NODE_VAR:
 		node->type = node->var->type;
+		if(node->var->type->kind == TYPE_VOID) {
+			compile_err(node->lhs->type->ident->loc, "invalid void decltype");
+		}
 		break;
 	case NODE_ADD:
 	case NODE_SUB:
@@ -98,12 +114,21 @@ void type_propagate(node_t *node)
 	case NODE_NEG:
 	case NODE_ASSIGN:
 		node->type = node->lhs->type;
+		if(node->lhs->type->kind == TYPE_VOID) {
+			compile_err(node->lhs->type->ident->loc, "invalid void decltype");
+		}
 		break;
 	case NODE_ADDR:
 		node->type = type_ptr_to(node->lhs->type);
+		if(node->lhs->type->kind == TYPE_VOID) {
+			compile_err(node->lhs->type->ident->loc, "invalid void decltype");
+		}
 		break;
 	case NODE_DEREF:
 		node->type = type_deref(node->lhs->type);
+		if(node->lhs->type->kind == TYPE_VOID) {
+			compile_err(node->lhs->type->ident->loc, "invalid void decltype");
+		}
 		break;
 	default:
 		break;

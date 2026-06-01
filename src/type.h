@@ -5,6 +5,9 @@
 #include "lex.h"
 
 enum type_kind {
+	TYPE_VOID, /* void */
+	TYPE_CHAR, /* char */
+	TYPE_SHORT, /* short */
 	TYPE_INT, /* int */
 	TYPE_LONG, /* long */
 	TYPE_PTR, /* a pointer */
@@ -19,6 +22,9 @@ typedef struct type {
 	token_t *ident; /* identifier of type */
 } type_t;
 
+extern type_t *TY_VOID;
+extern type_t *TY_CHAR;
+extern type_t *TY_SHORT;
 extern type_t *TY_INT;
 extern type_t *TY_LONG;
 extern type_t *TY_PTR;

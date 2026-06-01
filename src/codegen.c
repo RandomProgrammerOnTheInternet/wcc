@@ -300,7 +300,7 @@ void codegen_expr_stmt(node_t *node)
 	case NODE_RET: {
 		reg_t *retval = codegen_expr(node->lhs);
 		reg_t *ext = reg_make();
-		ir_inst_t *ins = ins_zextl(ext, retval);
+		ir_inst_t *ins = ins_sextl(ext, retval);
 		ins->size = fun_obj->type->to->size;
 		ir_blk_add(outblk, ins);
 		emit_ret(ext);
@@ -512,7 +512,7 @@ void codegen_func(FILE *f, obj_t *fn, int opt_level, enum ir_arch backend)
 		fun->stack_needed = align_to(cur_fn->stack_size, 16);
 		codegen_expr_stmt(cur_fn->body);
 
-		// varopt(func);
+		// 		varopt(func);
 
 		ir_inst_t *nop = ins_nop();
 		nop->next = fun->blocks[0]->insts;
