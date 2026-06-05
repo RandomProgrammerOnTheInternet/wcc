@@ -645,19 +645,19 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 			ir_fix(func);
 		}
 
-		/* branch opts */
-		{
-			change |= ir_branchopt(func);
-			ir_nopremover(func);
-			ir_fix(func);
-		}
-
 		/* fold opts */
 		{
 			change |= ir_fold(func);
 			change |= ir_optzero(func);
 			ir_fix(func);
 			change |= ir_mov_elim(func);
+			ir_nopremover(func);
+			ir_fix(func);
+		}
+
+		/* branch opts */
+		{
+			change |= ir_branchopt(func);
 			ir_nopremover(func);
 			ir_fix(func);
 		}
@@ -673,7 +673,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 
 	if(debug) {
 		printf("After common opts:\n");
-		ir_dump(func, 'v');
+		// ir_dump(func, 'v');
 		printf("****\n");
 	}
 
@@ -693,7 +693,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 
 	if(debug) {
 		printf("After arch opts:\n");
-		ir_dump(func, 'v');
+		// ir_dump(func, 'v');
 		printf("****\n");
 	}
 	return;

@@ -34,7 +34,7 @@ bool type_is_int(type_t *ty)
 
 bool type_is_ptr(type_t *ty)
 {
-	return ty->kind == TYPE_PTR;
+	return ty->kind == TYPE_PTR || ty->kind == TYPE_ARRAY;
 }
 
 bool type_is_signed(type_t *ty)
@@ -48,6 +48,19 @@ type_t *type_ptr_to(type_t *ty)
 	type_t *typtr = scr_alloc(sizeof(type_t));
 	memcpy(typtr, TY_PTR, sizeof(type_t));
 	typtr->to = ty;
+	typtr->ident = ty->ident;
+	return typtr;
+}
+
+type_t *type_arr_to(type_t *type, size_t alen)
+{
+	type_t *typtr = scr_alloc(sizeof(type_t));
+	typtr->align = type->align;
+	typtr->size = type->size * alen;
+	typtr->kind = TYPE_ARRAY;
+	typtr->to = type;
+	typtr->alen = alen;
+	typtr->ident = type->ident;
 	return typtr;
 }
 
@@ -62,7 +75,7 @@ type_t *type_func_to(type_t *ret_ty)
 
 static type_t *type_deref(type_t *ty)
 {
-	if(ty->kind == TYPE_PTR) {
+	if(type_is_ptr(ty)) {
 		return ty->to;
 	} else {
 		compile_err(ty->ident->loc, "tried to dereference non-pointer");
@@ -112,6 +125,8 @@ void type_propagate(node_t *node)
 	case NODE_MUL:
 	case NODE_DIV:
 	case NODE_NEG:
+		node->type = node->lhs->type;
+		break;
 	case NODE_ASSIGN:
 		node->type = node->lhs->type;
 		if(node->lhs->type->kind == TYPE_VOID) {
@@ -119,7 +134,11 @@ void type_propagate(node_t *node)
 		}
 		break;
 	case NODE_ADDR:
-		node->type = type_ptr_to(node->lhs->type);
+		if(node->lhs->type->kind == TYPE_ARRAY) {
+			node->type = type_ptr_to(node->lhs->type->to);
+		} else {
+			node->type = type_ptr_to(node->lhs->type);
+		}
 		if(node->lhs->type->kind == TYPE_VOID) {
 			compile_err(node->lhs->type->ident->loc, "invalid void decltype");
 		}

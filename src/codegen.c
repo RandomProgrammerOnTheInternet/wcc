@@ -1,5 +1,6 @@
 #include "codegen.h"
 #include "parse.h"
+#include "type.h"
 #include <stdlib.h>
 #include "ir/ir.h"
 #include "ir/regalloc.h"
@@ -207,7 +208,11 @@ reg_t *codegen_expr(node_t *node)
 	case NODE_VAR: {
 		reg_t *addr = calc_addr(node);
 		reg_t *val = reg_make();
-		emit_load_sz(type, val, addr);
+		if(node->type->kind == TYPE_ARRAY) {
+			emit_mov(val, addr);
+		} else {
+			emit_load_sz(type, val, addr);
+		}
 		return val;
 	};
 	case NODE_ADDR: {
@@ -217,7 +222,11 @@ reg_t *codegen_expr(node_t *node)
 	case NODE_DEREF: {
 		reg_t *expr = codegen_expr(node->lhs);
 		reg_t *val = reg_make();
-		emit_load_sz(type, val, expr);
+		if(node->type->kind == TYPE_ARRAY) {
+			emit_mov(val, expr);
+		} else {
+			emit_load_sz(type, val, expr);
+		}
 		return val;
 	}
 	case NODE_ASSIGN: {
@@ -405,16 +414,37 @@ static void calc_stack_needed(obj_t *fn)
 {
 	size_t space = 0;
 	long off = 0;
+	LIST(obj_t *) arrays = list_make(obj_t *);
 	for(size_t i = 0; i < list_len(fn->vars); i++) {
 		obj_t *obj = fn->vars[i];
 		if(obj->is_func || obj->skip) {
+			continue;
+		}
+		if(obj->type->kind == TYPE_ARRAY) {
+			/* deal with this later */
+			list_append(arrays, obj);
+			continue;
+		}
+		space += (size_t)obj->type->size;
+		off -= (long)obj->type->size;
+		obj->off = off;
+		// printf("object %s: off %ld\n", obj->name, obj->off);
+	}
+
+	/* deal with arrays now */
+	for(size_t i = 0; i < list_len(arrays); i++) {
+		obj_t *obj = arrays[i];
+		if(obj->skip) {
 			continue;
 		}
 		space += (size_t)obj->type->size;
 		off -= (long)obj->type->size;
 		obj->off = off;
 	}
+
 	fn->stack_size = space;
+
+	list_delete(arrays);
 	return;
 }
 

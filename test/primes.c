@@ -7,11 +7,15 @@ int primes()
 	int i = 0;
 	int iter = 0;
 
+	for(i = 0; i < 1000; i = i + 1) {
+		*(array + i) = 0;
+	}
+
 	for(i = 2; i < 1000; i = i + 1) {
-		iter = i;
+		iter = i + i;
 		while(iter < 1000) {
-			iter = iter + i;
 			*(array + iter) = 1;
+			iter = iter + i;
 		}
 	}
 

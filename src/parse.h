@@ -32,7 +32,7 @@ enum node_kind {
 	NODE_FOR, /* for */
 	NODE_ADDR, /* & */
 	NODE_DEREF, /* * */
-	NODE_FUNCALL,
+	NODE_FUNCALL, /* func() */
 };
 
 /* a variable */

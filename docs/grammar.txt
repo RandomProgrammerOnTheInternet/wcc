@@ -11,7 +11,7 @@ assign = equality ("=" assign)?
 expr = assign
 expr-stmt = expr? ";"
 declspec = "long" | "int"
-direct-declarator = ident
+direct-declarator = ident ("[" num "]")*
 declarator = "*"* direct-declarator
 initalizer = expr
 init-declarator = declarator

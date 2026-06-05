@@ -1,21 +1,24 @@
 /* prime number generator, returns maximum prime number in [0, 1000] */
 // comment test 5000
-short primes()
+int primes()
 {
-	short *array = malloc(2 * 1000);
-	short max = 0;
-	short i = 0;
-	short iter = 0;
+	short array[1000];
+	int max = 0;
+	int iter = 0;
 
-	for(i = 2; i < 1000; i = i + 1) {
-		iter = i;
+	for(int i = 0; i < 1000; i = i + 1) {
+		array[i] = 0;
+	}
+
+	for(int i = 2; i < 1000; i = i + 1) {
+		iter = i + i;
 		while(iter < 1000) {
-			iter = iter + i;
 			array[iter] = 1;
+			iter = iter + i;
 		}
 	}
 
-	for(i = 0; i < 1000; i = i + 1) {
+	for(int i = 0; i < 1000; i = i + 1) {
 		if(array[i] == 0) {
 			if(i > max) {
 				max = i;
@@ -24,7 +27,6 @@ short primes()
 	}
 
 	print_num(max);
-	free(array);
 	return max;
 }
 

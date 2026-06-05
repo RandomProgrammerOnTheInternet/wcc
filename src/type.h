@@ -12,6 +12,7 @@ enum type_kind {
 	TYPE_LONG, /* long */
 	TYPE_PTR, /* a pointer */
 	TYPE_FUNC, /* a function */
+	TYPE_ARRAY, /* an array */
 };
 
 typedef struct type {
@@ -20,6 +21,7 @@ typedef struct type {
 	size_t align;
 	struct type *to; /* a pointer to? */
 	token_t *ident; /* identifier of type */
+	size_t alen; /* array length */
 } type_t;
 
 extern type_t *TY_VOID;
@@ -34,6 +36,7 @@ bool type_is_ptr(type_t *ty);
 bool type_is_signed(type_t *ty);
 
 type_t *type_ptr_to(type_t *ty);
+type_t *type_arr_to(type_t *ty, size_t alen);
 type_t *type_func_to(type_t *ret_ty);
 
 struct node;

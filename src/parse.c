@@ -153,6 +153,8 @@ static node_t *parse_assign(token_t *tok, token_t **rest);
 static node_t *parse_compound_stmt(token_t *tok, token_t **rest);
 static type_t *parse_declspec(token_t *tok, token_t **rest);
 static node_t *parse_initializer(token_t *tok, token_t **rest);
+static type_t *parse_direct_declarator(type_t *root, token_t *tok,
+									   token_t **rest);
 static type_t *parse_declarator(type_t *root, token_t *tok, token_t **rest);
 static node_t *parse_init_declarator(type_t *root, token_t *tok,
 									 token_t **rest);
@@ -210,6 +212,31 @@ static node_t *parse_initializer(token_t *tok, token_t **rest)
 	return parse_expr(tok, rest);
 }
 
+static type_t *parse_direct_declarator(type_t *root, token_t *tok,
+									   token_t **rest)
+{
+	type_t *type = root;
+	if(tok->kind != TOK_IDENT) {
+		compile_err(tok->loc, "expected an identifier");
+	}
+
+	type->ident = tok;
+	tok = tok->next;
+
+	while(token_eq(tok, "[")) {
+		tok = token_skip(tok, "[");
+		if(tok->kind != TOK_NUM) {
+			compile_err(tok->loc, "expected a constant number");
+		}
+		size_t size = tok->num;
+		tok = token_skip(tok->next, "]");
+		type = type_arr_to(type, size);
+	}
+
+	*rest = tok;
+	return type;
+}
+
 static type_t *parse_declarator(type_t *root, token_t *tok, token_t **rest)
 {
 	type_t *decltype = root;
@@ -218,12 +245,7 @@ static type_t *parse_declarator(type_t *root, token_t *tok, token_t **rest)
 		decltype = type_ptr_to(decltype);
 	}
 
-	if(tok->kind != TOK_IDENT) {
-		compile_err(tok->loc, "expected an identifier");
-	}
-
-	decltype->ident = tok;
-	tok = tok->next;
+	decltype = parse_direct_declarator(decltype, tok, &tok);
 
 	*rest = tok;
 	return decltype;
