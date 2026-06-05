@@ -1,11 +1,13 @@
 # `wcc` - the `Wonderful C compiler`
 C Compiler, largely based on `chibicc` (used as a tutorial). The IR register allocation is also inspired off of `9cc`.
 
-Work in Progress.....
+Curently the "version" of C it can compile is Turing Complete and has functions, types, arrays, etc.
 
 Generates code for aarch64 & x86_64. I have not tested if the x86_64 backend works on the latest commit because I don't have an x86 machine.
 
 You can also check out the IR backend in `src/ir`, which can probably be ported to other projects.
+
+> Rewrite incoming...
 
 ## Usage
 
@@ -43,4 +45,4 @@ $ make help
 ```sh
 $ make count
 ```
-Swag Point Counter: `5050`
+Swag Point Counter: `5451`
