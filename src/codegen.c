@@ -413,7 +413,6 @@ void codegen_expr_stmt(node_t *node)
 static void calc_stack_needed(obj_t *fn)
 {
 	size_t space = 0;
-	long off = 0;
 	LIST(obj_t *) arrays = list_make(obj_t *);
 	for(size_t i = 0; i < list_len(fn->vars); i++) {
 		obj_t *obj = fn->vars[i];
@@ -425,10 +424,9 @@ static void calc_stack_needed(obj_t *fn)
 			list_append(arrays, obj);
 			continue;
 		}
-		space += (size_t)obj->type->size;
-		off -= (long)obj->type->size;
-		obj->off = off;
-		// printf("object %s: off %ld\n", obj->name, obj->off);
+		space += obj->type->size;
+		obj->off = -(long)space;
+		space = align_to(space, obj->type->align);
 	}
 
 	/* deal with arrays now */
@@ -437,9 +435,9 @@ static void calc_stack_needed(obj_t *fn)
 		if(obj->skip) {
 			continue;
 		}
-		space += (size_t)obj->type->size;
-		off -= (long)obj->type->size;
-		obj->off = off;
+		space += obj->type->size;
+		obj->off = -(long)space;
+		space = align_to(space, obj->type->align);
 	}
 
 	fn->stack_size = space;
