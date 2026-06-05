@@ -58,6 +58,7 @@ assert 229 "primes_short.c"
 assert 1 "arrays.c"
 #todo proper alignment support (need to switch to sp-rel addressing)
 #assert 6 "align.c"
+assert 164 "sizeof_alignof.c"
 
 if [ "$passing" = "1" ]; then
   echo "all tests passed"
