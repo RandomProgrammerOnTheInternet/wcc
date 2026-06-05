@@ -331,10 +331,10 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_SEXT:
 			switch(ins->size) {
 			case 1:
-				fprintf(f, "\tsxtb w%d, w%d\n", r0, r1);
+				fprintf(f, "\tsxtb x%d, x%d\n", r0, r1);
 				break;
 			case 2:
-				fprintf(f, "\tsxth w%d, w%d\n", r0, r1);
+				fprintf(f, "\tsxth x%d, x%d\n", r0, r1);
 				break;
 			case 4:
 				fprintf(f, "\tsxtw x%d, x%d\n", r0, r1);

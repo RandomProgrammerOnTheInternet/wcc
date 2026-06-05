@@ -3,8 +3,8 @@
 int primes()
 {
 	short array[1000];
-	int max = 0;
-	int iter = 0;
+	short max = 0;
+	short iter = 0;
 
 	for(int i = 0; i < 1000; i = i + 1) {
 		array[i] = 0;

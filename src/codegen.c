@@ -310,7 +310,7 @@ void codegen_expr_stmt(node_t *node)
 		reg_t *retval = codegen_expr(node->lhs);
 		reg_t *ext = reg_make();
 		ir_inst_t *ins = ins_sextl(ext, retval);
-		ins->size = fun_obj->type->to->size;
+		ins->size = node->lhs->type->size;
 		ir_blk_add(outblk, ins);
 		emit_ret(ext);
 		break;
