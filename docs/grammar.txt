@@ -10,7 +10,9 @@ equality = relational ("==" relational | "!=" relational)*
 assign = equality ("=" assign)?
 expr = assign
 expr-stmt = expr? ";"
-declspec = "long" | "int"
+type-specifier = "void" | "char" | "short" | "int" | "long"
+alignment-specifier = "_Alignas" "(" num ")"
+declspec = (type-specifier | alignment-specififer)*
 direct-declarator = ident ("[" num "]")*
 declarator = "*"* direct-declarator
 initalizer = expr

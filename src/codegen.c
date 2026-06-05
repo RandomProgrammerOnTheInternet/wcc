@@ -409,9 +409,10 @@ void codegen_expr_stmt(node_t *node)
 	return;
 }
 
-/* calculate stack frame space needed for function `fn` */
-static void calc_stack_needed(obj_t *fn)
+/* calculate stack frame space needed for function `fn`. returns maximum alignment */
+static size_t calc_stack_needed(obj_t *fn)
 {
+	size_t max_align = 0;
 	size_t space = 0;
 	LIST(obj_t *) arrays = list_make(obj_t *);
 	for(size_t i = 0; i < list_len(fn->vars); i++) {
@@ -425,8 +426,12 @@ static void calc_stack_needed(obj_t *fn)
 			continue;
 		}
 		space += obj->type->size;
-		obj->off = -(long)space;
 		space = align_to(space, obj->type->align);
+		obj->off = -(long)space;
+
+		if(obj->type->align > max_align) {
+			max_align = obj->type->align;
+		}
 	}
 
 	/* deal with arrays now */
@@ -436,14 +441,18 @@ static void calc_stack_needed(obj_t *fn)
 			continue;
 		}
 		space += obj->type->size;
-		obj->off = -(long)space;
 		space = align_to(space, obj->type->align);
+		obj->off = -(long)space;
+
+		if(obj->type->align > max_align) {
+			max_align = obj->type->align;
+		}
 	}
 
 	fn->stack_size = space;
 
 	list_delete(arrays);
-	return;
+	return max_align;
 }
 
 /* variable optimization */
@@ -526,7 +535,7 @@ void codegen_func(FILE *f, obj_t *fn, int opt_level, enum ir_arch backend)
 		ir_blk_t *blk = emit_blk();
 		outblk = blk;
 
-		calc_stack_needed(cur_fn);
+		(void)calc_stack_needed(cur_fn);
 
 		obj_t *fnargs = cur_fn->args;
 		for(; fnargs; fnargs = fnargs->next) {
@@ -563,11 +572,12 @@ void codegen_func(FILE *f, obj_t *fn, int opt_level, enum ir_arch backend)
 		fun->blocks[0]->insts = fun->blocks[0]->insts->next;
 		ir_inst_delete(nop);
 
-		calc_stack_needed(cur_fn);
+		size_t max_align = calc_stack_needed(cur_fn);
 		fun->stack_needed = align_to(cur_fn->stack_size, 16);
+		fun->align_needed = align_to(max_align, 16);
 
 		ir_opt(func, opt_level, backend);
-		ir_finalize(func, backend == IR_ARCH_AARCH64_APPLE ? 10 : 5, backend);
+		ir_finalize(func, backend == IR_ARCH_AARCH64_APPLE ? 9 : 5, backend);
 
 		ir_func_emit(f, func, backend);
 

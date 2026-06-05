@@ -166,8 +166,8 @@ static int load_fp_imm_x10(FILE *f, long off, bool save)
 	return 1;
 }
 
-static int arm_reg[10] = { 19, 20, 21, 22, 23, 24, 25, 26, 27, 28 };
-static const int arm_reg_count = 10;
+static int arm_reg[9] = { 19, 20, 21, 22, 23, 24, 25, 26, 27 };
+static const int arm_reg_count = 9;
 
 static INLINE void vload(FILE *f, size_t size, bool ext, int reg_to,
 						 char *addr_fmt, va_list va)
@@ -639,6 +639,12 @@ void ir_func_emit_aarch64_apple(FILE *f, ir_func_t *fun)
 	size_t alignd = align_to(fun->stack_needed, 16);
 	fprintf(f, "\tstp fp, lr, [sp, #-16]!\n");
 	int save = ir_func_save_regs(f, fun);
+
+	if(fun->align_needed > 16) {
+		fprintf(f, "\tmov x28, sp\n");
+		fprintf(f, "\tand sp, x28, #-%zu\n", fun->align_needed);
+	}
+
 	fprintf(f, "\tmov fp, sp\n");
 
 	size_t alen = list_len(fun->args);
@@ -698,7 +704,11 @@ void ir_func_emit_aarch64_apple(FILE *f, ir_func_t *fun)
 
 	/* leave stack frame */
 	fprintf(f, ".L%s_ret:\n", fun->name);
-	fprintf(f, "\tmov sp, fp\n");
+	if(fun->align_needed <= 16) {
+		fprintf(f, "\tmov sp, fp\n");
+	} else {
+		fprintf(f, "\tmov sp, x28\n");
+	}
 	ir_func_restore_regs(f, fun, save);
 	fprintf(f, "\tldp fp, lr, [sp], #16\n");
 	fprintf(f, "\tret\n");

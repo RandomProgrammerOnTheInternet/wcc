@@ -158,6 +158,7 @@ typedef struct ir_func {
 	char *name; /* name of this function */
 	LIST(ir_blk_t *) blocks; /* the collection of blocks */
 	size_t stack_needed; /* stack space needed for this function */
+	size_t align_needed; /* stack alignment needed for this function */
 	bool alloc_strat; /* false = prefer caller-save first, true = prefer callee-save first */
 	bool *alloc_used; /* used registers for allocation (for push-ing/pop-ing) */
 	LIST(callreg_t *) args; /* arguments to this function */

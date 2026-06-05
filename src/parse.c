@@ -165,7 +165,7 @@ static bool is_declspec(token_t *tok)
 {
 	if(token_eq(tok, "void") || token_eq(tok, "char") ||
 	   token_eq(tok, "short") || token_eq(tok, "long") ||
-	   token_eq(tok, "int")) {
+	   token_eq(tok, "int") || token_eq(tok, "_Alignas")) {
 		return true;
 	}
 	return false;
@@ -173,38 +173,72 @@ static bool is_declspec(token_t *tok)
 
 static type_t *parse_declspec(token_t *tok, token_t **rest)
 {
-	if(token_eq(tok, "long")) {
-		tok = token_skip(tok, "long");
-		*rest = tok;
-		return TY_LONG;
+	uint64_t align = 0;
+	type_t *res = TY_VOID;
+
+	while(is_declspec(tok)) {
+		if(token_eq(tok, "long")) {
+			tok = token_skip(tok, "long");
+			*rest = tok;
+			res = TY_LONG;
+			break;
+		}
+
+		if(token_eq(tok, "int")) {
+			tok = token_skip(tok, "int");
+			*rest = tok;
+			res = TY_INT;
+			break;
+		}
+
+		if(token_eq(tok, "short")) {
+			tok = token_skip(tok, "short");
+			*rest = tok;
+			res = TY_SHORT;
+			break;
+		}
+
+		if(token_eq(tok, "char")) {
+			tok = token_skip(tok, "char");
+			*rest = tok;
+			res = TY_CHAR;
+			break;
+		}
+
+		if(token_eq(tok, "void")) {
+			tok = token_skip(tok, "void");
+			*rest = tok;
+			res = TY_VOID;
+			break;
+		}
+
+		if(token_eq(tok, "_Alignas")) {
+			tok = token_skip(tok, "_Alignas");
+			tok = token_skip(tok, "(");
+			token_t *num = tok;
+			if(tok->kind != TOK_NUM) {
+				compile_err(tok->loc, "expected a number");
+			}
+			align = tok->num;
+
+			tok = token_skip(tok->next, ")");
+			*rest = tok;
+			if(align <= 0) {
+				compile_err(num->loc,
+							"alignment has to be non-zero, non-negative");
+			}
+			continue;
+		}
+
+		compile_err(tok->loc, "invalid declaration specifier type '%.*s'",
+					tok->len, tok->loc);
 	}
 
-	if(token_eq(tok, "int")) {
-		tok = token_skip(tok, "int");
-		*rest = tok;
-		return TY_INT;
+	if(align) {
+		res->align = align;
 	}
 
-	if(token_eq(tok, "short")) {
-		tok = token_skip(tok, "short");
-		*rest = tok;
-		return TY_SHORT;
-	}
-
-	if(token_eq(tok, "char")) {
-		tok = token_skip(tok, "char");
-		*rest = tok;
-		return TY_CHAR;
-	}
-
-	if(token_eq(tok, "void")) {
-		tok = token_skip(tok, "void");
-		*rest = tok;
-		return TY_VOID;
-	}
-	compile_err(tok->loc, "invalid declaration specifier type '%.*s'", tok->len,
-				tok->loc);
-	return NULL;
+	return res;
 }
 
 static node_t *parse_initializer(token_t *tok, token_t **rest)

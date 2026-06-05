@@ -362,6 +362,9 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		}; break;
 		case IR_INST_CALL: {
 			size_t stack_used = 0;
+			if(fn->align_needed > 16) {
+				fprintf(f, "\tpush rcx\n");
+			}
 			for(size_t i = 0; i < list_len(ins->call_args); i++) {
 				if(ins->call_args[i]->r->spilld) {
 					fprintf(f, "\tmov %s, [rbp - %lld]\n",
@@ -383,6 +386,9 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			}
 			if(stack_used) {
 				fprintf(f, "\tsub rsp, %zu\n", stack_used);
+			}
+			if(fn->align_needed > 16) {
+				fprintf(f, "\tpop rcx\n");
 			}
 		} break;
 		case IR_INST_BREQI:
@@ -552,32 +558,32 @@ cmp_main:
 			switch(ins->type) {
 			case IR_INST_EQ:
 			case IR_INST_EQI:
-				fprintf(f, "\tsete al\n");
+				fprintf(f, "\tsete %s\n", r0b);
 				break;
 			case IR_INST_NE:
 			case IR_INST_NEI:
-				fprintf(f, "\tsetne al\n");
+				fprintf(f, "\tsetne %s\n", r0b);
 				break;
 			case IR_INST_LT:
 			case IR_INST_LTI:
-				fprintf(f, "\tsetl al\n");
+				fprintf(f, "\tsetl %s\n", r0b);
 				break;
 			case IR_INST_LE:
 			case IR_INST_LEI:
-				fprintf(f, "\tsetle al\n");
+				fprintf(f, "\tsetle %s\n", r0b);
 				break;
 			case IR_INST_GT:
 			case IR_INST_GTI:
-				fprintf(f, "\tsetg al\n");
+				fprintf(f, "\tsetg %s\n", r0b);
 				break;
 			case IR_INST_GE:
 			case IR_INST_GEI:
-				fprintf(f, "\tsetge al\n");
+				fprintf(f, "\tsetge %s\n", r0b);
 				break;
 			default: /* wth? */
 				break;
 			}
-			fprintf(f, "\tmovzx %s, al\n", r0);
+			fprintf(f, "\tmovzx %s, %s\n", r0, r0b);
 			break;
 		case IR_INST_LEAS:
 			fprintf(f, "\tlea %s, [rbp - %lld]\n", r0, (int64_t)ins->imm);
@@ -648,6 +654,13 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 	size_t alignd = align_to(fun->stack_needed, 16);
 	fprintf(f, "\tpush rbp\n");
 	ir_func_save_regs(f, fun);
+
+	if(fun->align_needed > 16) {
+		fprintf(f, "\tmov rbx, rsp\n");
+		fprintf(f, "\tmov rcx, rbx\n");
+		fprintf(f, "\tand rbx, -%zu\n", fun->align_needed);
+	}
+
 	fprintf(f, "\tmov rbp, rsp\n");
 	size_t alen = list_len(fun->args);
 	size_t stack_indx = 0;
@@ -673,10 +686,6 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 					arg_reg[i]);
 		} else {
 			ENSURE(stack_indx >= 0, "negative stack index, somehow");
-
-			// fprintf(f, "\tldr x10, [sp, #%zu]\n", stack_indx + stack_disp);
-			// fprintf(f, "\tstr x10, [fp, #%lld]\n", (int64_t)arg->r->off);
-
 			fprintf(f, "\tmov rax, [rsp + %zu]\n", stack_indx + stack_disp);
 			fprintf(f, "\tmov [rbp - %lld], rax\n",
 					i64abs((int64_t)arg->r->off));
@@ -697,7 +706,13 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 
 	/* leave stack frame */
 	fprintf(f, "%s_ret:\n", name);
-	fprintf(f, "\tmov rsp, rbp\n");
+
+	if(fun->align_needed > 16) {
+		fprintf(f, "\tmov rsp, rcx\n");
+	} else {
+		fprintf(f, "\tmov rsp, rbp\n");
+	}
+
 	ir_func_restore_regs(f, fun);
 	fprintf(f, "\tpop rbp\n");
 	fprintf(f, "\tret\n");
