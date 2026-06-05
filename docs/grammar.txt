@@ -3,6 +3,8 @@ funcall = ident "(" (assign ("," assign)*)? ")"
 postfix = prim ("[" expr "]")*
 unary = ("+" | "-" | "*" | "&") unary
 		| postfix
+		| "sizeof" unary
+		| "_Alignof" unary         # extension
 mul = unary ("*" unary | "/" unary)*
 add = mul ("+" mul | "-" mul)*
 relational = add ("<" add | "<=" add | ">" add | ">=" add)*

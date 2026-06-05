@@ -2,10 +2,10 @@
 // comment test 5000
 int primes()
 {
-	int *array = malloc(4 * 1000);
 	int max = 0;
 	int i = 0;
 	int iter = 0;
+	int *array = malloc(1000 * sizeof i);
 
 	for(i = 0; i < 1000; i = i + 1) {
 		*(array + i) = 0;

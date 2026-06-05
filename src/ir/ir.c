@@ -674,7 +674,7 @@ void ir_func_emit(FILE *f, ir_func_t *fun, enum ir_arch arch)
 	switch(arch) {
 	case IR_ARCH_AARCH64_APPLE:
 		if(!emitted) {
-			fprintf(f, "\t.align 16\n");
+			fprintf(f, "\t.p2align 4\n");
 		}
 		break;
 	case IR_ARCH_X64_SYSV:

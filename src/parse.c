@@ -753,6 +753,22 @@ static node_t *parse_unary(token_t *tok, token_t **rest)
 		return node_unary(NODE_DEREF, parse_unary(tok->next, rest), tok);
 	}
 
+	/* sizeof, _Alignof */
+
+	if(token_eq(tok, "sizeof")) {
+		tok = token_skip(tok, "sizeof");
+		node_t *expr = parse_unary(tok, &tok);
+		*rest = tok;
+		return node_num(expr->type->size, tok);
+	}
+
+	if(token_eq(tok, "_Alignof")) {
+		tok = token_skip(tok, "_Alignof");
+		node_t *expr = parse_unary(tok, &tok);
+		*rest = tok;
+		return node_num(expr->type->align, tok);
+	}
+
 	return parse_postfix(tok, rest);
 }
 
