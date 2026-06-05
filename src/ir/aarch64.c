@@ -632,8 +632,7 @@ static void ir_func_restore_regs(FILE *f, ir_func_t *fun, int save)
 
 void ir_func_emit_aarch64_apple(FILE *f, ir_func_t *fun)
 {
-	fprintf(f, ".globl _%s\n", fun->name);
-	fprintf(f, ".p2align 2\n");
+	fprintf(f, "\t.globl _%s\n", fun->name);
 	fprintf(f, "_%s:\n", fun->name);
 	/* enter stack frame */
 	size_t alignd = align_to(fun->stack_needed, 16);
@@ -712,6 +711,7 @@ void ir_func_emit_aarch64_apple(FILE *f, ir_func_t *fun)
 	ir_func_restore_regs(f, fun, save);
 	fprintf(f, "\tldp fp, lr, [sp], #16\n");
 	fprintf(f, "\tret\n");
+	fprintf(f, "\n");
 
 	return;
 }

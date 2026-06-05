@@ -645,9 +645,7 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 {
 	char *name = fun->name;
 	/* correct syntax */
-	fprintf(f, ".intel_syntax noprefix\n");
-	fprintf(f, ".global %s\n", name);
-	fprintf(f, ".align 4\n");
+	fprintf(f, "\t.global %s\n", name);
 	fprintf(f, "%s:\n", name);
 
 	/* enter stack frame */
@@ -716,6 +714,7 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 	ir_func_restore_regs(f, fun);
 	fprintf(f, "\tpop rbp\n");
 	fprintf(f, "\tret\n");
+	fprintf(f, "\n");
 
 	return;
 }

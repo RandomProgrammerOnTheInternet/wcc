@@ -670,6 +670,24 @@ void ir_nopremover(ir_func_t *fun)
 /* assumes it has been finalized */
 void ir_func_emit(FILE *f, ir_func_t *fun, enum ir_arch arch)
 {
+	static bool emitted = false;
+	switch(arch) {
+	case IR_ARCH_AARCH64_APPLE:
+		if(!emitted) {
+			fprintf(f, "\t.align 16\n");
+		}
+		break;
+	case IR_ARCH_X64_SYSV:
+		if(!emitted) {
+			fprintf(f, "\t.intel_syntax noprefix\n\t.align 16\n");
+		}
+		break;
+	default:
+		break;
+	}
+
+	emitted = true;
+
 	switch(arch) {
 	case IR_ARCH_AARCH64_APPLE:
 		ir_func_emit_aarch64_apple(f, fun);
