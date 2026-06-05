@@ -55,6 +55,7 @@ assert 3 "funs.c"
 assert 251 "triangle.c"
 assert 229 "primes.c"
 assert 229 "primes_short.c"
+assert 1 "arrays.c"
 
 if [ "$passing" = "1" ]; then
   echo "all tests passed"

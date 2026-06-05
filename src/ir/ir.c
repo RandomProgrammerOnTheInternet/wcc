@@ -482,8 +482,9 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		r2 = ins->r2 ? (long)ins->r2->vr : -1;
 	}
 	uint64_t imm = ins->imm;
-	char suf = size_suf[ins->size];
-	char ext = ins->sext ? 'x' : ' ';
+	char *suf =
+		(char *[]){ "", ".i8", ".i16", "", ".i32", "", "", "", "" }[ins->size];
+	char *ext = ins->sext ? ".x" : "";
 
 	switch(ins->type) {
 	case IR_INST_NOP:
@@ -535,21 +536,21 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 	case IR_INST_GEI:
 		out("%%r%ld = cmpi.ge %%r%ld, #%lld", r0, r1, imm);
 	case IR_INST_LOAD:
-		out("%%r%ld = load%c%c %%r%ld", r0, suf, ext, r1);
+		out("%%r%ld = load%s%s %%r%ld", r0, suf, ext, r1);
 	case IR_INST_STORE:
-		out("store%c %%r%ld, %%r%ld", suf, r1, r2);
+		out("store%s %%r%ld, %%r%ld", suf, r1, r2);
 	case IR_INST_LOADS:
-		out("%%r%ld = loads%c%c #%ld", r0, suf, ext, (long)imm);
+		out("%%r%ld = loads%s%s #%ld", r0, suf, ext, (long)imm);
 	case IR_INST_LOADSS:
-		out("%%r%ld = loadss%c%c #%ld", r0, suf, ext, (long)imm);
+		out("%%r%ld = spill_load%s%s #%ld", r0, suf, ext, (long)imm);
 	case IR_INST_STORES:
-		out("stores%c #%ld, %%r%ld", suf, (long)imm, r1);
+		out("stores%s #%ld, %%r%ld", suf, (long)imm, r1);
 	case IR_INST_STORESS:
-		out("storess%c #%ld, %%r%ld", suf, (long)imm, r1);
+		out("spill_store%s #%ld, %%r%ld", suf, (long)imm, r1);
 	case IR_INST_ZEXT:
-		out("%%r%ld = zext%c %%r%ld", r0, suf, r1);
+		out("%%r%ld = zext%s %%r%ld", r0, suf, r1);
 	case IR_INST_SEXT:
-		out("%%r%ld = sext%c %%r%ld", r0, suf, r1);
+		out("%%r%ld = sext%s %%r%ld", r0, suf, r1);
 	case IR_INST_BR:
 		out("br %%r%ld, BB%ld, BB%ld", r1, ins->true_blk->num,
 			ins->false_blk->num);
