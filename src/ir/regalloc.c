@@ -41,27 +41,26 @@ static void fill_defs(ir_blk_t *blk)
 /* fill out successors and predecessors (and also if block returns) */
 static void fill_succ_pred(ir_blk_t *blk)
 {
-	if(!blk || blk->succ[0] || blk->succ[1] || blk->returns) {
+	if(!blk || blk->returns || blk->visited) {
 		return;
 	}
 
+	blk->visited = true;
+
 	/* find the last inst. */
 	ir_inst_t *flow = find_last_or_flow_ins(blk->insts);
-	int i = 0;
 	if(flow->type == IR_INST_RET) {
 		blk->returns = true;
 	}
 
 	if(flow->false_blk) {
 		/* add successor, predecessor */
-		blk->succ[i++] = flow->false_blk;
 		list_append(flow->false_blk->pred, blk);
 		fill_succ_pred(flow->false_blk);
 	}
 
 	if(flow->true_blk) {
 		/* add successor, predecessor */
-		blk->succ[i++] = flow->true_blk;
 		list_append(flow->true_blk->pred, blk);
 		fill_succ_pred(flow->true_blk);
 	}

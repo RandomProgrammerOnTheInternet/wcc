@@ -5,7 +5,9 @@
 #include "x64.h"
 #include "zz/arena.h"
 
-static long counter(int reset)
+/* ron's universal number kounter */
+/* very important, critical piece of code */
+static long runk(int reset)
 {
 	static int counter = 1;
 	if(reset) {
@@ -54,7 +56,7 @@ int ir_inst_is_assoc(enum ins_type type)
 /* reset register counter */
 void reg_reset_counter(void)
 {
-	(void)counter(1);
+	(void)runk(1);
 	return;
 }
 
@@ -68,7 +70,7 @@ reg_t *reg_make(void)
 	reg->spilld = false;
 	reg->def = 0;
 	reg->last_use = 0;
-	reg->vr = counter(0);
+	reg->vr = runk(0);
 	reg->insty = IR_INST_NOP;
 	reg->lhs = reg->rhs = NULL;
 
@@ -323,8 +325,7 @@ ir_blk_t *ir_blk_make(ir_inst_t *insts)
 	ir_blk_t *blk = zalloc(sizeof(ir_blk_t));
 
 	blk->insts = insts;
-	blk->succ[0] = NULL;
-	blk->succ[1] = NULL;
+	blk->visited = false;
 	blk->pred = list_make(ir_blk_t *);
 	blk->regs_def = list_make(reg_t *);
 	blk->regs_in = list_make(reg_t *);
@@ -354,6 +355,27 @@ void ir_blk_delete(ir_blk_t *blk)
 	list_delete(blk->regs_in);
 	list_delete(blk->regs_out);
 	free(blk);
+	return;
+}
+
+/* make a global variable */
+ir_global_t *ir_glob_make(char *name, size_t size, uint8_t *data)
+{
+	ir_global_t *glob = zalloc(sizeof(ir_global_t));
+	glob->name = name;
+	glob->size = size;
+	glob->data = data;
+	if(data) {
+		glob->has_data = true;
+	}
+
+	return glob;
+}
+
+/* delete a global variable */
+void ir_glob_delete(ir_global_t *glob)
+{
+	free(glob);
 	return;
 }
 
@@ -670,24 +692,6 @@ void ir_nopremover(ir_func_t *fun)
 /* assumes it has been finalized */
 void ir_func_emit(FILE *f, ir_func_t *fun, enum ir_arch arch)
 {
-	static bool emitted = false;
-	switch(arch) {
-	case IR_ARCH_AARCH64_APPLE:
-		if(!emitted) {
-			fprintf(f, "\t.p2align 4\n");
-		}
-		break;
-	case IR_ARCH_X64_SYSV:
-		if(!emitted) {
-			fprintf(f, "\t.intel_syntax noprefix\n\t.align 16\n");
-		}
-		break;
-	default:
-		break;
-	}
-
-	emitted = true;
-
 	switch(arch) {
 	case IR_ARCH_AARCH64_APPLE:
 		ir_func_emit_aarch64_apple(f, fun);
@@ -698,4 +702,45 @@ void ir_func_emit(FILE *f, ir_func_t *fun, enum ir_arch arch)
 	default:
 		break;
 	}
+}
+
+/* generates code for an IR program */
+/* handles all the function finalization stuff */
+void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt)
+{
+	switch(arch) {
+	case IR_ARCH_AARCH64_APPLE:
+		ir_prog_begin_aarch64_apple(f, prog);
+		break;
+	case IR_ARCH_X64_SYSV:
+		ir_prog_begin_x64_sysv(f, prog);
+		break;
+	default:
+		break;
+	}
+
+	/* global vars */
+	for(size_t i = 0; i < list_len(prog->globs); i++) {
+		ir_global_t *glob = prog->globs[i];
+		switch(arch) {
+		case IR_ARCH_AARCH64_APPLE:
+			ir_glob_emit_aarch64_apple(f, glob);
+			break;
+		case IR_ARCH_X64_SYSV:
+			ir_glob_emit_x64_sysv(f, glob);
+			break;
+		default:
+			break;
+		}
+	}
+
+	/* functions */
+	for(size_t i = 0; i < list_len(prog->funcs); i++) {
+		ir_func_t *func = prog->funcs[i];
+		ir_opt(func, opt, arch);
+		ir_finalize(func, arch == IR_ARCH_AARCH64_APPLE ? 9 : 5, arch);
+		ir_func_emit(f, func, arch);
+	}
+
+	return;
 }

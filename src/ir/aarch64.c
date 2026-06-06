@@ -169,6 +169,27 @@ static int load_fp_imm_x10(FILE *f, long off, bool save)
 static int arm_reg[9] = { 19, 20, 21, 22, 23, 24, 25, 26, 27 };
 static const int arm_reg_count = 9;
 
+void ir_prog_begin_aarch64_apple(FILE *f, ir_prog_t *prog)
+{
+	UNUSED(prog);
+	fprintf(f, "\t.p2align 4\n");
+}
+
+void ir_prog_end_aarch64_apple(FILE *f, ir_prog_t *prog)
+{
+	UNUSED(f);
+	UNUSED(prog);
+	return;
+}
+
+void ir_glob_emit_aarch64_apple(FILE *f, ir_global_t *glob)
+{
+	UNUSED(f);
+	UNUSED(glob);
+	ERROR("todo");
+	return;
+}
+
 static INLINE void vload(FILE *f, size_t size, bool ext, int reg_to,
 						 char *addr_fmt, va_list va)
 {

@@ -146,7 +146,7 @@ typedef struct ir_blk {
 	long num; /* this block's # */
 
 	/* register allocation stuff */
-	struct ir_blk *succ[2]; /* block's successors */
+	bool visited;
 	LIST(struct ir_blk *) pred; /* block's predecessors */
 	LIST(reg_t *) regs_def; /* registers in this block */
 	LIST(reg_t *) regs_in; /* registers in */
@@ -163,6 +163,20 @@ typedef struct ir_func {
 	bool *alloc_used; /* used registers for allocation (for push-ing/pop-ing) */
 	LIST(callreg_t *) args; /* arguments to this function */
 } ir_func_t;
+
+/* global variable */
+typedef struct ir_global {
+	char *name; /* name of this global variable */
+	size_t size; /* size of this global variable */
+	bool has_data; /* is this global variable initalized with data? */
+	uint8_t *data; /* if so, the data */
+} ir_global_t;
+
+/* IR program (collection of functions, variables, etc.) */
+typedef struct ir_prog {
+	LIST(ir_func_t *) funcs; /* the collection of functions */
+	LIST(ir_global_t *) globs; /* the collection of global variables */
+} ir_prog_t;
 
 /* -- big list of instructions -- */
 #define INSNAME(name) ins_##name
@@ -298,10 +312,20 @@ void ir_nopremover(ir_func_t *fun);
 /* assumes function has been finalized */
 void ir_func_emit(FILE *f, ir_func_t *fun, enum ir_arch arch);
 
+/* generates code for an IR program */
+/* handles all the function finalization stuff */
+void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt);
+
 /* add IR instruction to IR block */
 void ir_blk_add(ir_blk_t *blk, ir_inst_t *inst);
 
 /* fixes IR function */
 void ir_fix(ir_func_t *func);
+
+/* make a global variable */
+ir_global_t *ir_glob_make(char *name, size_t size, uint8_t *data);
+
+/* delete a global variable */
+void ir_glob_delete(ir_global_t *glob);
 
 #endif /* IR_H_ */

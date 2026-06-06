@@ -178,6 +178,29 @@ void ir_func_opt_x64(ir_func_t *fun, int opt_level)
 	return;
 }
 
+void ir_prog_begin_x64_sysv(FILE *f, ir_prog_t *prog)
+{
+	UNUSED(prog);
+	fprintf(f, "\t.align 16\n");
+	fprintf(f, "\t.intel_syntax noprefix");
+	return;
+}
+
+void ir_prog_end_x64_sysv(FILE *f, ir_prog_t *prog)
+{
+	UNUSED(f);
+	UNUSED(prog);
+	return;
+}
+
+void ir_glob_emit_x64_sysv(FILE *f, ir_global_t *glob)
+{
+	UNUSED(f);
+	UNUSED(glob);
+	ERROR("todo");
+	return;
+}
+
 static const char *x64_reg[6] = { "rbx", "r12", "r13", "r14", "r15", NULL };
 static const char *x64_reg8[6] = { "bl", "r12b", "r13b", "r14b", "r15b", NULL };
 static const char *x64_reg16[6] = { "bx", "r12w", "r13w", "r14w", "r15w", NULL };

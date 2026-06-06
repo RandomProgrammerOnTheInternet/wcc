@@ -521,6 +521,9 @@ static void varopt(ir_func_t *func)
 /* generates code for a function */
 void codegen_func(FILE *f, obj_t *fn, int opt_level, enum ir_arch backend)
 {
+	ir_prog_t prog = { 0 };
+	prog.globs = list_make(ir_global_t *);
+	prog.funcs = list_make(ir_func_t *);
 	obj_t *cur_fn = fn;
 	blk_num = 0;
 	while(cur_fn) {
@@ -576,13 +579,16 @@ void codegen_func(FILE *f, obj_t *fn, int opt_level, enum ir_arch backend)
 		fun->stack_needed = align_to(cur_fn->stack_size, 16);
 		fun->align_needed = align_to(max_align, 16);
 
-		ir_opt(func, opt_level, backend);
-		ir_finalize(func, backend == IR_ARCH_AARCH64_APPLE ? 9 : 5, backend);
-
-		ir_func_emit(f, func, backend);
-
-		ir_func_delete(func);
+		list_append(prog.funcs, fun);
 		cur_fn = cur_fn->next;
 	}
+
+	ir_prog_compile(f, &prog, backend, opt_level);
+	for(size_t i = 0; i < list_len(prog.funcs); i++) {
+		ir_func_delete(prog.funcs[i]);
+	}
+
+	list_delete(prog.funcs);
+	list_delete(prog.globs);
 	return;
 }

@@ -1,14 +1,21 @@
 int main()
 {
-	long a = 1, b, c, d, e, f, g, h, i, j;
-	b = a + 1;
-	c = b + 1;
-	d = c + 1;
-	e = d + 1;
-	f = e + 1;
-	g = f + 1;
-	h = g + 1;
-	i = h + 1;
-	j = i + 1;
-	return j + 1;
+	int a = 1, b = 1, c = 1, d = 1, e = 1, f = 1, g = 1, h = 1, i = 1, j = 1,
+		k = 1, l = 1, m = 1, n = 1, o = 1, p = 1;
+	a = a + b;
+	c = c + d;
+	e = e + f;
+	g = g + h;
+	i = i + j;
+	k = k + l;
+	m = m + n;
+	o = o + p;
+	a = a + c;
+	e = e + g;
+	i = i + k;
+	m = m + o;
+	a = a + e;
+	i = i + m;
+	a = a + i;
+	return a;
 }
