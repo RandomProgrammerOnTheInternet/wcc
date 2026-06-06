@@ -54,6 +54,7 @@ assert 2 "types.c"
 assert 3 "funs.c"
 assert 251 "triangle.c"
 assert 229 "primes.c"
+# assert 229 "primes2.c"
 assert 229 "primes_short.c"
 assert 1 "arrays.c"
 #todo proper alignment support (need to switch to sp-rel addressing)

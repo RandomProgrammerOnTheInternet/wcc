@@ -9,21 +9,21 @@ static int unpromote(enum ins_type type)
 	case IR_INST_SUBI:
 		return IR_INST_SUB;
 	case IR_INST_MULI:
-		return IR_INST_MUL;
+		return IR_INST_SMUL;
 	case IR_INST_DIVI:
-		return IR_INST_DIV;
+		return IR_INST_SDIV;
 	case IR_INST_EQI:
 		return IR_INST_EQ;
 	case IR_INST_NEI:
 		return IR_INST_NE;
 	case IR_INST_LTI:
-		return IR_INST_LT;
+		return IR_INST_SLT;
 	case IR_INST_LEI:
-		return IR_INST_LE;
+		return IR_INST_SLE;
 	case IR_INST_GTI:
-		return IR_INST_GT;
+		return IR_INST_SGT;
 	case IR_INST_GEI:
-		return IR_INST_GE;
+		return IR_INST_SGE;
 	case IR_INST_BREQI:
 		return IR_INST_BREQ;
 	case IR_INST_BRNEI:
@@ -110,8 +110,9 @@ static void degrade_large_imms(ir_func_t *fun)
 static bool ins_is_3source(enum ins_type t)
 {
 	/* ADD is not needed here because on x64 you can do lea A, [B+C] */
-	return t == IR_INST_SUB || t == IR_INST_MUL || t == IR_INST_DIV ||
-		   t == IR_INST_MULI || t == IR_INST_DIVI;
+	return t == IR_INST_SUB || t == IR_INST_SMUL || t == IR_INST_UMUL ||
+		   t == IR_INST_SDIV || t == IR_INST_UDIV || t == IR_INST_SMOD ||
+		   t == IR_INST_UMOD || t == IR_INST_MULI || t == IR_INST_DIVI;
 }
 
 /* is the instruction in form A = F(B) where it needs A and B to be separate? */
@@ -182,7 +183,7 @@ void ir_prog_begin_x64_sysv(FILE *f, ir_prog_t *prog)
 {
 	UNUSED(prog);
 	fprintf(f, "\t.align 16\n");
-	fprintf(f, "\t.intel_syntax noprefix");
+	fprintf(f, "\t.intel_syntax noprefix\n");
 	return;
 }
 
@@ -516,16 +517,35 @@ brcmp_main:
 		case IR_INST_SUB:
 			fprintf(f, "\tsub %s, %s\n", r0, r2);
 			break;
-		case IR_INST_MUL:
+		case IR_INST_SMUL:
 			fprintf(f, "\timul %s, %s\n", r0, r2);
 			break;
-		case IR_INST_DIV:
+		case IR_INST_UMUL:
+			fprintf(f, "\tpush rdx\n");
+			fprintf(f, "\tmov rax, %s\n", r0);
+			fprintf(f, "\tmul %s\n", r2);
+			fprintf(f, "\tpop rdx\n");
+			fprintf(f, "\tmov %s, rax\n", r0);
+			break;
+		case IR_INST_SDIV:
 			fprintf(f, "\tpush rdx\n");
 			fprintf(f, "\tmov rax, %s\n", r0);
 			fprintf(f, "\tcqo\n");
 			fprintf(f, "\tidiv %s\n", r2);
 			fprintf(f, "\tpop rdx\n");
 			fprintf(f, "\tmov %s, rax\n", r0);
+			break;
+		case IR_INST_UDIV:
+			fprintf(f, "\tpush rdx\n");
+			fprintf(f, "\tmov rax, %s\n", r0);
+			fprintf(f, "\tcqo\n");
+			fprintf(f, "\tdiv %s\n", r2);
+			fprintf(f, "\tpop rdx\n");
+			fprintf(f, "\tmov %s, rax\n", r0);
+			break;
+		case IR_INST_SMOD:
+		case IR_INST_UMOD:
+			ERROR("todo");
 			break;
 		case IR_INST_NEG:
 			fprintf(f, "\tneg %s\n", r0);
@@ -571,10 +591,10 @@ brcmp_main:
 			goto cmp_main;
 		case IR_INST_EQ:
 		case IR_INST_NE:
-		case IR_INST_LT:
-		case IR_INST_LE:
-		case IR_INST_GT:
-		case IR_INST_GE:
+		case IR_INST_SLT:
+		case IR_INST_SLE:
+		case IR_INST_SGT:
+		case IR_INST_SGE:
 			fprintf(f, "\tcmp %s, %s\n", r1, r2);
 
 cmp_main:
@@ -587,19 +607,19 @@ cmp_main:
 			case IR_INST_NEI:
 				fprintf(f, "\tsetne %s\n", r0b);
 				break;
-			case IR_INST_LT:
+			case IR_INST_SLT:
 			case IR_INST_LTI:
 				fprintf(f, "\tsetl %s\n", r0b);
 				break;
-			case IR_INST_LE:
+			case IR_INST_SLE:
 			case IR_INST_LEI:
 				fprintf(f, "\tsetle %s\n", r0b);
 				break;
-			case IR_INST_GT:
+			case IR_INST_SGT:
 			case IR_INST_GTI:
 				fprintf(f, "\tsetg %s\n", r0b);
 				break;
-			case IR_INST_GE:
+			case IR_INST_SGE:
 			case IR_INST_GEI:
 				fprintf(f, "\tsetge %s\n", r0b);
 				break;

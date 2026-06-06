@@ -5,42 +5,6 @@
 
 extern int debug;
 
-/* is this instruction foldable? */
-static int ir_inst_is_foldable(enum ins_type type)
-{
-	return ir_inst_is_cmp(type) || type == IR_INST_ADD || type == IR_INST_SUB ||
-		   type == IR_INST_MUL || type == IR_INST_DIV || type == IR_INST_ADDI ||
-		   type == IR_INST_SUBI || type == IR_INST_MULI || type == IR_INST_DIVI;
-}
-
-static int promote_assoc_to_assoc_imm(enum ins_type type)
-{
-	if(!ir_inst_is_assoc(type)) {
-		return type;
-	}
-	switch(type) {
-	case IR_INST_ADD:
-		return IR_INST_ADDI;
-	case IR_INST_MUL:
-		return IR_INST_MULI;
-	case IR_INST_EQ:
-		return IR_INST_EQI;
-	case IR_INST_NE:
-		return IR_INST_NEI;
-	case IR_INST_LT:
-		return IR_INST_LTI;
-	case IR_INST_LE:
-		return IR_INST_LEI;
-	case IR_INST_GT:
-		return IR_INST_GTI;
-	case IR_INST_GE:
-		return IR_INST_GEI;
-	default:
-		return IR_INST_NOP;
-	}
-	return IR_INST_NOP;
-}
-
 /* move elimination */
 static UNUSEDA int ir_mov_elim(ir_func_t *func)
 {
@@ -93,226 +57,6 @@ static UNUSEDA int ir_mov_elim(ir_func_t *func)
 			if(ins->type == IR_INST_IMM && !ins->r0->no_mov_elim) {
 				ins->r0->insty = IR_INST_IMM;
 				ins->r0->imm = ins->imm;
-				continue;
-			}
-		}
-	}
-	return changed;
-}
-
-/* constant folding */
-static int ir_fold(ir_func_t *func)
-{
-	int changed = 0;
-	for(size_t i = 0; i < list_len(func->blocks); i++) {
-		ir_blk_t *blk = func->blocks[i];
-		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-			if(ins->type == IR_INST_IMM) {
-				ins->r1 = NULL;
-set_imm:
-				ins->r0->imm = ins->imm;
-				ins->r0->insty = IR_INST_IMM;
-				continue;
-			}
-
-			/* if another value stored to this instruction, remove it's immediate status */
-			if(ins->r0 && ins->r0->insty == IR_INST_IMM) {
-				changed = 1;
-				ins->r0->imm = 0;
-				ins->r0->insty = IR_INST_NOP;
-				continue;
-			}
-
-			if(ins->r0 && ins->r0->no_mov_elim) {
-				continue;
-			}
-
-			/* fold */
-			if(ins->type == IR_INST_MOV && ins->r1->insty == IR_INST_IMM) {
-				changed = 1;
-				ins->type = IR_INST_IMM;
-				ins->imm = ins->r1->imm;
-				ins->r1 = NULL;
-				goto set_imm;
-				continue;
-			}
-
-			if(ins->type == IR_INST_NEG && ins->r1->insty == IR_INST_IMM) {
-				changed = 1;
-				ins->type = IR_INST_IMM;
-				ins->imm = -(long)ins->r1->imm;
-				ins->r1 = NULL;
-				goto set_imm;
-				continue;
-			}
-
-			/* fold 3-sources with both imms */
-			if(ir_inst_is_foldable(ins->type) && ins->r1 && ins->r2 &&
-			   ins->r1->insty == IR_INST_IMM && ins->r2->insty == IR_INST_IMM) {
-				changed = 1;
-				int oldtype = ins->type;
-				ins->type = IR_INST_IMM;
-				long a1 = ins->r1->imm;
-				long a2 = ins->r2->imm;
-				ins->r1 = NULL;
-				ins->r2 = NULL;
-				switch(oldtype) {
-				case IR_INST_ADD:
-					ins->imm = a1 + a2;
-					break;
-				case IR_INST_SUB:
-					ins->imm = a1 - a2;
-					break;
-				case IR_INST_MUL:
-					ins->imm = a1 * a2;
-					break;
-				case IR_INST_DIV:
-					/* define division by zero to be zero */
-					if(a2 == 0) {
-						a1 = 0;
-						a2 = 1;
-					}
-					ins->imm = a1 / a2;
-					break;
-				case IR_INST_EQ:
-					ins->imm = a1 == a2;
-					break;
-				case IR_INST_NE:
-					ins->imm = a1 != a2;
-					break;
-				case IR_INST_LT:
-					ins->imm = a1 < a2;
-					break;
-				case IR_INST_LE:
-					ins->imm = a1 <= a2;
-					break;
-				case IR_INST_GT:
-					ins->imm = a1 > a2;
-					break;
-				case IR_INST_GE:
-					ins->imm = a1 >= a2;
-					break;
-				default:
-					break;
-				}
-				goto set_imm;
-				continue;
-			}
-
-			/* fold assocs with only 1 imm */
-			if(ir_inst_is_foldable(ins->type) && ir_inst_is_assoc(ins->type) &&
-			   ins->r1 && ins->r2 &&
-			   (ins->r1->insty == IR_INST_IMM ||
-				ins->r2->insty == IR_INST_IMM)) {
-				changed = 1;
-				/* reorder so that imm is on r2 */
-				if(ins->r1->insty == IR_INST_IMM) {
-					reg_t *swap = ins->r1;
-					ins->r1 = ins->r2;
-					ins->r2 = swap;
-					/* if comparison, change to inverse cond */
-					if(ins->type == IR_INST_LT || ins->type == IR_INST_LE ||
-					   ins->type == IR_INST_GT || ins->type == IR_INST_GE) {
-						switch(ins->type) {
-						case IR_INST_LT:
-							ins->type = IR_INST_GT;
-							break;
-						case IR_INST_LE:
-							ins->type = IR_INST_GE;
-							break;
-						case IR_INST_GT:
-							ins->type = IR_INST_LT;
-							break;
-						case IR_INST_GE:
-							ins->type = IR_INST_LE;
-							break;
-						default:
-							break;
-						}
-					}
-				}
-
-				ins->type = promote_assoc_to_assoc_imm(ins->type);
-				ins->imm = ins->r2->imm;
-				continue;
-			}
-
-			/* fold the half-folded ins */
-			if(ir_inst_r2_imm(ins->type) && ins->r1->insty == IR_INST_IMM) {
-				changed = 1;
-				long res = 0;
-				long a1 = ins->r1->imm;
-				long a2 = ins->imm;
-				ins->type = IR_INST_IMM;
-				switch(ins->type) {
-				case IR_INST_ADDI:
-					res = a1 + a2;
-					break;
-				case IR_INST_SUBI:
-					res = a1 - a2;
-					break;
-				case IR_INST_MULI:
-					res = a1 * a2;
-					break;
-				case IR_INST_DIVI:
-					res = a1 / a2;
-					break;
-				case IR_INST_EQI:
-					res = a1 == a2;
-					break;
-				case IR_INST_NEI:
-					res = a1 != a2;
-					break;
-				case IR_INST_LTI:
-					res = a1 < a2;
-					break;
-				case IR_INST_LEI:
-					res = a1 <= a2;
-					break;
-				case IR_INST_GTI:
-					res = a1 > a2;
-					break;
-				case IR_INST_GEI:
-					res = a1 >= a2;
-					break;
-
-				default:
-					break;
-				case IR_INST_BREQI:
-					ins->type = IR_INST_JMP;
-					res = a1 == a2;
-					break;
-				case IR_INST_BRNEI:
-					ins->type = IR_INST_JMP;
-					res = a1 != a2;
-					break;
-				case IR_INST_BRLTI:
-					ins->type = IR_INST_JMP;
-					res = a1 < a2;
-					break;
-				case IR_INST_BRLEI:
-					ins->type = IR_INST_JMP;
-					res = a1 <= a2;
-					break;
-				case IR_INST_BRGTI:
-					ins->type = IR_INST_JMP;
-					res = a1 > a2;
-					break;
-				case IR_INST_BRGEI:
-					ins->type = IR_INST_JMP;
-					res = a1 >= a2;
-					break;
-				}
-
-				if(ins->type == IR_INST_IMM) {
-					ins->imm = res;
-					continue;
-				}
-
-				if(!res && ins->type == IR_INST_JMP) {
-					ins->true_blk = ins->false_blk;
-				}
-
 				continue;
 			}
 		}
@@ -420,13 +164,13 @@ static int cmp_to_br(enum ins_type ins)
 		return IR_INST_BREQ;
 	case IR_INST_NE:
 		return IR_INST_BRNE;
-	case IR_INST_LT:
+	case IR_INST_SLT:
 		return IR_INST_BRLT;
-	case IR_INST_LE:
+	case IR_INST_SLE:
 		return IR_INST_BRLE;
-	case IR_INST_GT:
+	case IR_INST_SGT:
 		return IR_INST_BRGT;
-	case IR_INST_GE:
+	case IR_INST_SGE:
 		return IR_INST_BRGE;
 	case IR_INST_EQI:
 		return IR_INST_BREQI;
@@ -646,6 +390,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		}
 
 		/* fold opts */
+		/* TODO: better folding system
 		{
 			change |= ir_fold(func);
 			change |= ir_optzero(func);
@@ -654,6 +399,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 			ir_nopremover(func);
 			ir_fix(func);
 		}
+		*/
 
 		/* branch opts */
 		{

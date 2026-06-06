@@ -28,14 +28,23 @@ DEF_INS(mov, MOV, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
 DEF_INS(imm, IMM, r0, NULL, NULL, imm, reg_t *r0, uint64_t imm);
 DEF_INS(add, ADD, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(sub, SUB, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(mul, MUL, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(div, DIV, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(smul, SMUL, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(sdiv, SDIV, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(smod, SMOD, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(udiv, UDIV, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(umul, UMUL, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(umod, UMOD, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+
 DEF_INS(eq, EQ, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(ne, NE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(lt, LT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(le, LE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(gt, GT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(ge, GE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(slt, SLT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(sle, SLE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(sgt, SGT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(sge, SGE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(ult, ULT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(ule, ULE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(ugt, UGT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(uge, UGE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(neg, NEG, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
 DEF_INS(leas, LEAS, r0, NULL, NULL, imm, reg_t *r0, long imm);
 DEF_INS(ret, RET, NULL, r1, NULL, 0, reg_t *r1);
@@ -267,10 +276,13 @@ reg_t *codegen_expr(node_t *node)
 		emit_sub(res, lhs, rhs);
 		break;
 	case NODE_MUL:
-		emit_mul(res, lhs, rhs);
+		emit_smul(res, lhs, rhs);
 		break;
 	case NODE_DIV:
-		emit_div(res, lhs, rhs);
+		emit_sdiv(res, lhs, rhs);
+		break;
+	case NODE_MOD:
+		emit_smod(res, lhs, rhs);
 		break;
 	case NODE_VAR:
 		res = calc_addr(node);
@@ -284,16 +296,16 @@ reg_t *codegen_expr(node_t *node)
 		emit_ne(res, lhs, rhs);
 		break;
 	case NODE_LE:
-		emit_le(res, lhs, rhs);
+		emit_sle(res, lhs, rhs);
 		break;
 	case NODE_LT:
-		emit_lt(res, lhs, rhs);
+		emit_slt(res, lhs, rhs);
 		break;
 	case NODE_GE:
-		emit_ge(res, lhs, rhs);
+		emit_sge(res, lhs, rhs);
 		break;
 	case NODE_GT:
-		emit_gt(res, lhs, rhs);
+		emit_sgt(res, lhs, rhs);
 		break;
 	}
 

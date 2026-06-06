@@ -15,8 +15,12 @@ enum ins_type {
 	/* arithmetic - binops */
 	IR_INST_ADD, /* %r0 = add %r1, %r2 */
 	IR_INST_SUB, /* %r0 = sub %r1, %r2 */
-	IR_INST_MUL, /* %r0 = mul %r1, %r2 */
-	IR_INST_DIV, /* %r0 = div %r1, %r2 */
+	IR_INST_SMUL, /* %r0 = smul %r1, %r2 */
+	IR_INST_SDIV, /* %r0 = sdiv %r1, %r2 */
+	IR_INST_SMOD, /* %r0 = smod %r1, %r2 */
+	IR_INST_UMUL, /* %r0 = umul %r1, %r2 */
+	IR_INST_UDIV, /* %r0 = udiv %r1, %r2 */
+	IR_INST_UMOD, /* %r0 = umod %r1, %r2 */
 
 	/* immediate binops */
 	IR_INST_ADDI, /* %r0 = addi %r1, #imm */
@@ -27,13 +31,17 @@ enum ins_type {
 	/* arithmetic - unaryops */
 	IR_INST_NEG, /* %r0 = neg %r1 */
 
-	/* comparisons (all signed for now) */
+	/* comparisons */
 	IR_INST_EQ, /* %r0 = cmp.eq %r1, %r2 */
 	IR_INST_NE, /* %r0 = cmp.ne %r1, %r2 */
-	IR_INST_LT, /* %r0 = cmp.lt %r1, %r2 */
-	IR_INST_LE, /* %r0 = cmp.le %r1, %r2 */
-	IR_INST_GT, /* %r0 = cmp.gt %r1, %r2 */
-	IR_INST_GE, /* %r0 = cmp.ge %r1, %r2 */
+	IR_INST_SLT, /* %r0 = cmp.slt %r1, %r2 */
+	IR_INST_SLE, /* %r0 = cmp.sle %r1, %r2 */
+	IR_INST_SGT, /* %r0 = cmp.sgt %r1, %r2 */
+	IR_INST_SGE, /* %r0 = cmp.sge %r1, %r2 */
+	IR_INST_ULT, /* %r0 = cmp.ult %r1, %r2 */
+	IR_INST_ULE, /* %r0 = cmp.ule %r1, %r2 */
+	IR_INST_UGT, /* %r0 = cmp.ugt %r1, %r2 */
+	IR_INST_UGE, /* %r0 = cmp.uge %r1, %r2 */
 
 	/* immediate comparisons */
 	IR_INST_EQI, /* %r0 = cmpi.eq %r1, #imm */
@@ -188,14 +196,22 @@ DEF_INS(mov, reg_t *r0, reg_t *r1);
 DEF_INS(imm, reg_t *r0, uint64_t imm);
 DEF_INS(add, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(sub, reg_t *r0, reg_t *r2, reg_t *r3);
-DEF_INS(mul, reg_t *r0, reg_t *r2, reg_t *r3);
-DEF_INS(div, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(smul, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(sdiv, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(smod, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(umul, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(udiv, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(umod, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(eq, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(ne, reg_t *r0, reg_t *r2, reg_t *r3);
-DEF_INS(lt, reg_t *r0, reg_t *r2, reg_t *r3);
-DEF_INS(le, reg_t *r0, reg_t *r2, reg_t *r3);
-DEF_INS(gt, reg_t *r0, reg_t *r2, reg_t *r3);
-DEF_INS(ge, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(slt, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(sle, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(sgt, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(sge, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(ult, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(ule, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(ugt, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(uge, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(addi, reg_t *r0, reg_t *r2, long imm);
 DEF_INS(subi, reg_t *r0, reg_t *r2, long imm);
 DEF_INS(muli, reg_t *r0, reg_t *r2, long imm);

@@ -645,6 +645,11 @@ parse:
 		goto parse;
 	}
 
+	if(token_eq(tok, "%")) {
+		node = node_bin(NODE_MOD, node, parse_unary(tok->next, &tok), tok);
+		goto parse;
+	}
+
 	*rest = tok;
 	return node;
 }

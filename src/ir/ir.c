@@ -39,18 +39,22 @@ int ir_inst_is_term(enum ins_type type)
 /* is this instruction a comparison? */
 int ir_inst_is_cmp(enum ins_type type)
 {
-	return type == IR_INST_EQ || type == IR_INST_NE || type == IR_INST_LE ||
-		   type == IR_INST_LT || type == IR_INST_GT || type == IR_INST_GE ||
-		   type == IR_INST_EQI || type == IR_INST_NEI || type == IR_INST_LEI ||
-		   type == IR_INST_LTI || type == IR_INST_GTI || type == IR_INST_GEI;
+	return type == IR_INST_EQ || type == IR_INST_NE || type == IR_INST_SLE ||
+		   type == IR_INST_SLT || type == IR_INST_SGT || type == IR_INST_SGE ||
+		   type == IR_INST_ULE || type == IR_INST_ULT || type == IR_INST_UGT ||
+		   type == IR_INST_UGE || type == IR_INST_EQI || type == IR_INST_NEI ||
+		   type == IR_INST_LEI || type == IR_INST_LTI || type == IR_INST_GTI ||
+		   type == IR_INST_GEI;
 }
 
 /* is this instruction associative? (F(B, C) == F(C, B)) */
 int ir_inst_is_assoc(enum ins_type type)
 {
-	return type == IR_INST_EQ || type == IR_INST_NE || type == IR_INST_LT ||
-		   type == IR_INST_LE || type == IR_INST_GT || type == IR_INST_GE ||
-		   type == IR_INST_ADD || type == IR_INST_MUL;
+	return type == IR_INST_EQ || type == IR_INST_NE || type == IR_INST_SLT ||
+		   type == IR_INST_SLE || type == IR_INST_SGT || type == IR_INST_SGE ||
+		   type == IR_INST_ULT || type == IR_INST_ULE || type == IR_INST_UGT ||
+		   type == IR_INST_UGE || type == IR_INST_ADD || type == IR_INST_UMUL ||
+		   type == IR_INST_SMUL;
 }
 
 /* reset register counter */
@@ -146,25 +150,33 @@ DEF_INS(mov, MOV, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
 DEF_INS(imm, IMM, r0, NULL, NULL, imm, reg_t *r0, uint64_t imm);
 DEF_INS(add, ADD, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(sub, SUB, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(mul, MUL, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(div, DIV, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(smul, SMUL, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(sdiv, SDIV, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(smod, SMOD, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(udiv, UDIV, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(umul, UMUL, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(umod, UMOD, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+
 DEF_INS(eq, EQ, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(ne, NE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(lt, LT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(le, LE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(gt, GT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(ge, GE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-
-DEF_INS(addi, ADD, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
-DEF_INS(subi, SUB, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
-DEF_INS(muli, MUL, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
-DEF_INS(divi, DIV, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
-DEF_INS(eqi, EQ, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
-DEF_INS(nei, NE, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
-DEF_INS(lti, LT, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
-DEF_INS(lei, LE, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
-DEF_INS(gti, GT, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
-DEF_INS(gei, GE, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
+DEF_INS(slt, SLT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(sle, SLE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(sgt, SGT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(sge, SGE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(ult, ULT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(ule, ULE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(ugt, UGT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(uge, UGE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(addi, ADDI, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
+DEF_INS(subi, SUBI, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
+DEF_INS(muli, MULI, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
+DEF_INS(divi, DIVI, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
+DEF_INS(eqi, EQI, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
+DEF_INS(nei, NEI, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
+DEF_INS(lti, LTI, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
+DEF_INS(lei, LEI, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
+DEF_INS(gti, GTI, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
+DEF_INS(gei, GEI, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
 
 DEF_INS(neg, NEG, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
 DEF_INS(leas, LEAS, r0, NULL, NULL, imm, reg_t *r0, long imm);
@@ -519,10 +531,18 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		out("%%r%ld = add %%r%ld, %%r%ld", r0, r1, r2);
 	case IR_INST_SUB:
 		out("%%r%ld = sub %%r%ld, %%r%ld", r0, r1, r2);
-	case IR_INST_MUL:
-		out("%%r%ld = mul %%r%ld, %%r%ld", r0, r1, r2);
-	case IR_INST_DIV:
-		out("%%r%ld = div %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_SMUL:
+		out("%%r%ld = smul %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_SDIV:
+		out("%%r%ld = sdiv %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_SMOD:
+		out("%%r%ld = smod %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_UMUL:
+		out("%%r%ld = umul %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_UDIV:
+		out("%%r%ld = udiv %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_UMOD:
+		out("%%r%ld = umod %%r%ld, %%r%ld", r0, r1, r2);
 	case IR_INST_ADDI:
 		out("%%r%ld = addi %%r%ld, #%llu", r0, r1, imm);
 	case IR_INST_SUBI:
@@ -537,14 +557,22 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		out("%%r%ld = cmp.eq %%r%ld, %%r%ld", r0, r1, r2);
 	case IR_INST_NE:
 		out("%%r%ld = cmp.ne %%r%ld, %%r%ld", r0, r1, r2);
-	case IR_INST_LT:
-		out("%%r%ld = cmp.lt %%r%ld, %%r%ld", r0, r1, r2);
-	case IR_INST_LE:
-		out("%%r%ld = cmp.le %%r%ld, %%r%ld", r0, r1, r2);
-	case IR_INST_GT:
-		out("%%r%ld = cmp.gt %%r%ld, %%r%ld", r0, r1, r2);
-	case IR_INST_GE:
-		out("%%r%ld = cmp.ge %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_SLT:
+		out("%%r%ld = cmp.slt %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_SLE:
+		out("%%r%ld = cmp.sle %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_SGT:
+		out("%%r%ld = cmp.sgt %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_SGE:
+		out("%%r%ld = cmp.sge %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_ULT:
+		out("%%r%ld = cmp.ult %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_ULE:
+		out("%%r%ld = cmp.ule %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_UGT:
+		out("%%r%ld = cmp.ugt %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_UGE:
+		out("%%r%ld = cmp.uge %%r%ld, %%r%ld", r0, r1, r2);
 	case IR_INST_EQI:
 		out("%%r%ld = cmpi.eq %%r%ld, #%lld", r0, r1, imm);
 	case IR_INST_NEI:

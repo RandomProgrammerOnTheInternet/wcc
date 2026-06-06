@@ -9,21 +9,21 @@ static int unpromote(enum ins_type type)
 	case IR_INST_SUBI:
 		return IR_INST_SUB;
 	case IR_INST_MULI:
-		return IR_INST_MUL;
+		return IR_INST_SMUL;
 	case IR_INST_DIVI:
-		return IR_INST_DIV;
+		return IR_INST_SDIV;
 	case IR_INST_EQI:
 		return IR_INST_EQ;
 	case IR_INST_NEI:
 		return IR_INST_NE;
 	case IR_INST_LTI:
-		return IR_INST_LT;
+		return IR_INST_SLT;
 	case IR_INST_LEI:
-		return IR_INST_LE;
+		return IR_INST_SLE;
 	case IR_INST_GTI:
-		return IR_INST_GT;
+		return IR_INST_SGT;
 	case IR_INST_GEI:
-		return IR_INST_GE;
+		return IR_INST_SGE;
 	case IR_INST_BREQI:
 		return IR_INST_BREQ;
 	case IR_INST_BRNEI:
@@ -473,11 +473,23 @@ brcmp_main:
 		case IR_INST_SUBI:
 			fprintf(f, "\tsub x%d, x%d, #%llu\n", r0, r1, ins->imm);
 			break;
-		case IR_INST_MUL:
+		case IR_INST_SMUL:
+		case IR_INST_UMUL:
 			fprintf(f, "\tmul x%d, x%d, x%d\n", r0, r1, r2);
 			break;
-		case IR_INST_DIV:
+		case IR_INST_SDIV:
 			fprintf(f, "\tsdiv x%d, x%d, x%d\n", r0, r1, r2);
+			break;
+		case IR_INST_SMOD:
+			fprintf(f, "\tsdiv x10, x%d, x%d\n", r1, r2);
+			fprintf(f, "\tmsub x%d, x10, x%d, x%d\n", r0, r2, r1);
+			break;
+		case IR_INST_UDIV:
+			fprintf(f, "\tudiv x%d, x%d, x%d\n", r0, r1, r2);
+			break;
+		case IR_INST_UMOD:
+			fprintf(f, "\tudiv x10, x%d, x%d\n", r1, r2);
+			fprintf(f, "\tmsub x%d, x10, x%d, x%d\n", r0, r2, r1);
 			break;
 		case IR_INST_NEG:
 			fprintf(f, "\tneg x%d, x%d\n", r0, r1);
@@ -492,10 +504,10 @@ brcmp_main:
 			goto cmp_main;
 		case IR_INST_EQ:
 		case IR_INST_NE:
-		case IR_INST_LT:
-		case IR_INST_LE:
-		case IR_INST_GT:
-		case IR_INST_GE:
+		case IR_INST_SLT:
+		case IR_INST_SLE:
+		case IR_INST_SGT:
+		case IR_INST_SGE:
 			fprintf(f, "\tcmp x%d, x%d\n", r1, r2);
 
 cmp_main:
@@ -508,19 +520,19 @@ cmp_main:
 			case IR_INST_NEI:
 				fprintf(f, "\tcset x%d, ne\n", r0);
 				break;
-			case IR_INST_LT:
+			case IR_INST_SLT:
 			case IR_INST_LTI:
 				fprintf(f, "\tcset x%d, lt\n", r0);
 				break;
-			case IR_INST_LE:
+			case IR_INST_SLE:
 			case IR_INST_LEI:
 				fprintf(f, "\tcset x%d, le\n", r0);
 				break;
-			case IR_INST_GT:
+			case IR_INST_SGT:
 			case IR_INST_GTI:
 				fprintf(f, "\tcset x%d, gt\n", r0);
 				break;
-			case IR_INST_GE:
+			case IR_INST_SGE:
 			case IR_INST_GEI:
 				fprintf(f, "\tcset x%d, ge\n", r0);
 				break;

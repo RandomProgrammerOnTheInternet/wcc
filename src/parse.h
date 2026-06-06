@@ -13,6 +13,7 @@ enum node_kind {
 	NODE_SUB, /* subtraction - */
 	NODE_MUL, /* multiplication * */
 	NODE_DIV, /* division / */
+	NODE_MOD, /* modulus % */
 	NODE_NUM, /* numbers 123456 */
 	NODE_NEG, /* negation - */
 	NODE_ASSIGN, /* assignment = */
