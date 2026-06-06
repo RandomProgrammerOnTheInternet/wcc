@@ -692,7 +692,7 @@ void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt)
 	for(size_t i = 0; i < list_len(prog->funcs); i++) {
 		ir_func_t *func = prog->funcs[i];
 		ir_opt(func, opt, arch);
-		ir_finalize(func, arch == IR_ARCH_AARCH64_APPLE ? 3 : 5, arch);
+		ir_finalize(func, arch == IR_ARCH_AARCH64_APPLE ? 9 : 5, arch);
 		ir_func_emit(f, func, arch);
 	}
 
