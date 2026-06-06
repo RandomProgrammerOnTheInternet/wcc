@@ -2,29 +2,59 @@
 #include "zz/arena.h"
 #include "parse.h"
 
-type_t REAL_TY_INT =
-	(type_t){ .kind = TYPE_INT, .size = 4, .align = 4, .to = NULL };
-type_t *TY_INT = &REAL_TY_INT;
+type_t *TY_INT = &(type_t){ .kind = TYPE_INT,
+							.size = 4,
+							.align = 4,
+							.to = NULL,
+							.unsignd = false };
 
-type_t REAL_TY_LONG =
-	(type_t){ .kind = TYPE_LONG, .size = 8, .align = 8, .to = NULL };
-type_t *TY_LONG = &REAL_TY_LONG;
+type_t *TY_LONG = &(type_t){ .kind = TYPE_LONG,
+							 .size = 8,
+							 .align = 8,
+							 .to = NULL,
+							 .unsignd = false };
 
-type_t REAL_TY_CHAR =
-	(type_t){ .kind = TYPE_CHAR, .size = 1, .align = 1, .to = NULL };
-type_t *TY_CHAR = &REAL_TY_CHAR;
+type_t *TY_CHAR = &(type_t){ .kind = TYPE_CHAR,
+							 .size = 1,
+							 .align = 1,
+							 .to = NULL,
+							 .unsignd = false };
 
-type_t REAL_TY_SHORT =
-	(type_t){ .kind = TYPE_SHORT, .size = 2, .align = 2, .to = NULL };
-type_t *TY_SHORT = &REAL_TY_SHORT;
+type_t *TY_SHORT = &(type_t){ .kind = TYPE_SHORT,
+							  .size = 2,
+							  .align = 2,
+							  .to = NULL,
+							  .unsignd = false };
 
-type_t REAL_TY_VOID =
-	(type_t){ .kind = TYPE_VOID, .size = 0, .align = 0, .to = NULL };
-type_t *TY_VOID = &REAL_TY_VOID;
+type_t *TY_UINT = &(type_t){ .kind = TYPE_INT,
+							 .size = 4,
+							 .align = 4,
+							 .to = NULL,
+							 .unsignd = true };
 
-type_t REAL_TY_PTR =
-	(type_t){ .kind = TYPE_PTR, .size = 8, .align = 8, .to = NULL };
-type_t *TY_PTR = &REAL_TY_PTR;
+type_t *TY_ULONG = &(type_t){ .kind = TYPE_LONG,
+							  .size = 8,
+							  .align = 8,
+							  .to = NULL,
+							  .unsignd = true };
+
+type_t *TY_UCHAR = &(type_t){ .kind = TYPE_CHAR,
+							  .size = 1,
+							  .align = 1,
+							  .to = NULL,
+							  .unsignd = true };
+
+type_t *TY_USHORT = &(type_t){ .kind = TYPE_SHORT,
+							   .size = 2,
+							   .align = 2,
+							   .to = NULL,
+							   .unsignd = true };
+
+type_t *TY_VOID =
+	&(type_t){ .kind = TYPE_VOID, .size = 0, .align = 1, .to = NULL };
+
+type_t *TY_PTR =
+	&(type_t){ .kind = TYPE_PTR, .size = 8, .align = 8, .to = NULL };
 
 bool type_is_int(type_t *ty)
 {
@@ -40,7 +70,7 @@ bool type_is_ptr(type_t *ty)
 bool type_is_signed(type_t *ty)
 {
 	/* all integers are signed right now */
-	return type_is_int(ty);
+	return type_is_int(ty) && !ty->unsignd;
 }
 
 type_t *type_ptr_to(type_t *ty)

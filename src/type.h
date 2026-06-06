@@ -22,6 +22,7 @@ typedef struct type {
 	struct type *to; /* a pointer to? */
 	token_t *ident; /* identifier of type */
 	size_t alen; /* array length */
+	bool unsignd; /* is this type unsigned? */
 } type_t;
 
 extern type_t *TY_VOID;
@@ -29,6 +30,10 @@ extern type_t *TY_CHAR;
 extern type_t *TY_SHORT;
 extern type_t *TY_INT;
 extern type_t *TY_LONG;
+extern type_t *TY_UCHAR;
+extern type_t *TY_USHORT;
+extern type_t *TY_UINT;
+extern type_t *TY_ULONG;
 extern type_t *TY_PTR;
 
 bool type_is_int(type_t *ty);

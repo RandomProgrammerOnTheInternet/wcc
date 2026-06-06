@@ -165,7 +165,8 @@ static bool is_declspec(token_t *tok)
 {
 	if(token_eq(tok, "void") || token_eq(tok, "char") ||
 	   token_eq(tok, "short") || token_eq(tok, "long") ||
-	   token_eq(tok, "int") || token_eq(tok, "_Alignas")) {
+	   token_eq(tok, "int") || token_eq(tok, "signed") ||
+	   token_eq(tok, "unsigned") || token_eq(tok, "_Alignas")) {
 		return true;
 	}
 	return false;
@@ -210,6 +211,18 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 			*rest = tok;
 			res = TY_VOID;
 			break;
+		}
+
+		if(token_eq(tok, "signed")) {
+			tok = token_skip(tok, "signed");
+			res->unsignd = false;
+			continue;
+		}
+
+		if(token_eq(tok, "unsigned")) {
+			tok = token_skip(tok, "unsigned");
+			res->unsignd = true;
+			continue;
 		}
 
 		if(token_eq(tok, "_Alignas")) {
