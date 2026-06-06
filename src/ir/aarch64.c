@@ -1,115 +1,10 @@
 #include "ir.h"
 #include "aarch64.h"
 
-static int unpromote(enum ins_type type)
-{
-	switch(type) {
-	case IR_INST_ADDI:
-		return IR_INST_ADD;
-	case IR_INST_SUBI:
-		return IR_INST_SUB;
-	case IR_INST_MULI:
-		return IR_INST_SMUL;
-	case IR_INST_DIVI:
-		return IR_INST_SDIV;
-	case IR_INST_EQI:
-		return IR_INST_EQ;
-	case IR_INST_NEI:
-		return IR_INST_NE;
-	case IR_INST_LTI:
-		return IR_INST_SLT;
-	case IR_INST_LEI:
-		return IR_INST_SLE;
-	case IR_INST_GTI:
-		return IR_INST_SGT;
-	case IR_INST_GEI:
-		return IR_INST_SGE;
-	case IR_INST_BREQI:
-		return IR_INST_BREQ;
-	case IR_INST_BRNEI:
-		return IR_INST_BRNE;
-	case IR_INST_BRLTI:
-		return IR_INST_BRLT;
-	case IR_INST_BRLEI:
-		return IR_INST_BRLE;
-	case IR_INST_BRGTI:
-		return IR_INST_BRGT;
-	case IR_INST_BRGEI:
-		return IR_INST_BRGE;
-	default:
-		return IR_INST_NOP;
-	}
-	return IR_INST_NOP;
-}
-
-/* remove immediate from ins if immediate is out of [-4095, 4095] */
-/* for mul & div, remove it anyway */
-/* also turn addi x, neg -> subi x, pos
- *           subi x, neg -> addi x, pos */
-static void degrade_ins(ir_inst_t *prev, ir_inst_t *ins)
-{
-	if(!ir_inst_r2_imm(ins->type)) {
-		return;
-	}
-
-	if(ins->type == IR_INST_ADDI && (int64_t)ins->imm < 0) {
-		ins->type = IR_INST_SUBI;
-		ins->imm = -(int64_t)ins->imm;
-	}
-
-	if(ins->type == IR_INST_SUBI && (int64_t)ins->imm < 0) {
-		ins->type = IR_INST_ADDI;
-		ins->imm = -(int64_t)ins->imm;
-	}
-
-	int64_t imm = (int64_t)ins->imm;
-	if(ins->type == IR_INST_MULI || ins->type == IR_INST_DIVI) {
-		goto remove;
-	}
-
-	if(imm < -4095 || imm > 4095) {
-		reg_t *imml;
-remove:
-		imml = reg_make();
-		ir_inst_t *new_ins = ins_imm(imml, imm);
-		new_ins->next = ins;
-		prev->next = new_ins;
-		ins->type = unpromote(ins->type);
-		ins->r2 = imml;
-	}
-
-	return;
-}
-
-static void degrade_large_imms(ir_func_t *fun)
-{
-	for(size_t i = 0; i < list_len(fun->blocks); i++) {
-		ir_blk_t *blk = fun->blocks[i];
-
-		ir_inst_t *nop = ir_inst_make(IR_INST_NOP, NULL, NULL, NULL, 0);
-		nop->next = blk->insts;
-		blk->insts = nop;
-
-		ir_inst_t *prev = nop;
-		ir_inst_t *cur = blk->insts->next;
-		for(; cur; cur = cur->next) {
-			degrade_ins(prev, cur);
-			prev = cur;
-
-			if(ir_inst_is_term(cur->type)) {
-				break;
-			}
-		}
-
-		blk->insts = blk->insts->next;
-		ir_inst_delete(nop);
-	}
-}
-
 void ir_func_opt_aarch64(ir_func_t *fun, int opt_level)
 {
 	UNUSED(opt_level);
-	degrade_large_imms(fun);
+	UNUSED(fun);
 	return;
 }
 
@@ -372,49 +267,34 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			ir_ins_abi_call_aarch64(f, fn, blk, ins, ins->call_args, r0, r1,
 									r2);
 			break;
-		case IR_INST_BREQI:
-		case IR_INST_BRNEI:
-		case IR_INST_BRLTI:
-		case IR_INST_BRLEI:
-		case IR_INST_BRGTI:
-		case IR_INST_BRGEI:
-			fprintf(f, "\tcmp x%d, #%lld\n", r1, imm);
-			goto brcmp_main;
 		case IR_INST_BREQ:
 		case IR_INST_BRNE:
-		case IR_INST_BRLT:
-		case IR_INST_BRLE:
-		case IR_INST_BRGT:
-		case IR_INST_BRGE:
+		case IR_INST_BRSLT:
+		case IR_INST_BRSLE:
+		case IR_INST_BRSGT:
+		case IR_INST_BRSGE:
 			fprintf(f, "\tcmp x%d, x%d\n", r1, r2);
-brcmp_main:
 			switch(ins->type) {
 			default:
 				break;
 			/* remember: this is for false condition
 			 * so invert the specified condition */
 			case IR_INST_BREQ:
-			case IR_INST_BREQI:
 				fprintf(f, "\tbne .BB%ld\n", ins->false_blk->num);
 				break;
 			case IR_INST_BRNE:
-			case IR_INST_BRNEI:
 				fprintf(f, "\tbeq .BB%ld\n", ins->false_blk->num);
 				break;
-			case IR_INST_BRLT:
-			case IR_INST_BRLTI:
+			case IR_INST_BRSLT:
 				fprintf(f, "\tbge .BB%ld\n", ins->false_blk->num);
 				break;
-			case IR_INST_BRLE:
-			case IR_INST_BRLEI:
+			case IR_INST_BRSLE:
 				fprintf(f, "\tbgt .BB%ld\n", ins->false_blk->num);
 				break;
-			case IR_INST_BRGT:
-			case IR_INST_BRGTI:
+			case IR_INST_BRSGT:
 				fprintf(f, "\tble .BB%ld\n", ins->false_blk->num);
 				break;
-			case IR_INST_BRGE:
-			case IR_INST_BRGEI:
+			case IR_INST_BRSGE:
 				fprintf(f, "\tblt .BB%ld\n", ins->false_blk->num);
 				break;
 			}
@@ -467,12 +347,6 @@ brcmp_main:
 		case IR_INST_SUB:
 			fprintf(f, "\tsub x%d, x%d, x%d\n", r0, r1, r2);
 			break;
-		case IR_INST_ADDI:
-			fprintf(f, "\tadd x%d, x%d, #%llu\n", r0, r1, ins->imm);
-			break;
-		case IR_INST_SUBI:
-			fprintf(f, "\tsub x%d, x%d, #%llu\n", r0, r1, ins->imm);
-			break;
 		case IR_INST_SMUL:
 		case IR_INST_UMUL:
 			fprintf(f, "\tmul x%d, x%d, x%d\n", r0, r1, r2);
@@ -494,14 +368,6 @@ brcmp_main:
 		case IR_INST_NEG:
 			fprintf(f, "\tneg x%d, x%d\n", r0, r1);
 			break;
-		case IR_INST_EQI:
-		case IR_INST_NEI:
-		case IR_INST_LTI:
-		case IR_INST_LEI:
-		case IR_INST_GTI:
-		case IR_INST_GEI:
-			fprintf(f, "\tcmp x%d, #%lld\n", r1, imm);
-			goto cmp_main;
 		case IR_INST_EQ:
 		case IR_INST_NE:
 		case IR_INST_SLT:
@@ -509,31 +375,23 @@ brcmp_main:
 		case IR_INST_SGT:
 		case IR_INST_SGE:
 			fprintf(f, "\tcmp x%d, x%d\n", r1, r2);
-
-cmp_main:
 			switch(ins->type) {
 			case IR_INST_EQ:
-			case IR_INST_EQI:
 				fprintf(f, "\tcset x%d, eq\n", r0);
 				break;
 			case IR_INST_NE:
-			case IR_INST_NEI:
 				fprintf(f, "\tcset x%d, ne\n", r0);
 				break;
 			case IR_INST_SLT:
-			case IR_INST_LTI:
 				fprintf(f, "\tcset x%d, lt\n", r0);
 				break;
 			case IR_INST_SLE:
-			case IR_INST_LEI:
 				fprintf(f, "\tcset x%d, le\n", r0);
 				break;
 			case IR_INST_SGT:
-			case IR_INST_GTI:
 				fprintf(f, "\tcset x%d, gt\n", r0);
 				break;
 			case IR_INST_SGE:
-			case IR_INST_GEI:
 				fprintf(f, "\tcset x%d, ge\n", r0);
 				break;
 			default: /* wth? */

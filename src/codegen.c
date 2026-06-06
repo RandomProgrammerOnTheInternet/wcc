@@ -123,8 +123,15 @@ static UNUSEDA void emit_store_sz(type_t *typ, reg_t *r1, reg_t *r2)
 
 GEN_BRCMP(IR_INST_BREQ, breq);
 GEN_BRCMP(IR_INST_BRNE, brne);
-GEN_BRCMP(IR_INST_BRLT, brlt);
-GEN_BRCMP(IR_INST_BRLE, brle);
+GEN_BRCMP(IR_INST_BRSLT, brslt);
+GEN_BRCMP(IR_INST_BRSLE, brsle);
+GEN_BRCMP(IR_INST_BRSGT, brsgt);
+GEN_BRCMP(IR_INST_BRSGE, brsge);
+
+GEN_BRCMP(IR_INST_BRULT, brult);
+GEN_BRCMP(IR_INST_BRULE, brule);
+GEN_BRCMP(IR_INST_BRUGT, brugt);
+GEN_BRCMP(IR_INST_BRUGE, bruge);
 
 #define DEF_INS(name)                                         \
 	static UNUSEDA void INSNAME(name)(reg_t * r0, reg_t * r1) \
@@ -473,12 +480,39 @@ static void varopt(ir_func_t *func)
 {
 	// printf("BEFORE\n");
 	// ir_dump(func, 'v');
+
+	/* make sure leas are not used outside of loads and stores */
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(ins->type == IR_INST_LEAS) {
+				ins->r0->stack_loc = true;
+				continue;
+			}
+
+			if(ins->r0 && ins->r0->stack_loc && ins->type != IR_INST_LOAD &&
+			   ins->type != IR_INST_STORE) {
+				ins->r0->stack_loc = false;
+			}
+
+			if(ins->r1 && ins->r1->stack_loc && ins->type != IR_INST_LOAD &&
+			   ins->type != IR_INST_STORE) {
+				ins->r1->stack_loc = false;
+			}
+
+			if(ins->r2 && ins->r2->stack_loc && ins->type != IR_INST_LOAD &&
+			   ins->type != IR_INST_STORE) {
+				ins->r2->stack_loc = false;
+			}
+		}
+	}
+
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
 			if(ins->type == IR_INST_LEAS) {
 				obj_t *obj = (obj_t *)ins->r0->rhs;
-				if(!obj || obj->addressed) {
+				if(!obj || obj->addressed || !ins->r0->stack_loc) {
 					/* can't optimize sorry */
 					obj->skip = false;
 					continue;
@@ -564,7 +598,7 @@ void codegen_func(FILE *f, obj_t *fn, int opt_level, enum ir_arch backend)
 		fun->stack_needed = align_to(cur_fn->stack_size, 16);
 		codegen_expr_stmt(cur_fn->body);
 
-		// 		varopt(func);
+		varopt(func);
 
 		ir_inst_t *nop = ins_nop();
 		nop->next = fun->blocks[0]->insts;

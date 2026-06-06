@@ -16,24 +16,14 @@ static long runk(int reset)
 	return counter++;
 }
 
-/* does this instruction have r2 as an immediate? */
-int ir_inst_r2_imm(enum ins_type type)
-{
-	return type == IR_INST_ADDI || type == IR_INST_SUBI ||
-		   type == IR_INST_MULI || type == IR_INST_DIVI ||
-		   type == IR_INST_EQI || type == IR_INST_NEI || type == IR_INST_LTI ||
-		   type == IR_INST_LEI || type == IR_INST_GTI || type == IR_INST_GTI;
-}
-
 int ir_inst_is_term(enum ins_type type)
 {
 	return type == IR_INST_BR || type == IR_INST_RET || type == IR_INST_JMP ||
 		   type == IR_INST_BREQ || type == IR_INST_BRNE ||
-		   type == IR_INST_BRLT || type == IR_INST_BRLE ||
-		   type == IR_INST_BRGT || type == IR_INST_BRGE ||
-		   type == IR_INST_BREQI || type == IR_INST_BRNEI ||
-		   type == IR_INST_BRLTI || type == IR_INST_BRLEI ||
-		   type == IR_INST_BRGTI || type == IR_INST_BRGEI;
+		   type == IR_INST_BRSLT || type == IR_INST_BRSLE ||
+		   type == IR_INST_BRSGT || type == IR_INST_BRSGE ||
+		   type == IR_INST_BRULT || type == IR_INST_BRULE ||
+		   type == IR_INST_BRUGT || type == IR_INST_BRUGE;
 }
 
 /* is this instruction a comparison? */
@@ -42,9 +32,7 @@ int ir_inst_is_cmp(enum ins_type type)
 	return type == IR_INST_EQ || type == IR_INST_NE || type == IR_INST_SLE ||
 		   type == IR_INST_SLT || type == IR_INST_SGT || type == IR_INST_SGE ||
 		   type == IR_INST_ULE || type == IR_INST_ULT || type == IR_INST_UGT ||
-		   type == IR_INST_UGE || type == IR_INST_EQI || type == IR_INST_NEI ||
-		   type == IR_INST_LEI || type == IR_INST_LTI || type == IR_INST_GTI ||
-		   type == IR_INST_GEI;
+		   type == IR_INST_UGE;
 }
 
 /* is this instruction associative? (F(B, C) == F(C, B)) */
@@ -167,17 +155,6 @@ DEF_INS(ult, ULT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(ule, ULE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(ugt, UGT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(uge, UGE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(addi, ADDI, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
-DEF_INS(subi, SUBI, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
-DEF_INS(muli, MULI, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
-DEF_INS(divi, DIVI, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
-DEF_INS(eqi, EQI, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
-DEF_INS(nei, NEI, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
-DEF_INS(lti, LTI, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
-DEF_INS(lei, LEI, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
-DEF_INS(gti, GTI, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
-DEF_INS(gei, GEI, r0, r1, NULL, imm, reg_t *r0, reg_t *r1, long imm);
-
 DEF_INS(neg, NEG, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
 DEF_INS(leas, LEAS, r0, NULL, NULL, imm, reg_t *r0, long imm);
 DEF_INS(ret, RET, NULL, r1, NULL, 0, reg_t *r1);
@@ -255,31 +232,18 @@ GEN_STORES(IR_INST_STORES, stores, 8);
 		ins->true_blk = tb;                                                 \
 		return ins;                                                         \
 	}
-#define GEN_BRCMPI(c, name)                                                \
-	ir_inst_t *ins_##name(reg_t *r1, long imm, ir_blk_t *fb, ir_blk_t *tb) \
-	{                                                                      \
-		ir_inst_t *ins = ir_inst_make(c, NULL, r1, NULL, imm);             \
-		ins->false_blk = fb;                                               \
-		ins->true_blk = tb;                                                \
-		return ins;                                                        \
-	}
-
 GEN_BRCMP(IR_INST_BREQ, breq);
 GEN_BRCMP(IR_INST_BRNE, brne);
-GEN_BRCMP(IR_INST_BRLT, brlt);
-GEN_BRCMP(IR_INST_BRLE, brle);
-GEN_BRCMP(IR_INST_BRGT, brgt);
-GEN_BRCMP(IR_INST_BRGE, brge);
-
-GEN_BRCMPI(IR_INST_BREQI, breqi);
-GEN_BRCMPI(IR_INST_BRNEI, brnei);
-GEN_BRCMPI(IR_INST_BRLTI, brlti);
-GEN_BRCMPI(IR_INST_BRLEI, brlei);
-GEN_BRCMPI(IR_INST_BRGTI, brgti);
-GEN_BRCMPI(IR_INST_BRGEI, brgei);
+GEN_BRCMP(IR_INST_BRSLT, brslt);
+GEN_BRCMP(IR_INST_BRSLE, brsle);
+GEN_BRCMP(IR_INST_BRSGT, brsgt);
+GEN_BRCMP(IR_INST_BRSGE, brsge);
+GEN_BRCMP(IR_INST_BRULT, brult);
+GEN_BRCMP(IR_INST_BRULE, brule);
+GEN_BRCMP(IR_INST_BRUGT, brugt);
+GEN_BRCMP(IR_INST_BRUGE, bruge);
 
 #undef GEN_BRCMP
-#undef GEN_BRCMPI
 
 #define GEN_EXT(c, name, s)                                 \
 	ir_inst_t *ins_##name(reg_t *r0, reg_t *r1)             \
@@ -440,26 +404,14 @@ static void ir_fix_ins(ir_inst_t *ins)
 		FIX(NEG, r0, r1, xx);
 		FIX(BREQ, xx, r1, r2);
 		FIX(BRNE, xx, r1, r2);
-		FIX(BRLT, xx, r1, r2);
-		FIX(BRLE, xx, r1, r2);
-		FIX(BRGT, xx, r1, r2);
-		FIX(BRGE, xx, r1, r2);
-		FIX(BREQI, xx, r1, xx);
-		FIX(BRNEI, xx, r1, xx);
-		FIX(BRLTI, xx, r1, xx);
-		FIX(BRLEI, xx, r1, xx);
-		FIX(BRGTI, xx, r1, xx);
-		FIX(BRGEI, xx, r1, xx);
-		FIX(ADDI, r0, r1, xx);
-		FIX(SUBI, r0, r1, xx);
-		FIX(MULI, r0, r1, xx);
-		FIX(DIVI, r0, r1, xx);
-		FIX(EQI, r0, r1, xx);
-		FIX(NEI, r0, r1, xx);
-		FIX(LTI, r0, r1, xx);
-		FIX(LEI, r0, r1, xx);
-		FIX(GTI, r0, r1, xx);
-		FIX(GEI, r0, r1, xx);
+		FIX(BRSLT, xx, r1, r2);
+		FIX(BRSLE, xx, r1, r2);
+		FIX(BRSGT, xx, r1, r2);
+		FIX(BRSGE, xx, r1, r2);
+		FIX(BRULT, xx, r1, r2);
+		FIX(BRULE, xx, r1, r2);
+		FIX(BRUGT, xx, r1, r2);
+		FIX(BRUGE, xx, r1, r2);
 		FIX(ZEXT, r0, r1, xx);
 		FIX(SEXT, r0, r1, xx);
 		FIX(LOAD, r0, r1, xx);
@@ -543,14 +495,6 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		out("%%r%ld = udiv %%r%ld, %%r%ld", r0, r1, r2);
 	case IR_INST_UMOD:
 		out("%%r%ld = umod %%r%ld, %%r%ld", r0, r1, r2);
-	case IR_INST_ADDI:
-		out("%%r%ld = addi %%r%ld, #%llu", r0, r1, imm);
-	case IR_INST_SUBI:
-		out("%%r%ld = subi %%r%ld, #%llu", r0, r1, imm);
-	case IR_INST_MULI:
-		out("%%r%ld = muli %%r%ld, #%lld", r0, r1, imm);
-	case IR_INST_DIVI:
-		out("%%r%ld = divi %%r%ld, #%lld", r0, r1, imm);
 	case IR_INST_NEG:
 		out("%%r%ld = neg %%r%ld", r0, r1);
 	case IR_INST_EQ:
@@ -573,18 +517,6 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		out("%%r%ld = cmp.ugt %%r%ld, %%r%ld", r0, r1, r2);
 	case IR_INST_UGE:
 		out("%%r%ld = cmp.uge %%r%ld, %%r%ld", r0, r1, r2);
-	case IR_INST_EQI:
-		out("%%r%ld = cmpi.eq %%r%ld, #%lld", r0, r1, imm);
-	case IR_INST_NEI:
-		out("%%r%ld = cmpi.ne %%r%ld, #%lld", r0, r1, imm);
-	case IR_INST_LTI:
-		out("%%r%ld = cmpi.lt %%r%ld, #%lld", r0, r1, imm);
-	case IR_INST_LEI:
-		out("%%r%ld = cmpi.le %%r%ld, #%lld", r0, r1, imm);
-	case IR_INST_GTI:
-		out("%%r%ld = cmpi.gt %%r%ld, #%lld", r0, r1, imm);
-	case IR_INST_GEI:
-		out("%%r%ld = cmpi.ge %%r%ld, #%lld", r0, r1, imm);
 	case IR_INST_LOAD:
 		out("%%r%ld = load%s%s %%r%ld", r0, suf, ext, r1);
 	case IR_INST_STORE:
@@ -621,35 +553,29 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 	case IR_INST_BRNE:
 		out("br.ne %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);
-	case IR_INST_BRLT:
-		out("br.lt %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
+	case IR_INST_BRSLT:
+		out("br.slt %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);
-	case IR_INST_BRLE:
-		out("br.le %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
+	case IR_INST_BRSLE:
+		out("br.sle %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);
-	case IR_INST_BRGT:
-		out("br.gt %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
+	case IR_INST_BRSGT:
+		out("br.sgt %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);
-	case IR_INST_BRGE:
-		out("br.ge %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
+	case IR_INST_BRSGE:
+		out("br.sge %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);
-	case IR_INST_BREQI:
-		out("br.eqi %%r%ld, %lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+	case IR_INST_BRULT:
+		out("br.ult %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);
-	case IR_INST_BRNEI:
-		out("br.nei %%r%ld, %lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+	case IR_INST_BRULE:
+		out("br.ule %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);
-	case IR_INST_BRLTI:
-		out("br.lti %%r%ld, %lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+	case IR_INST_BRUGT:
+		out("br.ugt %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);
-	case IR_INST_BRLEI:
-		out("br.lei %%r%ld, %lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
-			ins->false_blk->num);
-	case IR_INST_BRGTI:
-		out("br.gti %%r%ld, %lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
-			ins->false_blk->num);
-	case IR_INST_BRGEI:
-		out("br.gei %%r%ld, %lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+	case IR_INST_BRUGE:
+		out("br.uge %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);
 	case IR_INST_RET:
 		out("ret %%r%ld", r1);
@@ -766,7 +692,7 @@ void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt)
 	for(size_t i = 0; i < list_len(prog->funcs); i++) {
 		ir_func_t *func = prog->funcs[i];
 		ir_opt(func, opt, arch);
-		ir_finalize(func, arch == IR_ARCH_AARCH64_APPLE ? 9 : 5, arch);
+		ir_finalize(func, arch == IR_ARCH_AARCH64_APPLE ? 3 : 5, arch);
 		ir_func_emit(f, func, arch);
 	}
 

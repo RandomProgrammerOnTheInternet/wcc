@@ -165,60 +165,24 @@ static int cmp_to_br(enum ins_type ins)
 	case IR_INST_NE:
 		return IR_INST_BRNE;
 	case IR_INST_SLT:
-		return IR_INST_BRLT;
+		return IR_INST_BRSLT;
 	case IR_INST_SLE:
-		return IR_INST_BRLE;
+		return IR_INST_BRSLE;
 	case IR_INST_SGT:
-		return IR_INST_BRGT;
+		return IR_INST_BRSGT;
 	case IR_INST_SGE:
-		return IR_INST_BRGE;
-	case IR_INST_EQI:
-		return IR_INST_BREQI;
-	case IR_INST_NEI:
-		return IR_INST_BRNEI;
-	case IR_INST_LTI:
-		return IR_INST_BRLTI;
-	case IR_INST_LEI:
-		return IR_INST_BRLEI;
-	case IR_INST_GTI:
-		return IR_INST_BRGTI;
-	case IR_INST_GEI:
-		return IR_INST_BRGEI;
+		return IR_INST_BRSGE;
+	case IR_INST_ULT:
+		return IR_INST_BRULT;
+	case IR_INST_ULE:
+		return IR_INST_BRULE;
+	case IR_INST_UGT:
+		return IR_INST_BRUGT;
+	case IR_INST_UGE:
+		return IR_INST_BRUGE;
 	default:
 		return IR_INST_NOP;
 	}
-}
-
-static int ir_optzero(ir_func_t *func)
-{
-	int changed = 0;
-	for(size_t i = 0; i < list_len(func->blocks); i++) {
-		ir_blk_t *blk = func->blocks[i];
-		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-			if(ins->imm) {
-				continue;
-			}
-			switch(ins->type) {
-			case IR_INST_ADDI:
-			case IR_INST_SUBI:
-				/* %r0 = addi/subi %r1, 0 ->
-					 * %r0 = %r1 */
-				ins->type = IR_INST_MOV;
-				changed = 1;
-				break;
-			case IR_INST_MULI:
-			case IR_INST_DIVI:
-				/* %r0 = muli/divi %r1, 0 ->
-					 * %r0 = #0 */
-				ins->type = IR_INST_IMM;
-				changed = 1;
-				break;
-			default:
-				break;
-			}
-		}
-	}
-	return changed;
 }
 
 /* optimize
@@ -384,7 +348,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 			change |= ir_stackopt(func);
 			ir_nopremover(func);
 			change |= ir_stackreduce(func);
-			change |= ir_mov_elim(func);
+			// change |= ir_mov_elim(func);
 			ir_nopremover(func);
 			ir_fix(func);
 		}
@@ -419,7 +383,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 
 	if(debug) {
 		printf("After common opts:\n");
-		// ir_dump(func, 'v');
+		ir_dump(func, 'v');
 		printf("****\n");
 	}
 

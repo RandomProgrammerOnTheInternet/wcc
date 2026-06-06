@@ -254,11 +254,28 @@ static void rewrite_store_spill(ir_inst_t *ins)
 	return;
 }
 
+/* turns A = F(B, C) where they are all spilled into A = B; A = F(A, C) */
+static void rewrite_make_2op(ir_inst_t *ins_prev, ir_inst_t *ins)
+{
+	ir_inst_t *mov = ins_mov(ins->r0, ins->r1);
+	ins->r1 = ins->r0;
+	ins_prev->next = mov;
+	mov->next = ins;
+	return;
+}
+
 /* spill registers used in `ins` if needed */
 static void rewrite_ins(ir_inst_t *ins_prev, ir_inst_t *ins)
 {
 	if(ins->type == IR_INST_LOADSS || ins->type == IR_INST_STORESS) {
 		return;
+	}
+
+	/* edge case */
+	if(ins->r0 && ins->r1 && ins->r2 && ins->r0->spilld && ins->r1->spilld &&
+	   ins->r2->spilld) {
+		rewrite_make_2op(ins_prev, ins);
+		ins_prev = ins_prev->next;
 	}
 
 	if(ins->r0 && ins->r0->spilld) {
