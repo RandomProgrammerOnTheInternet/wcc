@@ -273,6 +273,10 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_BRSLE:
 		case IR_INST_BRSGT:
 		case IR_INST_BRSGE:
+		case IR_INST_BRULT:
+		case IR_INST_BRULE:
+		case IR_INST_BRUGT:
+		case IR_INST_BRUGE:
 			fprintf(f, "\tcmp x%d, x%d\n", r1, r2);
 			switch(ins->type) {
 			default:
@@ -297,6 +301,18 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			case IR_INST_BRSGE:
 				fprintf(f, "\tblt .BB%ld\n", ins->false_blk->num);
 				break;
+			case IR_INST_BRULT:
+				fprintf(f, "\tbhs .BB%ld\n", ins->false_blk->num);
+				break;
+			case IR_INST_BRULE:
+				fprintf(f, "\tbhi .BB%ld\n", ins->false_blk->num);
+				break;
+			case IR_INST_BRUGT:
+				fprintf(f, "\tbls .BB%ld\n", ins->false_blk->num);
+				break;
+			case IR_INST_BRUGE:
+				fprintf(f, "\tblo .BB%ld\n", ins->false_blk->num);
+				break;
 			}
 			if(ins->true_blk->num == blk->num + 1) {
 				/* fallthrough */
@@ -306,8 +322,7 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			fprintf(f, "\tb .BB%ld\n", ins->true_blk->num);
 			break;
 		case IR_INST_BR:
-			fprintf(f, "\ttst x%d, x%d\n", r1, r1);
-			fprintf(f, "\tbeq .BB%ld\n", ins->false_blk->num);
+			fprintf(f, "\tcbz x%d, .BB%ld\n", r1, ins->false_blk->num);
 			/* big brain optimization */
 			/* fallthrough to true block if in front of us */
 			if(ins->true_blk->num == blk->num + 1) {
@@ -374,6 +389,10 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_SLE:
 		case IR_INST_SGT:
 		case IR_INST_SGE:
+		case IR_INST_ULT:
+		case IR_INST_ULE:
+		case IR_INST_UGT:
+		case IR_INST_UGE:
 			fprintf(f, "\tcmp x%d, x%d\n", r1, r2);
 			switch(ins->type) {
 			case IR_INST_EQ:
@@ -393,6 +412,18 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 				break;
 			case IR_INST_SGE:
 				fprintf(f, "\tcset x%d, ge\n", r0);
+				break;
+			case IR_INST_ULT:
+				fprintf(f, "\tcset x%d, lo\n", r0);
+				break;
+			case IR_INST_ULE:
+				fprintf(f, "\tcset x%d, ls\n", r0);
+				break;
+			case IR_INST_UGT:
+				fprintf(f, "\tcset x%d, hi\n", r0);
+				break;
+			case IR_INST_UGE:
+				fprintf(f, "\tcset x%d, hs\n", r0);
 				break;
 			default: /* wth? */
 				break;

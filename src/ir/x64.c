@@ -316,6 +316,10 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_BRSLE:
 		case IR_INST_BRSGT:
 		case IR_INST_BRSGE:
+		case IR_INST_BRULT:
+		case IR_INST_BRULE:
+		case IR_INST_BRUGT:
+		case IR_INST_BRUGE:
 			fprintf(f, "\tcmp %s, %s\n", r1, r2);
 			switch(ins->type) {
 			default:
@@ -337,6 +341,18 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 				break;
 			case IR_INST_BRSGE:
 				fprintf(f, "\tjl .BB%ld\n", ins->false_blk->num);
+				break;
+			case IR_INST_BRULT:
+				fprintf(f, "\tjae .BB%ld\n", ins->false_blk->num);
+				break;
+			case IR_INST_BRULE:
+				fprintf(f, "\tja .BB%ld\n", ins->false_blk->num);
+				break;
+			case IR_INST_BRUGT:
+				fprintf(f, "\tjbe .BB%ld\n", ins->false_blk->num);
+				break;
+			case IR_INST_BRUGE:
+				fprintf(f, "\tjb .BB%ld\n", ins->false_blk->num);
 				break;
 			}
 			if(ins->true_blk->num == blk->num + 1) {
@@ -435,6 +451,10 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_SLE:
 		case IR_INST_SGT:
 		case IR_INST_SGE:
+		case IR_INST_ULT:
+		case IR_INST_ULE:
+		case IR_INST_UGT:
+		case IR_INST_UGE:
 			fprintf(f, "\tcmp %s, %s\n", r1, r2);
 
 			switch(ins->type) {
@@ -455,6 +475,18 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 				break;
 			case IR_INST_SGE:
 				fprintf(f, "\tsetge %s\n", r0b);
+				break;
+			case IR_INST_ULT:
+				fprintf(f, "\tsetb %s\n", r0b);
+				break;
+			case IR_INST_ULE:
+				fprintf(f, "\tsetbe %s\n", r0b);
+				break;
+			case IR_INST_UGT:
+				fprintf(f, "\tseta %s\n", r0b);
+				break;
+			case IR_INST_UGE:
+				fprintf(f, "\tsetae %s\n", r0b);
 				break;
 			default: /* wth? */
 				break;
