@@ -7,7 +7,6 @@ Generates code for aarch64 & x86_64. I have not tested if the x86_64 backend wor
 
 You can also check out the IR backend in `src/ir`, which can probably be ported to other projects.
 
-> Rewrite incoming...
 
 ## Usage
 
@@ -21,6 +20,14 @@ Usage: ./bin/wcc <input file> [-o <output asm file>] [-t <arch>-<abi>] [-d] [-?/
   -O0/1/2/3:            optimization level (default: 0)
   -?, --help:           this page
 ```
+
+
+## Credits
+
+- `chibbicc`, `9cc`
+- `godbolt.org` (to see how `clang` generated some non-trivial stuff)
+- RandomProgrammerOnTheInternet - advice, x64-sysv backend tester
+- epic-coder-64 - advice, x64-sysv backend tester
 
 ## Build
 
@@ -45,4 +52,4 @@ $ make help
 ```sh
 $ make count
 ```
-Swag Point Counter: `5451`
+Swag Point Counter: `5512`

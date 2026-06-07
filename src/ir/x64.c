@@ -90,9 +90,10 @@ void ir_prog_end_x64_sysv(FILE *f, ir_prog_t *prog)
 
 void ir_glob_emit_x64_sysv(FILE *f, ir_global_t *glob)
 {
-	UNUSED(f);
-	UNUSED(glob);
-	ERROR("todo");
+	fprintf(f, "\t.global %s\n", glob->name);
+	fprintf(f, "\t.bss\n");
+	fprintf(f, "%s:\n", glob->name);
+	fprintf(f, "\t.zero %zu\n", glob->size);
 	return;
 }
 
@@ -602,6 +603,7 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 	char *name = fun->name;
 	/* correct syntax */
 	fprintf(f, "\t.global %s\n", name);
+	fprintf(f, "\t.text\n");
 	fprintf(f, "%s:\n", name);
 
 	/* enter stack frame */
