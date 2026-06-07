@@ -617,7 +617,7 @@ parse:
 		goto parse;
 	}
 
-	if(token_eq(tok, "<<")) {
+	if(token_eq(tok, ">>")) {
 		node = node_bin(NODE_SHR, node, parse_add(tok, &tok), tok);
 		goto parse;
 	}
@@ -656,7 +656,7 @@ static node_t *parse_or(token_t *tok, token_t **rest)
 {
 	node_t *node = parse_eor(tok, &tok);
 parse:
-	if(token_eq(tok, "^")) {
+	if(token_eq(tok, "|")) {
 		node = node_bin(NODE_OR, parse_eor(tok, &tok), node, tok);
 		goto parse;
 	}

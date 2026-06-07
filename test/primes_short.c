@@ -13,7 +13,7 @@ int primes()
 	for(int i = 2; i < 1000; i = i + 1) {
 		iter = i + i;
 		while(iter < 1000) {
-			array[iter] = 1;
+			array[iter] = array[iter] | 1;
 			iter = iter + i;
 		}
 	}

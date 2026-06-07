@@ -13,7 +13,7 @@ static bool ins_is_3source(enum ins_type t)
 /* is the instruction in form A = F(B) where it needs A and B to be separate? */
 static bool ins_is_2source(enum ins_type t)
 {
-	return t == IR_INST_NEG || t == IR_INST_NEG;
+	return t == IR_INST_NEG || t == IR_INST_NOT;
 }
 
 static void turn_into_x64_ins(ir_inst_t *prev, ir_inst_t *cur)
@@ -656,6 +656,7 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 	fprintf(f, "%s_ret:\n", name);
 
 	ir_func_restore_regs(f, fun);
+	fprintf(f, "\tmov rsp, rbp\n");
 	fprintf(f, "\tpop rbp\n");
 	fprintf(f, "\tret\n");
 	fprintf(f, "\n");
