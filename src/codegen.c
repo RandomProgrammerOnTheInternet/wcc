@@ -383,12 +383,21 @@ void codegen_expr_stmt(node_t *node)
 		(void)codegen_expr(node->lhs);
 		break;
 	case NODE_RET: {
-		reg_t *retval = codegen_expr(node->lhs);
-		reg_t *ext = reg_make();
-		ir_inst_t *ins = ins_sextl(ext, retval);
-		ins->size = node->lhs->type->size;
-		ir_blk_add(outblk, ins);
-		emit_ret(ext);
+		type_t *rettype = fun_obj->type->to;
+		if(node->lhs && rettype->kind != TYPE_VOID) {
+			reg_t *retval = codegen_expr(node->lhs);
+			reg_t *ext = reg_make();
+			ir_inst_t *ins = ins_sextl(ext, retval);
+			ins->size = node->lhs->type->size;
+			ir_blk_add(outblk, ins);
+			emit_ret(ext);
+		} else if(!node->lhs && rettype->kind == TYPE_VOID) {
+			emit_ret(NULL);
+		} else if(node->lhs && rettype->kind == TYPE_VOID) {
+			compile_err(node->tok->loc, "function cannot return something");
+		} else if(!node->lhs && rettype->kind != TYPE_VOID) {
+			compile_err(node->tok->loc, "function has to return something");
+		}
 		break;
 	}
 	case NODE_BLOCK:

@@ -30,7 +30,7 @@ declaration = declspec init-declarator ("," init-declarator)* ";"
 parameter-declaration = declspec declarator
 parameter-list = parameter-declaration ("," parameter-declaration)*
 function-definition = declspec declarator "(" parameter-list? ")" compound-stmt
-stmt = "return" expr ";"
+stmt = "return" expr? ";"
       | "if" "(" expr ")" stmt ("else" stmt)?
       | "for" "(" expr-stmt expr? ";" expr? ")" stmt
       | "for" "(" declaration expr? ";" expr? ")" stmt

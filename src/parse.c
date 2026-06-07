@@ -511,7 +511,12 @@ static node_t *parse_stmt(token_t *tok, token_t **rest)
 {
 	/* return */
 	if(tok->kind == TOK_KEYWORD && token_eq(tok, "return")) {
-		node_t *stmt = node_unary(NODE_RET, parse_expr(tok->next, &tok), tok);
+		node_t *stmt = node_unary(NODE_RET, NULL, tok);
+		if(token_eq(tok->next, ";")) {
+			*rest = token_skip(tok->next, ";");
+			return stmt;
+		}
+		stmt->lhs = parse_expr(tok->next, &tok);
 		*rest = token_skip(tok, ";");
 		return stmt;
 	}

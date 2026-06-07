@@ -1,10 +1,10 @@
 int a;
 
-int reset_a()
+void reset_a()
 {
 	int olda = a;
 	a = 0;
-	return olda;
+	return;
 }
 
 int increment_a()
@@ -23,7 +23,7 @@ int decrement_a()
 
 int main()
 {
-	int dont_care = reset_a();
+	reset_a();
 	int x = increment_a(); // x=0
 	int y = increment_a(); // y=1
 	int z = decrement_a(); // z=2, a=1
