@@ -655,8 +655,8 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 	/* leave stack frame */
 	fprintf(f, "%s_ret:\n", name);
 
-	ir_func_restore_regs(f, fun);
 	fprintf(f, "\tmov rsp, rbp\n");
+	ir_func_restore_regs(f, fun);
 	fprintf(f, "\tpop rbp\n");
 	fprintf(f, "\tret\n");
 	fprintf(f, "\n");
