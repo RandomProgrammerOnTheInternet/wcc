@@ -184,22 +184,31 @@ int main(int argc, char *argv[])
 
 	token_t *head = lex_do(prog);
 	token_t *cur = head;
-	obj_t *prog_node = parse_do(cur);
-	codegen_func(emit_to, prog_node, opt_level, arch);
+	LIST(obj_t *) globals = parse_do(cur);
+	codegen_func(emit_to, globals, opt_level, arch);
 
 	free(prog);
 
 	fclose(emit_to);
 
 	token_delete_all(head);
-	node_t *curnode = prog_node->body;
-	node_t *nxtnode = NULL;
-	while(curnode) {
-		nxtnode = curnode->next;
-		node_delete_all(curnode);
-		curnode = nxtnode;
+	for(size_t i = 0; i < list_len(globals); i++) {
+		node_t *curnode = globals[i]->body;
+		node_t *nxtnode = NULL;
+		while(curnode) {
+			nxtnode = curnode->next;
+			node_delete_all(curnode);
+			curnode = nxtnode;
+		}
 	}
-	obj_delete_all(prog_node->vars);
+
+	for(size_t i = 0; i < list_len(globals); i++) {
+		if(globals[i]) {
+			obj_delete_all(globals[i]->vars);
+		}
+	}
+
+	list_delete(globals);
 
 	scr_cleanup();
 	return 0;

@@ -490,7 +490,11 @@ static UNUSEDA void assign_globals(LIST(obj_t *) globals)
 {
 	for(size_t i = 0; i < list_len(globals); i++) {
 		obj_t *glob = globals[i];
-		glob->glob = ir_glob_make(glob->name, glob->type->size, NULL);
+		if(!glob || glob->is_func) {
+			continue;
+		}
+		glob->glob =
+			ir_glob_make(glob->name, glob->type->size, glob->type->align, NULL);
 	}
 	return;
 }
@@ -545,9 +549,6 @@ static size_t calc_stack_needed(obj_t *fn)
 /* optimize out load/stores, place it in own register */
 static void varopt(ir_func_t *func)
 {
-	// printf("BEFORE\n");
-	// ir_dump(func, 'v');
-
 	/* make sure leas are not used outside of loads and stores */
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
@@ -626,20 +627,32 @@ static void varopt(ir_func_t *func)
 			}
 		}
 	}
-	// printf("AFTER\n");
-	// ir_dump(fun, 'v');
 	return;
 }
 
 /* generates code for a function */
-void codegen_func(FILE *f, obj_t *fn, int opt_level, enum ir_arch backend)
+void codegen_func(FILE *f, LIST(obj_t *) globals, int opt_level,
+				  enum ir_arch backend)
 {
 	ir_prog_t prog = { 0 };
 	prog.globs = list_make(ir_global_t *);
 	prog.funcs = list_make(ir_func_t *);
-	obj_t *cur_fn = fn;
 	blk_num = 0;
-	while(cur_fn) {
+
+	assign_globals(globals);
+
+	for(size_t i = 0; i < list_len(globals); i++) {
+		obj_t *cur_fn = globals[i];
+
+		if(cur_fn && cur_fn->is_global) {
+			list_append(prog.globs, cur_fn->glob);
+			continue;
+		}
+
+		if(!cur_fn) {
+			continue;
+		}
+
 		ENSURE(cur_fn->is_func, "tried to generate code for a variable");
 		reg_reset_counter();
 		ir_func_t *func = ir_func_make(cur_fn->name);
@@ -665,8 +678,6 @@ void codegen_func(FILE *f, obj_t *fn, int opt_level, enum ir_arch backend)
 		fun->stack_needed = align_to(cur_fn->stack_size, 16);
 		codegen_expr_stmt(cur_fn->body);
 
-		// printf("Before varopt:\n");
-		// ir_dump(fun, 'v');
 		varopt(func);
 
 		ir_inst_t *nop = ins_nop();
@@ -695,14 +706,15 @@ void codegen_func(FILE *f, obj_t *fn, int opt_level, enum ir_arch backend)
 		fun->align_needed = align_to(max_align, 16);
 
 		list_append(prog.funcs, fun);
-		cur_fn = cur_fn->next;
 	}
 
 	ir_prog_compile(f, &prog, backend, opt_level);
 	for(size_t i = 0; i < list_len(prog.funcs); i++) {
 		ir_func_delete(prog.funcs[i]);
 	}
-
+	for(size_t i = 0; i < list_len(prog.globs); i++) {
+		ir_glob_delete(prog.globs[i]);
+	}
 	list_delete(prog.funcs);
 	list_delete(prog.globs);
 	return;

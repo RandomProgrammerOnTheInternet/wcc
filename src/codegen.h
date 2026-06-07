@@ -7,6 +7,7 @@
 #include "parse.h"
 
 /* generates code for a function */
-void codegen_func(FILE *f, obj_t *fn, int opt_level, enum ir_arch backend);
+void codegen_func(FILE *f, LIST(obj_t *) globals, int opt_level,
+				  enum ir_arch backend);
 
 #endif /* CODEGEN_H_ */

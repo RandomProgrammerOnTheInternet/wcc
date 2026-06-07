@@ -169,6 +169,7 @@ typedef struct ir_func {
 typedef struct ir_global {
 	char *name; /* name of this global variable */
 	size_t size; /* size of this global variable */
+	size_t align; /* alignment of this global variable */
 	bool has_data; /* is this global variable initalized with data? */
 	uint8_t *data; /* if so, the data */
 } ir_global_t;
@@ -325,7 +326,7 @@ void ir_blk_add(ir_blk_t *blk, ir_inst_t *inst);
 void ir_fix(ir_func_t *func);
 
 /* make a global variable */
-ir_global_t *ir_glob_make(char *name, size_t size, uint8_t *data);
+ir_global_t *ir_glob_make(char *name, size_t size, size_t align, uint8_t *data);
 
 /* delete a global variable */
 void ir_glob_delete(ir_global_t *glob);

@@ -349,11 +349,12 @@ void ir_blk_delete(ir_blk_t *blk)
 }
 
 /* make a global variable */
-ir_global_t *ir_glob_make(char *name, size_t size, uint8_t *data)
+ir_global_t *ir_glob_make(char *name, size_t size, size_t align, uint8_t *data)
 {
 	ir_global_t *glob = zalloc(sizeof(ir_global_t));
 	glob->name = name;
 	glob->size = size;
+	glob->align = align;
 	glob->data = data;
 	if(data) {
 		glob->has_data = true;

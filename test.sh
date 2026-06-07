@@ -60,6 +60,7 @@ assert 1 "arrays.c"
 #todo proper alignment support (need to switch to sp-rel addressing)
 #assert 6 "align.c"
 assert 164 "sizeof_alignof.c"
+assert 4 "globals.c"
 
 if [ "$passing" = "1" ]; then
   echo "all tests passed"

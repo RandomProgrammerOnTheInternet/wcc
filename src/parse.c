@@ -3,7 +3,8 @@
 #include "lex.h"
 #include "type.h"
 
-static LIST(obj_t *) locals = NULL;
+LIST(obj_t *) locals = NULL;
+LIST(obj_t *) globals = NULL;
 
 /* makes a node */
 node_t *node_make(enum node_kind kind, token_t *tok)
@@ -87,14 +88,9 @@ node_t *node_var(obj_t *var, token_t *tok)
 
 /* -- variables/objects -- */
 
-/* create an object with a name `name` */
-obj_t *obj_make(char *name, type_t *type, bool is_func)
+static obj_t *obj_make_noadd(char *name, type_t *type, bool is_func)
 {
-	/* also inserts it into locals list */
 	obj_t *obj = scr_alloc(sizeof(obj_t));
-	if(!is_func) {
-		list_append(locals, obj);
-	}
 	obj->is_func = is_func;
 	obj->name = name;
 	obj->off = 0;
@@ -102,18 +98,51 @@ obj_t *obj_make(char *name, type_t *type, bool is_func)
 	return obj;
 }
 
+/* create an object with a name `name` */
+obj_t *obj_make(char *name, type_t *type, bool is_func)
+{
+	obj_t *obj = obj_make_noadd(name, type, is_func);
+	list_append(locals, obj);
+	return obj;
+}
+
+/* create a global object */
+
+obj_t *obj_make_global(char *name, type_t *type, bool is_func)
+{
+	obj_t *obj = obj_make_noadd(name, type, is_func);
+	obj->is_global = true;
+	list_append(globals, obj);
+	return obj;
+}
+
 /* finds a local variable given token */
 static obj_t *find_var(token_t *tok)
 {
-	/* traverse linked list */
-	for(size_t i = 0; i < list_len(locals); i++) {
-		obj_t *obj = locals[i];
-		if(obj->is_func) {
-			continue;
+	/* traverse list */
+	if(locals) {
+		for(size_t i = 0; i < list_len(locals); i++) {
+			obj_t *obj = locals[i];
+			if(!obj || obj->is_func) {
+				continue;
+			}
+			if(strlen(obj->name) == tok->len &&
+			   strncmp(obj->name, tok->loc, tok->len) == 0) {
+				return obj;
+			}
 		}
-		if(strlen(obj->name) == tok->len &&
-		   strncmp(obj->name, tok->loc, tok->len) == 0) {
-			return obj;
+	}
+
+	if(globals) {
+		for(size_t i = 0; i < list_len(globals); i++) {
+			obj_t *obj = globals[i];
+			if(!obj || obj->is_func) {
+				continue;
+			}
+			if(strlen(obj->name) == tok->len &&
+			   strncmp(obj->name, tok->loc, tok->len) == 0) {
+				return obj;
+			}
 		}
 	}
 	return NULL;
@@ -129,6 +158,9 @@ void obj_delete(obj_t *obj)
 /* deletes all objects in list */
 void obj_delete_all(LIST(obj_t *) objs)
 {
+	if(!objs) {
+		return;
+	}
 	for(size_t i = 0; i < list_len(objs); i++) {
 		obj_delete(objs[i]);
 	}
@@ -889,11 +921,41 @@ static type_t *parse_parameter_declaration(token_t *tok, token_t **rest)
 	return complete;
 }
 
-static obj_t *parse_function_def(token_t *tok, token_t **rest)
+static void parse_global_var(type_t *decltype, token_t *tok, token_t **rest)
+{
+	obj_t *global = NULL, *found = NULL;
+
+	if((found = find_var(decltype->ident))) {
+		global = found;
+	} else {
+		global = obj_make_global(mystrndup(decltype->ident->loc,
+										   decltype->ident->len),
+								 decltype, false);
+	}
+
+	while(token_eq(tok, ",")) {
+		tok = token_skip(tok, ",");
+		if((found = find_var(decltype->ident))) {
+			global = found;
+		} else {
+			global = obj_make_global(mystrndup(decltype->ident->loc,
+											   decltype->ident->len),
+									 decltype, false);
+		}
+	}
+
+	if(!token_eq(tok, ";")) {
+		compile_err(tok->loc, "expected a semicolon");
+	}
+	tok = token_skip(tok, ";");
+
+	*rest = tok;
+	return;
+}
+
+static obj_t *parse_function_def(type_t *decltype, token_t *tok, token_t **rest)
 {
 	locals = list_make(obj_t *);
-	type_t *ret_type = parse_declspec(tok, &tok);
-	type_t *decltype = parse_declarator(ret_type, tok, &tok);
 	obj_t *func =
 		obj_make(mystrndup(decltype->ident->loc, decltype->ident->len),
 				 type_func_to(decltype), true);
@@ -942,17 +1004,29 @@ end:
 }
 
 /* does the parsing */
-obj_t *parse_do(token_t *toks)
+LIST(obj_t *) parse_do(token_t *toks)
 {
 	token_t *tok = toks;
-	obj_t head;
-	obj_t *cur = &head;
+	globals = list_make(obj_t *);
 	while(tok->kind != TOK_END) {
-		cur->next = parse_function_def(tok, &tok);
-		cur->next->vars = locals;
-		cur->next->stack_size = -1;
-		cur = cur->next;
+		type_t *declspec = parse_declspec(tok, &tok);
+		type_t *decl = parse_declarator(declspec, tok, &tok);
+
+		obj_t *obj = NULL;
+
+		/* function */
+		if(token_eq(tok, "(")) {
+			obj = parse_function_def(decl, tok, &tok);
+			obj->vars = locals;
+			obj->stack_size = -1;
+			list_append(globals, obj);
+		} else {
+			/* global variable */
+			parse_global_var(decl, tok, &tok);
+		}
+
+		locals = NULL;
 	}
 
-	return head.next;
+	return globals;
 }

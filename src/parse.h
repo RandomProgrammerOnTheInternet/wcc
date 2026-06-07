@@ -127,6 +127,6 @@ void obj_delete(obj_t *obj);
 void obj_delete_all(LIST(obj_t *) objs);
 
 /* does the parsing */
-obj_t *parse_do(token_t *toks);
+LIST(obj_t *) parse_do(token_t *toks);
 
 #endif /* PARSE_H_ */

@@ -39,4 +39,5 @@ stmt = "return" expr ";"
 	  | compound-stmt
 	  | expr-stmt
 compound-stmt = "{" (declaration | stmt)* "}"
-prog = stmt*
+global-variable = declspec declarator ("," declarator)* ";"
+prog = (function-definition | global-variable)*

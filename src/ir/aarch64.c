@@ -79,9 +79,10 @@ void ir_prog_end_aarch64_apple(FILE *f, ir_prog_t *prog)
 
 void ir_glob_emit_aarch64_apple(FILE *f, ir_global_t *glob)
 {
-	UNUSED(f);
-	UNUSED(glob);
-	ERROR("todo");
+	fprintf(f, "\t.globl _%s\n", glob->name);
+	fprintf(f, "\t.data\n");
+	fprintf(f, "\t.zerofill __DATA, __common, _%s, %zu, %zu\n", glob->name,
+			glob->size, glob->align);
 	return;
 }
 
@@ -585,6 +586,7 @@ static void ir_func_restore_regs(FILE *f, ir_func_t *fun, int save)
 void ir_func_emit_aarch64_apple(FILE *f, ir_func_t *fun)
 {
 	fprintf(f, "\t.globl _%s\n", fun->name);
+	fprintf(f, "\t.text\n");
 	fprintf(f, "_%s:\n", fun->name);
 	/* enter stack frame */
 	size_t alignd = align_to(fun->stack_needed, 16);
