@@ -1,20 +1,20 @@
 int a;
 
-void reset_a()
+void reset_a(void)
 {
 	int olda = a;
 	a = 0;
 	return;
 }
 
-int increment_a()
+int increment_a(void)
 {
 	int olda = a;
 	a = a + 1;
 	return olda;
 }
 
-int decrement_a()
+int decrement_a(void)
 {
 	int olda = a;
 	a = a - 1;

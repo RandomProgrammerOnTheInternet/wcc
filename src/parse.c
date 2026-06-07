@@ -967,6 +967,10 @@ static obj_t *parse_function_def(type_t *decltype, token_t *tok, token_t **rest)
 
 	tok = token_skip(tok, "(");
 
+	if(token_eq(tok, "void")) {
+		tok = token_skip(tok, "void");
+	}
+
 	if(token_eq(tok, ")")) {
 		tok = token_skip(tok, ")");
 		func->args = NULL;
