@@ -89,6 +89,12 @@ static void help(char *pname)
 
 int main(int argc, char *argv[])
 {
+	ENSURE(sizeof(char) == 1 && sizeof(short) == 2 && sizeof(int) == 4,
+		   "invalid runtime platform");
+
+	ENSURE(sizeof(long) == sizeof(long long) && sizeof(long) == 8,
+		   "Look, I'll add Windows support later, not now.");
+
 	if(scr_init()) {
 		ERROR("failed to allocate scratch allocator");
 		return 1;

@@ -7,9 +7,15 @@ unary = ("+" | "-" | "*" | "&") unary
 		| "_Alignof" unary         # extension
 mul = unary ("*" unary | "/" unary)*
 add = mul ("+" mul | "-" mul)*
-relational = add ("<" add | "<=" add | ">" add | ">=" add)*
+shift = add ("<<" add | ">>" add)*
+relational = shift ("<" shift | "<=" shift | ">" shift | ">=" shift)*
 equality = relational ("==" relational | "!=" relational)*
-assign = equality ("=" assign)?
+and-expr = equality ("&" equality)*
+eor-expr = and-expr ("^" and-expr)*
+or-expr = eor-expr ("|" eor-expr)*
+log-and-expr = or-expr ("&&" or-expr)*
+log-or-expr = log-and-expr ("||" log-and-expr)*
+assign = log-or-expr ("=" assign)?
 expr = assign
 expr-stmt = expr? ";"
 type-specifier = "void" | "char" | "short" | "int" | "long" | "signed" | "unsigned"

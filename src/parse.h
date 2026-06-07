@@ -16,6 +16,14 @@ enum node_kind {
 	NODE_MOD, /* modulus % */
 	NODE_NUM, /* numbers 123456 */
 	NODE_NEG, /* negation - */
+	// NODE_NOT, /* bitwise not ~ */
+	NODE_SHL, /* shift left << */
+	NODE_SHR, /* shift right >> */
+	NODE_AND, /* bitwise and & */
+	NODE_EOR, /* bitwise eor ^ */
+	NODE_OR, /* bitwise or | */
+	NODE_LOGAND, /* logical and && */
+	NODE_LOGOR, /* logical or || */
 	NODE_ASSIGN, /* assignment = */
 	NODE_VAR, /* variable ident */
 	NODE_EQ, /* equal == */
@@ -44,6 +52,8 @@ typedef struct obj {
 	struct obj *next; /* linked list */
 	long off; /* place on stack frame */
 	char *name; /* name of variable */
+	bool is_global; /* is this variable global? */
+	ir_global_t *glob; /* the global assoc with it */
 	type_t *type; /* type of this var */
 	bool addressed; /* is this variable addressed? (used for optimization) */
 	bool skip; /* has this variable been turned into a register? */

@@ -21,9 +21,17 @@ enum ins_type {
 	IR_INST_UMUL, /* %r0 = umul %r1, %r2 */
 	IR_INST_UDIV, /* %r0 = udiv %r1, %r2 */
 	IR_INST_UMOD, /* %r0 = umod %r1, %r2 */
+	IR_INST_AND, /* %r0 = and %r1, %r2 */
+	IR_INST_OR, /* %r0 = or %r1, %r2 */
+	IR_INST_EOR, /* %r0 = eor %r1, %r2 */
+	IR_INST_SHL, /* %r0 = shl %r1, %r2 */
+	IR_INST_SHR, /* %r0 = shr %r1, %r2 */
+	IR_INST_ASHR, /* %r0 = ashr %r1, %r2 */
 
 	/* arithmetic - unaryops */
 	IR_INST_NEG, /* %r0 = neg %r1 */
+	IR_INST_NOT, /* %r0 = not %r1 */
+	IR_INST_MKBOOL, /* %r0 = mkbool %r1 */
 
 	/* comparisons */
 	IR_INST_EQ, /* %r0 = cmp.eq %r1, %r2 */
@@ -52,7 +60,8 @@ enum ins_type {
 	/* memory */
 	IR_INST_LOAD, /* %r0 = load %r1 */
 	IR_INST_STORE, /* store %r1, %r2 */
-	IR_INST_LEAS, /* %r0 = lea %sp, #imm */
+	IR_INST_LEAS, /* %r0 = leas #imm */
+	IR_INST_LEA, /* %r0 = lea Label */
 	/* load, store from stack */
 	IR_INST_LOADS, /* %r0 = loads #imm */
 	IR_INST_STORES, /* stores %r1, #imm */
@@ -113,6 +122,7 @@ enum ir_arch {
 };
 
 struct ir_blk;
+struct ir_global;
 
 /* an IR instruction. is a linked list */
 typedef struct ir_inst {
@@ -126,6 +136,7 @@ typedef struct ir_inst {
 	bool noopt; /* is this inst volatile? */
 	bool sext; /* sign extend this load? */
 	size_t size; /* load/store/zext/sext size */
+	struct ir_global *label; /* for lea, the label */
 } ir_inst_t;
 
 /* IR block (collection of instructions, >= 1 entry and only <= 2 exits) */
@@ -178,6 +189,12 @@ DEF_INS(mov, reg_t *r0, reg_t *r1);
 DEF_INS(imm, reg_t *r0, uint64_t imm);
 DEF_INS(add, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(sub, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(shl, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(shr, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(ashr, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(and, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(or, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(eor, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(smul, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(sdiv, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(smod, reg_t *r0, reg_t *r2, reg_t *r3);
@@ -195,7 +212,10 @@ DEF_INS(ule, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(ugt, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(uge, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(neg, reg_t *r0, reg_t *r1);
+DEF_INS(not, reg_t *r0, reg_t *r1);
+DEF_INS(mkbool, reg_t *r0, reg_t *r1);
 DEF_INS(leas, reg_t *r0, long imm);
+DEF_INS(lea, reg_t *r0, struct ir_global *lbl);
 DEF_INS(load, reg_t *r0, reg_t *r1);
 DEF_INS(loads, reg_t *r0, long imm);
 DEF_INS(store, reg_t *r0, reg_t *r1);

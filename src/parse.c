@@ -147,6 +147,12 @@ static node_t *parse_unary(token_t *tok, token_t **rest);
 static node_t *parse_relational(token_t *tok, token_t **rest);
 static node_t *parse_equality(token_t *tok, token_t **rest);
 static node_t *parse_add(token_t *tok, token_t **rest);
+static node_t *parse_shift(token_t *tok, token_t **rest);
+static node_t *parse_and(token_t *tok, token_t **rest);
+static node_t *parse_eor(token_t *tok, token_t **rest);
+static node_t *parse_or(token_t *tok, token_t **rest);
+static node_t *parse_logand(token_t *tok, token_t **rest);
+static node_t *parse_logor(token_t *tok, token_t **rest);
 static node_t *parse_expr_stmt(token_t *tok, token_t **rest);
 static node_t *parse_stmt(token_t *tok, token_t **rest);
 static node_t *parse_assign(token_t *tok, token_t **rest);
@@ -458,10 +464,15 @@ static node_t *parse_compound_stmt(token_t *tok, token_t **rest)
 
 static node_t *parse_assign(token_t *tok, token_t **rest)
 {
-	node_t *node = parse_equality(tok, &tok);
+	node_t *node = parse_logor(tok, &tok);
 
 	if(token_eq(tok, "=")) {
-		node = node_bin(NODE_ASSIGN, node, parse_assign(tok->next, &tok), tok);
+		if(node->kind == NODE_VAR || node->kind == NODE_DEREF) {
+			node =
+				node_bin(NODE_ASSIGN, node, parse_assign(tok->next, &tok), tok);
+		} else {
+			compile_err(node->tok->loc, "cannot assign to non-variable");
+		}
 	}
 
 	*rest = tok;
@@ -597,27 +608,110 @@ parse:
 	return node;
 }
 
-static node_t *parse_relational(token_t *tok, token_t **rest)
+static node_t *parse_shift(token_t *tok, token_t **rest)
 {
 	node_t *node = parse_add(tok, &tok);
 parse:
+	if(token_eq(tok, "<<")) {
+		node = node_bin(NODE_SHL, node, parse_add(tok, &tok), tok);
+		goto parse;
+	}
+
+	if(token_eq(tok, "<<")) {
+		node = node_bin(NODE_SHR, node, parse_add(tok, &tok), tok);
+		goto parse;
+	}
+
+	*rest = tok;
+	return node;
+}
+
+static node_t *parse_and(token_t *tok, token_t **rest)
+{
+	node_t *node = parse_equality(tok, &tok);
+parse:
+	if(token_eq(tok, "&")) {
+		node = node_bin(NODE_AND, parse_equality(tok, &tok), node, tok);
+		goto parse;
+	}
+
+	*rest = tok;
+	return node;
+}
+
+static node_t *parse_eor(token_t *tok, token_t **rest)
+{
+	node_t *node = parse_and(tok, &tok);
+parse:
+	if(token_eq(tok, "^")) {
+		node = node_bin(NODE_EOR, parse_and(tok, &tok), node, tok);
+		goto parse;
+	}
+
+	*rest = tok;
+	return node;
+}
+
+static node_t *parse_or(token_t *tok, token_t **rest)
+{
+	node_t *node = parse_eor(tok, &tok);
+parse:
+	if(token_eq(tok, "^")) {
+		node = node_bin(NODE_OR, parse_eor(tok, &tok), node, tok);
+		goto parse;
+	}
+
+	*rest = tok;
+	return node;
+}
+
+static node_t *parse_logand(token_t *tok, token_t **rest)
+{
+	node_t *node = parse_or(tok, &tok);
+parse:
+	if(token_eq(tok, "&&")) {
+		node = node_bin(NODE_LOGAND, parse_or(tok, &tok), node, tok);
+		goto parse;
+	}
+
+	*rest = tok;
+	return node;
+}
+
+static node_t *parse_logor(token_t *tok, token_t **rest)
+{
+	node_t *node = parse_logand(tok, &tok);
+parse:
+	if(token_eq(tok, "||")) {
+		node = node_bin(NODE_LOGOR, parse_logand(tok, &tok), node, tok);
+		goto parse;
+	}
+
+	*rest = tok;
+	return node;
+}
+
+static node_t *parse_relational(token_t *tok, token_t **rest)
+{
+	node_t *node = parse_shift(tok, &tok);
+parse:
 	if(token_eq(tok, "<")) {
-		node = node_bin(NODE_LT, node, parse_add(tok->next, &tok), tok);
+		node = node_bin(NODE_LT, node, parse_shift(tok->next, &tok), tok);
 		goto parse;
 	}
 
 	if(token_eq(tok, "<=")) {
-		node = node_bin(NODE_LE, node, parse_add(tok->next, &tok), tok);
+		node = node_bin(NODE_LE, node, parse_shift(tok->next, &tok), tok);
 		goto parse;
 	}
 
 	if(token_eq(tok, ">")) {
-		node = node_bin(NODE_GT, node, parse_add(tok->next, &tok), tok);
+		node = node_bin(NODE_GT, node, parse_shift(tok->next, &tok), tok);
 		goto parse;
 	}
 
 	if(token_eq(tok, ">=")) {
-		node = node_bin(NODE_GE, node, parse_add(tok->next, &tok), tok);
+		node = node_bin(NODE_GE, node, parse_shift(tok->next, &tok), tok);
 		goto parse;
 	}
 

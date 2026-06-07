@@ -28,6 +28,12 @@ DEF_INS(mov, MOV, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
 DEF_INS(imm, IMM, r0, NULL, NULL, imm, reg_t *r0, uint64_t imm);
 DEF_INS(add, ADD, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(sub, SUB, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(shl, SHL, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(shr, SHR, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(ashr, ASHR, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(and, AND, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(or, OR, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(eor, EOR, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(smul, SMUL, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(sdiv, SDIV, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(smod, SMOD, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
@@ -46,6 +52,8 @@ DEF_INS(ule, ULE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(ugt, UGT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(uge, UGE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(neg, NEG, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
+DEF_INS(not, NOT, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
+DEF_INS(mkbool, MKBOOL, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
 DEF_INS(leas, LEAS, r0, NULL, NULL, imm, reg_t *r0, long imm);
 DEF_INS(ret, RET, NULL, r1, NULL, 0, reg_t *r1);
 
@@ -88,6 +96,13 @@ static UNUSEDA void emit_leas_var(reg_t *r0, long off, obj_t *var)
 	ir_inst_t *ins = ins_leas(r0, off);
 	/* absolutely horrid code, but it will work */
 	ins->r0->rhs = (reg_t *)var;
+	ir_blk_add(outblk, ins);
+	return;
+}
+
+static UNUSEDA void emit_lea(reg_t *res, ir_global_t *glob)
+{
+	ir_inst_t *ins = ins_lea(res, glob);
 	ir_blk_add(outblk, ins);
 	return;
 }
@@ -186,9 +201,13 @@ static reg_t *codegen_expr(node_t *node);
 static reg_t *calc_addr(node_t *node)
 {
 	if(node->kind == NODE_VAR) {
-		long placement = -node->var->off;
 		reg_t *addr = reg_make();
-		emit_leas_var(addr, placement, node->var);
+		if(node->var->is_global) {
+			emit_lea(addr, node->var->glob);
+		} else {
+			long placement = -node->var->off;
+			emit_leas_var(addr, placement, node->var);
+		}
 		return addr;
 	}
 	if(node->kind == NODE_DEREF) {
@@ -282,6 +301,46 @@ reg_t *codegen_expr(node_t *node)
 	case NODE_SUB:
 		emit_sub(res, lhs, rhs);
 		break;
+	case NODE_SHL:
+		emit_shl(res, lhs, rhs);
+		break;
+	case NODE_SHR:
+		emit_ashr(res, lhs, rhs);
+		break;
+	case NODE_AND:
+		emit_and(res, lhs, rhs);
+		break;
+	case NODE_OR:
+		emit_or(res, lhs, rhs);
+		break;
+	case NODE_EOR:
+		emit_eor(res, lhs, rhs);
+		break;
+	case NODE_LOGAND: {
+		ir_blk_t *left_blk = emit_blk();
+		ir_blk_t *resume = emit_blk();
+		reg_t *res = reg_make();
+		emit_imm(res, 0);
+		emit_br(lhs, left_blk, resume);
+		outblk = left_blk;
+		emit_mkbool(res, rhs);
+		emit_jmp(resume);
+		outblk = resume;
+	}
+	case NODE_LOGOR: {
+		ir_blk_t *right_blk = emit_blk();
+		ir_blk_t *resume = emit_blk();
+
+		reg_t *res = reg_make();
+		emit_mkbool(res, lhs);
+		emit_br(lhs, resume, right_blk);
+		outblk = right_blk;
+		emit_mkbool(res, rhs);
+		emit_jmp(resume);
+		outblk = resume;
+
+		break;
+	}
 	case NODE_MUL:
 		emit_smul(res, lhs, rhs);
 		break;
@@ -425,6 +484,16 @@ void codegen_expr_stmt(node_t *node)
 		break;
 	}
 
+	return;
+}
+
+/* assign globals */
+static UNUSEDA void assign_globals(LIST(obj_t *) globals)
+{
+	for(size_t i = 0; i < list_len(globals); i++) {
+		obj_t *glob = globals[i];
+		glob->glob = ir_glob_make(glob->name, glob->type->size, NULL);
+	}
 	return;
 }
 

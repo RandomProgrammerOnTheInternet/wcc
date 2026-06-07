@@ -6,14 +6,14 @@ static bool ins_is_3source(enum ins_type t)
 {
 	/* ADD is not needed here because on x64 you can do lea A, [B+C] */
 	return t == IR_INST_SUB || t == IR_INST_SMUL || t == IR_INST_UMUL ||
-		   t == IR_INST_SDIV || t == IR_INST_UDIV || t == IR_INST_SMOD ||
-		   t == IR_INST_UMOD;
+		   t == IR_INST_OR || t == IR_INST_AND || t == IR_INST_EOR ||
+		   t == IR_INST_SHL || t == IR_INST_SHR || t == IR_INST_ASHR;
 }
 
 /* is the instruction in form A = F(B) where it needs A and B to be separate? */
 static bool ins_is_2source(enum ins_type t)
 {
-	return t == IR_INST_NEG;
+	return t == IR_INST_NEG || t == IR_INST_NEG;
 }
 
 static void turn_into_x64_ins(ir_inst_t *prev, ir_inst_t *cur)
@@ -280,9 +280,6 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		}; break;
 		case IR_INST_CALL: {
 			size_t stack_used = 0;
-			if(fn->align_needed > 16) {
-				fprintf(f, "\tpush rcx\n");
-			}
 			for(size_t i = 0; i < list_len(ins->call_args); i++) {
 				if(ins->call_args[i]->r->spilld) {
 					fprintf(f, "\tmov %s, [rbp - %lld]\n",
@@ -304,9 +301,6 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			}
 			if(stack_used) {
 				fprintf(f, "\tsub rsp, %zu\n", stack_used);
-			}
-			if(fn->align_needed > 16) {
-				fprintf(f, "\tpop rcx\n");
 			}
 		} break;
 
@@ -413,34 +407,83 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			fprintf(f, "\tsub %s, %s\n", r0, r2);
 			break;
 		case IR_INST_SMUL:
+		case IR_INST_UMUL:
 			fprintf(f, "\timul %s, %s\n", r0, r2);
 			break;
-		case IR_INST_UMUL:
-			fprintf(f, "\tpush rdx\n");
-			fprintf(f, "\tmov rax, %s\n", r0);
-			fprintf(f, "\tmul %s\n", r2);
-			fprintf(f, "\tpop rdx\n");
-			fprintf(f, "\tmov %s, rax\n", r0);
-			break;
 		case IR_INST_SDIV:
-			fprintf(f, "\tpush rdx\n");
-			fprintf(f, "\tmov rax, %s\n", r0);
+			// fprintf(f, "\tpush rdx\n");
+			fprintf(f, "\tmov rax, %s\n", r1);
 			fprintf(f, "\tcqo\n");
 			fprintf(f, "\tidiv %s\n", r2);
-			fprintf(f, "\tpop rdx\n");
+			// fprintf(f, "\tpop rdx\n");
 			fprintf(f, "\tmov %s, rax\n", r0);
 			break;
 		case IR_INST_UDIV:
-			fprintf(f, "\tpush rdx\n");
-			fprintf(f, "\tmov rax, %s\n", r0);
-			fprintf(f, "\tcqo\n");
+			// fprintf(f, "\tpush rdx\n");
+			fprintf(f, "\tmov rax, %s\n", r1);
+			fprintf(f, "\txor edx, edx\n");
 			fprintf(f, "\tdiv %s\n", r2);
-			fprintf(f, "\tpop rdx\n");
+			// fprintf(f, "\tpop rdx\n");
 			fprintf(f, "\tmov %s, rax\n", r0);
 			break;
+		case IR_INST_AND:
+			fprintf(f, "\tand %s, %s\n", r0, r2);
+			break;
+		case IR_INST_OR:
+			fprintf(f, "\tor %s, %s\n", r0, r2);
+			break;
+		case IR_INST_EOR:
+			fprintf(f, "\txor %s, %s\n", r0, r2);
+			break;
+		case IR_INST_SHL:
+		case IR_INST_SHR:
+		case IR_INST_ASHR:
+			fprintf(f, "\tmovzx cl, %s\n", r2);
+			switch(ins->type) {
+			case IR_INST_SHL:
+				fprintf(f, "\tshl %s, cl", r0);
+				break;
+			case IR_INST_SHR:
+				fprintf(f, "\tshr %s, cl", r0);
+				break;
+			case IR_INST_ASHR:
+				fprintf(f, "\tsar %s, cl", r0);
+				break;
+			default: /* wth? */
+				break;
+			}
+			break;
+
+		case IR_INST_LEA:
+			fprintf(f, "\tlea %s, [rip + %s]\n", r0, ins->label->name);
+			break;
+
 		case IR_INST_SMOD:
+			fprintf(f, "\tmov rax, %s\n", r1);
+			fprintf(f, "\tcqo\n");
+			fprintf(f, "\tidiv %s\n", r2);
+			fprintf(f, "\tmov %s, rdx\n", r0);
+			break;
+
 		case IR_INST_UMOD:
-			ERROR("todo");
+			fprintf(f, "\tmov rax, %s\n", r1);
+			fprintf(f, "\txor edx, edx\n");
+			fprintf(f, "\tdiv %s\n", r2);
+			fprintf(f, "\tmov %s, rdx\n", r0);
+			break;
+		case IR_INST_NOT:
+			fprintf(f, "\tnot %s\n", r0);
+			break;
+		case IR_INST_MKBOOL:
+			if(r0i != r1i) {
+				fprintf(f, "\txor %s, %s\n", r0d, r0d);
+				fprintf(f, "\ttest %s, %s\n", r1, r1);
+				fprintf(f, "\tsetne %s\n", r0b);
+			} else {
+				fprintf(f, "\ttest %s, %s\n", r1, r1);
+				fprintf(f, "\tsetne %s\n", r0b);
+				fprintf(f, "\tmovzx %s, %s\n", r0, r0b);
+			}
 			break;
 		case IR_INST_NEG:
 			fprintf(f, "\tneg %s\n", r0);
@@ -455,6 +498,9 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_ULE:
 		case IR_INST_UGT:
 		case IR_INST_UGE:
+			if(r0i != r1i && r1i != r2i && r0i != r2i) {
+				fprintf(f, "\txor %s, %s\n", r0d, r0d);
+			}
 			fprintf(f, "\tcmp %s, %s\n", r1, r2);
 
 			switch(ins->type) {
@@ -491,7 +537,9 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			default: /* wth? */
 				break;
 			}
-			fprintf(f, "\tmovzx %s, %s\n", r0, r0b);
+			if(!(r0i != r1i && r1i != r2i && r0i != r2i)) {
+				fprintf(f, "\tmovzx %s, %s\n", r0, r0b);
+			}
 			break;
 		case IR_INST_LEAS:
 			fprintf(f, "\tlea %s, [rbp - %lld]\n", r0, (int64_t)ins->imm);
@@ -561,12 +609,6 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 	fprintf(f, "\tpush rbp\n");
 	ir_func_save_regs(f, fun);
 
-	if(fun->align_needed > 16) {
-		fprintf(f, "\tmov rbx, rsp\n");
-		fprintf(f, "\tmov rcx, rbx\n");
-		fprintf(f, "\tand rbx, -%zu\n", fun->align_needed);
-	}
-
 	fprintf(f, "\tmov rbp, rsp\n");
 	size_t alen = list_len(fun->args);
 	size_t stack_indx = 0;
@@ -612,12 +654,6 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 
 	/* leave stack frame */
 	fprintf(f, "%s_ret:\n", name);
-
-	if(fun->align_needed > 16) {
-		fprintf(f, "\tmov rsp, rcx\n");
-	} else {
-		fprintf(f, "\tmov rsp, rbp\n");
-	}
 
 	ir_func_restore_regs(f, fun);
 	fprintf(f, "\tpop rbp\n");

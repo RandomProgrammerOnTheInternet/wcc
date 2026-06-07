@@ -144,7 +144,12 @@ DEF_INS(smod, SMOD, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(udiv, UDIV, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(umul, UMUL, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(umod, UMOD, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-
+DEF_INS(shl, SHL, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(shr, SHR, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(ashr, ASHR, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(and, AND, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(or, OR, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(eor, EOR, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(eq, EQ, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(ne, NE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(slt, SLT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
@@ -156,6 +161,8 @@ DEF_INS(ule, ULE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(ugt, UGT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(uge, UGE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(neg, NEG, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
+DEF_INS(not, NOT, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
+DEF_INS(mkbool, MKBOOL, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
 DEF_INS(leas, LEAS, r0, NULL, NULL, imm, reg_t *r0, long imm);
 DEF_INS(ret, RET, NULL, r1, NULL, 0, reg_t *r1);
 
@@ -285,6 +292,13 @@ ir_inst_t *ins_jmp(ir_blk_t *blk)
 	return ins;
 }
 
+ir_inst_t *ins_lea(reg_t *res, ir_global_t *glob)
+{
+	ir_inst_t *ins = ir_inst_make(IR_INST_LEA, res, 0, 0, 0);
+	ins->label = glob;
+	return ins;
+}
+
 /* delete an IR instruction */
 void ir_inst_delete(ir_inst_t *ins)
 {
@@ -402,6 +416,8 @@ static void ir_fix_ins(ir_inst_t *ins)
 		FIX(MOV, r0, r1, xx);
 		FIX(IMM, r0, xx, xx);
 		FIX(NEG, r0, r1, xx);
+		FIX(NOT, r0, r1, xx);
+		FIX(MKBOOL, r0, r1, xx);
 		FIX(BREQ, xx, r1, r2);
 		FIX(BRNE, xx, r1, r2);
 		FIX(BRSLT, xx, r1, r2);
@@ -417,6 +433,7 @@ static void ir_fix_ins(ir_inst_t *ins)
 		FIX(LOAD, r0, r1, xx);
 		FIX(STORE, xx, r1, r2);
 		FIX(LEAS, r0, xx, xx);
+		FIX(LEA, r0, xx, xx);
 		FIX(LOADS, r0, xx, xx);
 		FIX(STORES, xx, r1, xx);
 		FIX(LOADSS, r0, xx, xx);
@@ -483,6 +500,18 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		out("%%r%ld = add %%r%ld, %%r%ld", r0, r1, r2);
 	case IR_INST_SUB:
 		out("%%r%ld = sub %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_SHL:
+		out("%%r%ld = shl %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_SHR:
+		out("%%r%ld = shr %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_ASHR:
+		out("%%r%ld = ashr %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_AND:
+		out("%%r%ld = and %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_OR:
+		out("%%r%ld = or %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_EOR:
+		out("%%r%ld = eor %%r%ld, %%r%ld", r0, r1, r2);
 	case IR_INST_SMUL:
 		out("%%r%ld = smul %%r%ld, %%r%ld", r0, r1, r2);
 	case IR_INST_SDIV:
@@ -497,6 +526,10 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		out("%%r%ld = umod %%r%ld, %%r%ld", r0, r1, r2);
 	case IR_INST_NEG:
 		out("%%r%ld = neg %%r%ld", r0, r1);
+	case IR_INST_NOT:
+		out("%%r%ld = not %%r%ld", r0, r1);
+	case IR_INST_MKBOOL:
+		out("%%r%ld = mkbool %%r%ld", r0, r1);
 	case IR_INST_EQ:
 		out("%%r%ld = cmp.eq %%r%ld, %%r%ld", r0, r1, r2);
 	case IR_INST_NE:
@@ -581,6 +614,8 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		out("ret %%r%ld", r1);
 	case IR_INST_LEAS:
 		out("%%r%ld = leas #%ld", r0, (long)imm);
+	case IR_INST_LEA:
+		out("%%r%ld = lea %s", r0, ins->label->name);
 	case IR_INST_JMP:
 		out("jmp BB%ld", ins->true_blk->num);
 	default:

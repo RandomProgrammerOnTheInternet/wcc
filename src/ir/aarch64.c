@@ -362,6 +362,24 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_SUB:
 			fprintf(f, "\tsub x%d, x%d, x%d\n", r0, r1, r2);
 			break;
+		case IR_INST_AND:
+			fprintf(f, "\tand x%d, x%d, x%d\n", r0, r1, r2);
+			break;
+		case IR_INST_OR:
+			fprintf(f, "\tor x%d, x%d, x%d\n", r0, r1, r2);
+			break;
+		case IR_INST_EOR:
+			fprintf(f, "\teor x%d, x%d, x%d\n", r0, r1, r2);
+			break;
+		case IR_INST_SHL:
+			fprintf(f, "\tlsl x%d, x%d, x%d\n", r0, r1, r2);
+			break;
+		case IR_INST_SHR:
+			fprintf(f, "\tlsr x%d, x%d, x%d\n", r0, r1, r2);
+			break;
+		case IR_INST_ASHR:
+			fprintf(f, "\tasr x%d, x%d, x%d\n", r0, r1, r2);
+			break;
 		case IR_INST_SMUL:
 		case IR_INST_UMUL:
 			fprintf(f, "\tmul x%d, x%d, x%d\n", r0, r1, r2);
@@ -379,6 +397,13 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_UMOD:
 			fprintf(f, "\tudiv x10, x%d, x%d\n", r1, r2);
 			fprintf(f, "\tmsub x%d, x10, x%d, x%d\n", r0, r2, r1);
+			break;
+		case IR_INST_NOT:
+			fprintf(f, "\tnot x%d, x%d\n", r0, r1);
+			break;
+		case IR_INST_MKBOOL:
+			fprintf(f, "\ttst x%d, x%d\n", r1, r1);
+			fprintf(f, "\tcset x%d, ne\n", r0);
 			break;
 		case IR_INST_NEG:
 			fprintf(f, "\tneg x%d, x%d\n", r0, r1);
@@ -435,6 +460,11 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			} else {
 				fprintf(f, "\tsub x%d, fp, #%lld\n", r0, imm);
 			}
+			break;
+		case IR_INST_LEA:
+			fprintf(f, "\tadrp x%d, _%s@PAGE\n", r0, ins->label->name);
+			fprintf(f, "\tadd x%d, x%d, _%s@PAGEOFF\n", r0, r0,
+					ins->label->name);
 			break;
 		case IR_INST_LOAD:
 			load(f, sz, ins->sext, r0, "[x%d]", r1);

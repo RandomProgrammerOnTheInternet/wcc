@@ -48,9 +48,6 @@ uint64_t token_num(token_t *tok);
 /* is this character whitespace? */
 int iswhitespace(int c);
 
-/* is this character a punctuator? */
-int islexpunct(int c);
-
 /* is this (first) character an identifier? */
 int isidentfirst(int c);
 
