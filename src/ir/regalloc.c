@@ -51,6 +51,7 @@ static void fill_succ_pred(ir_blk_t *blk)
 	ir_inst_t *flow = find_last_or_flow_ins(blk->insts);
 	if(flow->type == IR_INST_RET) {
 		blk->returns = true;
+		return;
 	}
 
 	if(flow->false_blk) {
@@ -591,14 +592,6 @@ void ir_finalize(ir_func_t *fun, int amount, enum ir_arch arch)
 	}
 
 	(void)ir_choose_alloc_strat(fun, amount, callee_cost, caller_cost);
-	if(debug) {
-		printf("Final IR:\n");
-		printf("\tvirtual:\n");
-		ir_dump(fun, 'v');
-		printf("\treal:\n");
-		ir_dump(fun, 'r');
-		printf("====\n");
-	}
 
 	/* free objects */
 	for(size_t i = 0; i < list_len(allocated); i++) {

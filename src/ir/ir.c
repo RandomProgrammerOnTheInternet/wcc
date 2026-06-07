@@ -5,6 +5,8 @@
 #include "x64.h"
 #include "zz/arena.h"
 
+extern int debug;
+
 /* ron's universal number kounter */
 /* very important, critical piece of code */
 static long runk(int reset)
@@ -18,8 +20,13 @@ static long runk(int reset)
 
 int ir_inst_is_term(enum ins_type type)
 {
-	return type == IR_INST_BR || type == IR_INST_RET || type == IR_INST_JMP ||
-		   type == IR_INST_BREQ || type == IR_INST_BRNE ||
+	return ir_inst_is_br(type) || type == IR_INST_JMP || type == IR_INST_RET;
+}
+
+/* is this instruction a branch? */
+int ir_inst_is_br(enum ins_type type)
+{
+	return type == IR_INST_BR || type == IR_INST_BREQ || type == IR_INST_BRNE ||
 		   type == IR_INST_BRSLT || type == IR_INST_BRSLE ||
 		   type == IR_INST_BRSGT || type == IR_INST_BRSGE ||
 		   type == IR_INST_BRULT || type == IR_INST_BRULE ||
@@ -461,6 +468,10 @@ void ir_fix(ir_func_t *func)
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
 			ir_fix_ins(ins);
 		}
+
+		if(!blk->insts) {
+			blk->insts = ins_ret(NULL);
+		}
 	}
 	return;
 }
@@ -734,8 +745,17 @@ void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt)
 	/* functions */
 	for(size_t i = 0; i < list_len(prog->funcs); i++) {
 		ir_func_t *func = prog->funcs[i];
+		ir_fix(func);
 		ir_opt(func, opt, arch);
 		ir_finalize(func, arch == IR_ARCH_AARCH64_APPLE ? 9 : 5, arch);
+		if(debug) {
+			printf("Final IR:\n");
+			printf("\tvirtual:\n");
+			ir_dump(func, 'v');
+			printf("\treal:\n");
+			ir_dump(func, 'r');
+			printf("====\n");
+		}
 		ir_func_emit(f, func, arch);
 	}
 

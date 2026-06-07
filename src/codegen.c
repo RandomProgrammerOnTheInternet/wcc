@@ -456,12 +456,13 @@ void codegen_expr_stmt(node_t *node)
 	case NODE_IF: {
 		reg_t *cond = codegen_expr(node->cond);
 
-		ir_blk_t *then = emit_blk(), *elze;
-		ir_blk_t *resume = emit_blk();
+		ir_blk_t *then = emit_blk(), *elze = emit_blk();
+		ir_blk_t *resume;
+
 		if(node->elze == NULL) {
-			elze = resume;
+			resume = elze;
 		} else {
-			elze = emit_blk();
+			resume = emit_blk();
 		}
 
 		emit_br(cond, then, elze);

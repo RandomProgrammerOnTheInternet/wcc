@@ -262,6 +262,9 @@ DEF_INS(sextl, reg_t *r0, reg_t *r1);
 /* does this instruction terminate a block? */
 int ir_inst_is_term(enum ins_type type);
 
+/* is this instruction a branch? */
+int ir_inst_is_br(enum ins_type type);
+
 /* is this instruction a comparison? */
 int ir_inst_is_cmp(enum ins_type type);
 

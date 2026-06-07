@@ -5,65 +5,6 @@
 
 extern int debug;
 
-/* move elimination */
-static UNUSEDA int ir_mov_elim(ir_func_t *func)
-{
-	int changed = 0;
-	for(size_t i = 0; i < list_len(func->blocks); i++) {
-		ir_blk_t *blk = func->blocks[i];
-		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-			if(ins->type == IR_INST_MOV && !ins->r0->no_mov_elim) {
-				changed = 1;
-				ins->r0->insty = IR_INST_MOV;
-				ins->r0->lhs = ins->r1;
-				ins->type = IR_INST_NOP;
-				continue;
-			}
-
-			if(ins->type == IR_INST_MOV && ins->r1->insty == IR_INST_IMM &&
-			   !ins->r0->no_mov_elim) {
-				ins->type = IR_INST_IMM;
-				changed = 1;
-				ins->imm = ins->r1->imm;
-				continue;
-			}
-
-			/* if written to stop the elim */
-			if(ins->r0 && ins->r0->insty == IR_INST_MOV) {
-				ins->r0->insty = IR_INST_NOP;
-				continue;
-			}
-
-			if(ins->r1 && ins->r1->insty == IR_INST_MOV) {
-				changed = 1;
-				ins->r1 = ins->r1->lhs;
-			}
-
-			if(ins->r2 && ins->r2->insty == IR_INST_MOV) {
-				changed = 1;
-				ins->r2 = ins->r2->lhs;
-			}
-
-			if(ins->type == IR_INST_CALL) {
-				for(size_t i = 0; i < list_len(ins->call_args); i++) {
-					reg_t *r = ins->call_args[i]->r;
-					if(r->insty == IR_INST_MOV) {
-						changed = 1;
-						ins->call_args[i]->r = ins->call_args[i]->r->lhs;
-					}
-				}
-			}
-
-			if(ins->type == IR_INST_IMM && !ins->r0->no_mov_elim) {
-				ins->r0->insty = IR_INST_IMM;
-				ins->r0->imm = ins->imm;
-				continue;
-			}
-		}
-	}
-	return changed;
-}
-
 /* optimize
  * %reg = leas #off
  * ...
@@ -279,6 +220,106 @@ false_pos:
 	return changed;
 }
 
+static int ir_simpleopt_ins(ir_inst_t *ins)
+{
+	int change = 0;
+	/* %r0 = eor/sub/sdiv/udiv/smod/umod %r1, %r1
+	 * ->
+	 * %r0 = imm #0 */
+	if((ins->type == IR_INST_EOR || ins->type == IR_INST_SUB ||
+		ins->type == IR_INST_SDIV || ins->type == IR_INST_UDIV ||
+		ins->type == IR_INST_SMOD || ins->type == IR_INST_UMOD) &&
+	   ins->r1->vr == ins->r2->vr) {
+		ins->type = IR_INST_IMM;
+		ins->imm = 0;
+		change = 1;
+	}
+
+	/* %r0 = and/or %r1, %r1
+	 * ->
+	 * %r0 = %r1
+	 */
+	if((ins->type == IR_INST_AND || ins->type == IR_INST_OR) &&
+	   ins->r1->vr == ins->r2->vr) {
+		ins->type = IR_INST_MOV;
+		change = 1;
+	}
+
+	/* %r0 = sext.i64/zext.i64 %r1
+	 * ->
+	 * %r0 = %r1
+	 */
+	if((ins->type == IR_INST_SEXT || ins->type == IR_INST_ZEXT) &&
+	   ins->size == 8) {
+		ins->type = IR_INST_MOV;
+		change = 1;
+	}
+
+	/* %r0 = %r0
+	 * ->
+	 * nop
+	 */
+	if(ins->type == IR_INST_MOV && ins->r0->vr == ins->r1->vr) {
+		ins->type = IR_INST_NOP;
+		change = 1;
+	}
+
+	/* %r0 = cmp.* %r1, %r1
+	 * ->
+	 * %r0 = imm #res */
+	if(ir_inst_is_cmp(ins->type) && ins->r1->vr == ins->r2->vr) {
+		long imm = 0;
+#define CASE(v, x) \
+	case v:        \
+		imm = (x); \
+		break
+		switch(ins->type) {
+			CASE(IR_INST_EQ, 1);
+			CASE(IR_INST_NE, 0);
+			CASE(IR_INST_SLT, 0);
+			CASE(IR_INST_SLE, 1);
+			CASE(IR_INST_SGT, 0);
+			CASE(IR_INST_SGE, 1);
+			CASE(IR_INST_ULT, 0);
+			CASE(IR_INST_ULE, 1);
+			CASE(IR_INST_UGT, 0);
+			CASE(IR_INST_UGE, 1);
+		default:
+			break;
+		}
+#undef CASE
+		ins->type = IR_INST_IMM;
+		ins->imm = imm;
+		change = 1;
+	}
+
+	/* br.** dontcareregs, blkA, blkA
+	 * ->
+	 * jmp blkA */
+	if(ir_inst_is_br(ins->type) && ins->false_blk == ins->true_blk) {
+		ins->type = IR_INST_JMP;
+		change = 1;
+	}
+
+	return change;
+}
+
+/* trivial/simple optimizations */
+static int ir_simpleopt(ir_func_t *func)
+{
+	int changed = 0;
+
+	/* first, instruction-level opts */
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			changed |= ir_simpleopt_ins(ins);
+		}
+	}
+
+	return changed;
+}
+
 /* changes
  * stores #imm, %r1
  * loads %r2, #imm
@@ -343,27 +384,22 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 	int left = max_tolerated_change;
 	while(left) {
 		change = 0;
+
+		/* trivial optimizations */
+		{
+			change |= ir_simpleopt(func);
+			ir_nopremover(func);
+			ir_fix(func);
+		}
+
 		/* stack-based optimizations */
 		{
 			change |= ir_stackopt(func);
 			ir_nopremover(func);
 			change |= ir_stackreduce(func);
-			// change |= ir_mov_elim(func);
 			ir_nopremover(func);
 			ir_fix(func);
 		}
-
-		/* fold opts */
-		/* TODO: better folding system
-		{
-			change |= ir_fold(func);
-			change |= ir_optzero(func);
-			ir_fix(func);
-			change |= ir_mov_elim(func);
-			ir_nopremover(func);
-			ir_fix(func);
-		}
-		*/
 
 		/* branch opts */
 		{
@@ -380,6 +416,9 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 	}
 
 	ir_nopremover(func);
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		list_hdr(func->blocks[i]->pred)->size = 0;
+	}
 
 	if(debug) {
 		printf("After common opts:\n");
@@ -403,7 +442,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 
 	if(debug) {
 		printf("After arch opts:\n");
-		// ir_dump(func, 'v');
+		ir_dump(func, 'v');
 		printf("****\n");
 	}
 	return;
