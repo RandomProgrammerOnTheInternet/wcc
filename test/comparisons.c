@@ -19,5 +19,5 @@ int main()
 	e1 = -4 == 2;
 	e1 = 1 - e1;
 	f1 = -4 != 2;
-	return (a0 + b0 + c0 + d0 + e0 + f0 + a1 + b1 + c1 + d1 + e1 + f1) == 12;
+	return a0 && b0 && c0 && d0 && e0 && f0 && a1 && b1 && c1 && d1 && e1 && f1;
 }

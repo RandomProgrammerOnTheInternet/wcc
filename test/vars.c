@@ -21,5 +21,5 @@ int main()
 	long result = (scooby * doo) - thing;
 	long resultres = (result / 2) == 2;
 
-	return (q + f + g + foobarres + resultres) == 5;
+	return q && f && g && resultres && foobarres;
 }

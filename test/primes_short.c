@@ -7,22 +7,20 @@ int primes()
 	short iter = 0;
 
 	for(int i = 0; i < 1000; i = i + 1) {
-		array[i] = 0;
+		array[i] = array[i] ^ array[i];
 	}
 
 	for(int i = 2; i < 1000; i = i + 1) {
-		iter = i + i;
+		iter = i << 1;
 		while(iter < 1000) {
-			array[iter] = 1;
+			array[iter] = array[iter] | 1;
 			iter = iter + i;
 		}
 	}
 
 	for(int i = 0; i < 1000; i = i + 1) {
-		if(array[i] == 0) {
-			if(i > max) {
-				max = i;
-			}
+		if(array[i] == 0 && i > max) {
+			max = i;
 		}
 	}
 

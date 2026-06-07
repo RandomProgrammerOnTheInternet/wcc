@@ -366,7 +366,7 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			fprintf(f, "\tand x%d, x%d, x%d\n", r0, r1, r2);
 			break;
 		case IR_INST_OR:
-			fprintf(f, "\tor x%d, x%d, x%d\n", r0, r1, r2);
+			fprintf(f, "\torr x%d, x%d, x%d\n", r0, r1, r2);
 			break;
 		case IR_INST_EOR:
 			fprintf(f, "\teor x%d, x%d, x%d\n", r0, r1, r2);

@@ -319,26 +319,24 @@ reg_t *codegen_expr(node_t *node)
 	case NODE_LOGAND: {
 		ir_blk_t *left_blk = emit_blk();
 		ir_blk_t *resume = emit_blk();
-		reg_t *res = reg_make();
 		emit_imm(res, 0);
 		emit_br(lhs, left_blk, resume);
 		outblk = left_blk;
 		emit_mkbool(res, rhs);
 		emit_jmp(resume);
 		outblk = resume;
+		break;
 	}
 	case NODE_LOGOR: {
 		ir_blk_t *right_blk = emit_blk();
 		ir_blk_t *resume = emit_blk();
 
-		reg_t *res = reg_make();
 		emit_mkbool(res, lhs);
 		emit_br(lhs, resume, right_blk);
 		outblk = right_blk;
 		emit_mkbool(res, rhs);
 		emit_jmp(resume);
 		outblk = resume;
-
 		break;
 	}
 	case NODE_MUL:
@@ -667,6 +665,8 @@ void codegen_func(FILE *f, obj_t *fn, int opt_level, enum ir_arch backend)
 		fun->stack_needed = align_to(cur_fn->stack_size, 16);
 		codegen_expr_stmt(cur_fn->body);
 
+		// printf("Before varopt:\n");
+		// ir_dump(fun, 'v');
 		varopt(func);
 
 		ir_inst_t *nop = ins_nop();

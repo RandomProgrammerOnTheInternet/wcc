@@ -633,7 +633,14 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 /* dump IR */
 void ir_dump(ir_func_t *fun, int mode)
 {
-	printf("func %s stack:%ld {\n", fun->name, fun->stack_needed);
+	printf("func %s(", fun->name);
+
+	for(size_t i = 0; i < list_len(fun->args); i++) {
+		callreg_t *arg = fun->args[i];
+		printf("i%zu #%ld, ", arg->size * 8, arg->r->off);
+	}
+	printf("void) stack:%ld\n", fun->stack_needed);
+
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
 		printf("BB%ld:\n", blk->num);

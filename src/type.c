@@ -152,6 +152,13 @@ void type_propagate(node_t *node)
 		break;
 	case NODE_ADD:
 	case NODE_SUB:
+	case NODE_SHL:
+	case NODE_SHR:
+	case NODE_AND:
+	case NODE_OR:
+	case NODE_LOGAND:
+	case NODE_LOGOR:
+	case NODE_EOR:
 	case NODE_MUL:
 	case NODE_DIV:
 	case NODE_NEG:
