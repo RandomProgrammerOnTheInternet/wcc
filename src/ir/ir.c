@@ -655,7 +655,8 @@ void ir_dump(ir_func_t *fun, int mode)
 		callreg_t *arg = fun->args[i];
 		printf("i%zu #%ld, ", arg->size * 8, arg->r->off);
 	}
-	printf("void) stack:%ld\n", fun->stack_needed);
+	printf("%s) stack:%ld\n", list_len(fun->args) ? "" : "void",
+		   fun->stack_needed);
 
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
