@@ -58,13 +58,13 @@ type_t *TY_PTR =
 
 bool type_is_int(type_t *ty)
 {
-	return ty->kind == TYPE_INT || ty->kind == TYPE_LONG ||
-		   ty->kind == TYPE_SHORT || ty->kind == TYPE_CHAR;
+	return ty && (ty->kind == TYPE_INT || ty->kind == TYPE_LONG ||
+				  ty->kind == TYPE_SHORT || ty->kind == TYPE_CHAR);
 }
 
 bool type_is_ptr(type_t *ty)
 {
-	return ty->kind == TYPE_PTR || ty->kind == TYPE_ARRAY;
+	return ty && (ty->kind == TYPE_PTR || ty->kind == TYPE_ARRAY);
 }
 
 bool type_is_signed(type_t *ty)
@@ -156,8 +156,10 @@ void type_propagate(node_t *node)
 	case NODE_SHR:
 	case NODE_AND:
 	case NODE_OR:
+	case NODE_MOD:
 	case NODE_LOGAND:
 	case NODE_LOGOR:
+	case NODE_LOGNEG:
 	case NODE_EOR:
 	case NODE_MUL:
 	case NODE_DIV:

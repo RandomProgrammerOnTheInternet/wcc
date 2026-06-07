@@ -1,7 +1,7 @@
 prim = "(" expr ")" | ident args? | num
 funcall = ident "(" (assign ("," assign)*)? ")"
 postfix = prim ("[" expr "]")*
-unary = ("+" | "-" | "*" | "&") unary
+unary = ("+" | "-" | "*" | "&" | "~" | "!") unary
 		| postfix
 		| "sizeof" unary
 		| "_Alignof" unary         # extension

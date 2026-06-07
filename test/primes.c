@@ -27,8 +27,11 @@ int primes()
 		}
 	}
 
-	print_num(max);
 	free(array);
+
+	print_num(
+		max); // this triggers some memory corruption if place before free, somehow
+
 	return max;
 }
 

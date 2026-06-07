@@ -2,7 +2,8 @@
 
 passing=1
 
-cc test/one.c -c -o one.o -O3
+./bin/wcc test/one.c -o test/one.s -O3
+cc -c -o one.o test/one.s
 
 assert() {
   

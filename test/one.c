@@ -1,4 +1,3 @@
-// not meant to be tested by the `wcc` compiler!!!
 long one(void)
 {
 	return 1;
@@ -15,9 +14,22 @@ long argument_waster(long a, long b, long c, long d, long e, long f, long g,
 	return a + b + c + d + e + f + g + h + i + j + k + l;
 }
 
-#include <stdio.h>
+void print_num_helper(int num)
+{
+	/* https://stackoverflow.com/a/59389473 */
+
+	if(num >= 10) {
+		print_num_helper(num / 10);
+	}
+
+	putchar((num % 10) + 48);
+
+	return;
+}
+
 void print_num(int num)
 {
-	printf("%d\n", num);
+	print_num_helper(num);
+	putchar(10);
 	return;
 }
