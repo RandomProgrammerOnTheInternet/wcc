@@ -20,7 +20,7 @@ int primes()
 	}
 
 	for(i = 0; i < 1000; i = i + 1) {
-		if(*(array + i) == 0) {
+		if(!*(array + i)) {
 			if(i > max) {
 				max = i;
 			}

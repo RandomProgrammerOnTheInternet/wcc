@@ -5,7 +5,7 @@ int main()
 	for(int i = 2; i < 1000; i = i + 1) {
 		int is_prime = 1;
 		for(int j = 2; j < i - 1; j = j + 1) {
-			if((i % j) == 0) {
+			if(!(i % j)) {
 				is_prime = 0;
 			}
 		}

@@ -16,7 +16,8 @@ enum node_kind {
 	NODE_MOD, /* modulus % */
 	NODE_NUM, /* numbers 123456 */
 	NODE_NEG, /* negation - */
-	// NODE_NOT, /* bitwise not ~ */
+	NODE_NOT, /* bitwise not ~ */
+	NODE_LOGNEG, /* logical negation ! */
 	NODE_SHL, /* shift left << */
 	NODE_SHR, /* shift right >> */
 	NODE_AND, /* bitwise and & */

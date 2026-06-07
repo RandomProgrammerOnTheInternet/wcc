@@ -53,6 +53,7 @@ DEF_INS(ugt, UGT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(uge, UGE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(neg, NEG, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
 DEF_INS(not, NOT, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
+DEF_INS(notbool, NOTBOOL, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
 DEF_INS(mkbool, MKBOOL, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
 DEF_INS(leas, LEAS, r0, NULL, NULL, imm, reg_t *r0, long imm);
 DEF_INS(ret, RET, NULL, r1, NULL, 0, reg_t *r1);
@@ -239,6 +240,18 @@ reg_t *codegen_expr(node_t *node)
 		reg_t *neg = reg_make();
 		emit_neg(neg, val);
 		return neg;
+	};
+	case NODE_NOT: {
+		reg_t *val = codegen_expr(node->lhs);
+		reg_t *not = reg_make();
+		emit_neg(not, val);
+		return not;
+	};
+	case NODE_LOGNEG: {
+		reg_t *val = codegen_expr(node->lhs);
+		reg_t *logneg = reg_make();
+		emit_notbool(logneg, val);
+		return logneg;
 	};
 	case NODE_VAR: {
 		reg_t *addr = calc_addr(node);

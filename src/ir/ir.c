@@ -170,6 +170,7 @@ DEF_INS(uge, UGE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(neg, NEG, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
 DEF_INS(not, NOT, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
 DEF_INS(mkbool, MKBOOL, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
+DEF_INS(notbool, NOTBOOL, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
 DEF_INS(leas, LEAS, r0, NULL, NULL, imm, reg_t *r0, long imm);
 DEF_INS(ret, RET, NULL, r1, NULL, 0, reg_t *r1);
 
@@ -426,6 +427,7 @@ static void ir_fix_ins(ir_inst_t *ins)
 		FIX(NEG, r0, r1, xx);
 		FIX(NOT, r0, r1, xx);
 		FIX(MKBOOL, r0, r1, xx);
+		FIX(NOTBOOL, r0, r1, xx);
 		FIX(BREQ, xx, r1, r2);
 		FIX(BRNE, xx, r1, r2);
 		FIX(BRSLT, xx, r1, r2);
@@ -542,6 +544,8 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		out("%%r%ld = not %%r%ld", r0, r1);
 	case IR_INST_MKBOOL:
 		out("%%r%ld = mkbool %%r%ld", r0, r1);
+	case IR_INST_NOTBOOL:
+		out("%%r%ld = notbool %%r%ld", r0, r1);
 	case IR_INST_EQ:
 		out("%%r%ld = cmp.eq %%r%ld, %%r%ld", r0, r1, r2);
 	case IR_INST_NE:

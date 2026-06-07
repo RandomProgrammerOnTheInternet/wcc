@@ -483,7 +483,18 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			} else {
 				fprintf(f, "\ttest %s, %s\n", r1, r1);
 				fprintf(f, "\tsetne %s\n", r0b);
-				fprintf(f, "\tmovzx %s, %s\n", r0, r0b);
+				fprintf(f, "\tmovzx %s, %s\n", r0d, r0b);
+			}
+			break;
+		case IR_INST_NOTBOOL:
+			if(r0i != r1i) {
+				fprintf(f, "\txor %s, %s\n", r0d, r0d);
+				fprintf(f, "\ttest %s, %s\n", r1, r1);
+				fprintf(f, "\tsete %s\n", r0b);
+			} else {
+				fprintf(f, "\ttest %s, %s\n", r1, r1);
+				fprintf(f, "\tsete %s\n", r0b);
+				fprintf(f, "\tmovzx %s, %s\n", r0d, r0b);
 			}
 			break;
 		case IR_INST_NEG:
@@ -539,7 +550,7 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 				break;
 			}
 			if(!(r0i != r1i && r1i != r2i && r0i != r2i)) {
-				fprintf(f, "\tmovzx %s, %s\n", r0, r0b);
+				fprintf(f, "\tmovzx %s, %s\n", r0d, r0b);
 			}
 			break;
 		case IR_INST_LEAS:

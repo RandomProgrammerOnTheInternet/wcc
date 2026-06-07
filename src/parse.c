@@ -898,6 +898,14 @@ static node_t *parse_unary(token_t *tok, token_t **rest)
 		return node_unary(NODE_DEREF, parse_unary(tok->next, rest), tok);
 	}
 
+	if(token_eq(tok, "~")) {
+		return node_unary(NODE_NOT, parse_unary(tok->next, rest), tok);
+	}
+
+	if(token_eq(tok, "!")) {
+		return node_unary(NODE_LOGNEG, parse_unary(tok->next, rest), tok);
+	}
+
 	/* sizeof, _Alignof */
 
 	if(token_eq(tok, "sizeof")) {

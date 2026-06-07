@@ -32,6 +32,7 @@ enum ins_type {
 	IR_INST_NEG, /* %r0 = neg %r1 */
 	IR_INST_NOT, /* %r0 = not %r1 */
 	IR_INST_MKBOOL, /* %r0 = mkbool %r1 */
+	IR_INST_NOTBOOL, /* %r0 = notbool %r1 */
 
 	/* comparisons */
 	IR_INST_EQ, /* %r0 = cmp.eq %r1, %r2 */
@@ -215,6 +216,7 @@ DEF_INS(uge, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(neg, reg_t *r0, reg_t *r1);
 DEF_INS(not, reg_t *r0, reg_t *r1);
 DEF_INS(mkbool, reg_t *r0, reg_t *r1);
+DEF_INS(notbool, reg_t *r0, reg_t *r1);
 DEF_INS(leas, reg_t *r0, long imm);
 DEF_INS(lea, reg_t *r0, struct ir_global *lbl);
 DEF_INS(load, reg_t *r0, reg_t *r1);

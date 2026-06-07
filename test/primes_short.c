@@ -19,7 +19,7 @@ int primes()
 	}
 
 	for(int i = 0; i < 1000; i = i + 1) {
-		if(array[i] == 0 && i > max) {
+		if(!array[i] && i > max) {
 			max = i;
 		}
 	}

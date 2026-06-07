@@ -406,6 +406,10 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			fprintf(f, "\ttst x%d, x%d\n", r1, r1);
 			fprintf(f, "\tcset x%d, ne\n", r0);
 			break;
+		case IR_INST_NOTBOOL:
+			fprintf(f, "\ttst x%d, x%d\n", r1, r1);
+			fprintf(f, "\tcset x%d, eq\n", r0);
+			break;
 		case IR_INST_NEG:
 			fprintf(f, "\tneg x%d, x%d\n", r0, r1);
 			break;
