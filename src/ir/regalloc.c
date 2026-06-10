@@ -542,6 +542,17 @@ static void ir_simplify(ir_func_t *fun, int amount)
 				goto end;
 			}
 
+			/* simplify
+			 * %r0 = %r1
+			 * %r1 = %r0
+			 * into
+			 * %r0 = %r1
+			 * nop */
+			if(nxt && ins->type == IR_INST_MOV && nxt->type == IR_INST_MOV &&
+			   ins->r0->rr == nxt->r1->rr && ins->r1->rr == nxt->r0->rr) {
+				nxt->type = IR_INST_NOP;
+			}
+
 			/* remove useless insts where thing stored is never used
 			 * beyond this inst */
 			if(ins->r0 && ins->r0->def == ins->r0->last_use &&

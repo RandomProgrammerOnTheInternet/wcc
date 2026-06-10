@@ -15,6 +15,19 @@ extern int debug;
  * %reg = leas #off
  
  */
+
+static ir_inst_t *find_last_or_flow_ins(ir_inst_t *root)
+{
+	ir_inst_t *ret = root;
+	for(; ret; ret = ret->next) {
+		if(ir_inst_is_term(ret->type)) {
+			return ret;
+		}
+	}
+	ASSERT(ir_inst_is_term(ret->type), "IR is not constructed properly");
+	return NULL;
+}
+
 static int ir_stackopt(ir_func_t *func)
 {
 	int changed = 0;
@@ -220,7 +233,35 @@ false_pos:
 	return changed;
 }
 
-static int ir_simpleopt_ins(ir_inst_t *ins)
+static int inverse_brcmp(enum ins_type ty)
+{
+	switch(ty) {
+	case IR_INST_BREQ:
+		return IR_INST_BRNE;
+	case IR_INST_BRNE:
+		return IR_INST_BREQ;
+	case IR_INST_BRSLT:
+		return IR_INST_BRSGE;
+	case IR_INST_BRSLE:
+		return IR_INST_BRSGT;
+	case IR_INST_BRSGT:
+		return IR_INST_BRSLE;
+	case IR_INST_BRSGE:
+		return IR_INST_BRSLT;
+	case IR_INST_BRULT:
+		return IR_INST_BRUGE;
+	case IR_INST_BRULE:
+		return IR_INST_BRUGT;
+	case IR_INST_BRUGT:
+		return IR_INST_BRULE;
+	case IR_INST_BRUGE:
+		return IR_INST_BRULT;
+	default:
+		return IR_INST_NOP;
+	}
+}
+
+static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 {
 	int change = 0;
 	/* %r0 = eor/sub/sdiv/udiv/smod/umod %r1, %r1
@@ -301,6 +342,44 @@ static int ir_simpleopt_ins(ir_inst_t *ins)
 		change = 1;
 	}
 
+	/* simplify dead block jumps */
+	if(ir_inst_is_br(ins->type) || ins->type == IR_INST_JMP) {
+		ir_inst_t *first = ins->true_blk->insts;
+		if(first->type == IR_INST_JMP) {
+			ir_blk_t *blk = first->true_blk;
+			ins->true_blk = blk;
+			change = 1;
+		}
+	}
+
+	if(ir_inst_is_br(ins->type)) {
+		ir_inst_t *first = ins->false_blk->insts;
+		if(first->type == IR_INST_JMP) {
+			ir_blk_t *blk = first->true_blk;
+			ins->false_blk = blk;
+			change = 1;
+		}
+	}
+
+	/* simplify
+	 * br.cmp %r0, %r1, trueblk, falseblk (in front)
+	 * to
+	 * br.invcmp %r1, %r0, falseblk (in front), trueblk */
+	if(ir_inst_is_br(ins->type) && ins->type != IR_INST_BR) {
+		if(ins->false_blk->num == thisblk->num + 1) {
+			reg_t *tmp = ins->r1;
+			ir_blk_t *tmpblk = ins->true_blk;
+			ins->type = inverse_brcmp(ins->type);
+			/*
+			ins->r1 = ins->r2;
+			ins->r2 = tmp;
+			*/
+			ins->true_blk = ins->false_blk;
+			ins->false_blk = tmpblk;
+			change = 1;
+		}
+	}
+
 	return change;
 }
 
@@ -313,7 +392,7 @@ static int ir_simpleopt(ir_func_t *func)
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-			changed |= ir_simpleopt_ins(ins);
+			changed |= ir_simpleopt_ins(blk, ins);
 		}
 	}
 
@@ -355,6 +434,10 @@ static int ir_stackreduce(ir_func_t *func)
 /* optimizes an IR function */
 void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 {
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		func->blocks[i]->tail = find_last_or_flow_ins(func->blocks[i]->insts);
+	}
+
 	int change = 0;
 	int max_tolerated_change;
 	switch(opt_level) {

@@ -110,7 +110,7 @@ static UNUSEDA void emit_lea(reg_t *res, ir_global_t *glob)
 
 static UNUSEDA void emit_load_sz(type_t *typ, reg_t *r0, reg_t *r1)
 {
-	reg_t *new_r0 = r0;
+	reg_t *new_r0 = reg_make();
 
 	ir_inst_t *ins = ins_load(new_r0, r1);
 	if(typ->size < 8 && type_is_signed(typ)) {
@@ -118,6 +118,12 @@ static UNUSEDA void emit_load_sz(type_t *typ, reg_t *r0, reg_t *r1)
 	}
 	ins->size = typ->size;
 	ir_blk_add(outblk, ins);
+
+	if(typ->kind == TYPE_BOOL) {
+		emit_mkbool(r0, new_r0);
+	} else {
+		ins->r0 = r0;
+	}
 	return;
 }
 
