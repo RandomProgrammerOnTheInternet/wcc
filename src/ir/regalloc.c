@@ -41,7 +41,7 @@ static void fill_defs(ir_blk_t *blk)
 /* fill out successors and predecessors (and also if block returns) */
 static void fill_succ_pred(ir_blk_t *blk)
 {
-	if(!blk || blk->returns || blk->visited) {
+	if(!blk || blk->visited) {
 		return;
 	}
 
@@ -118,8 +118,40 @@ static void fill_ins_outs(ir_blk_t *blk)
 	}
 }
 
+static void reset_blk(ir_blk_t *blk)
+{
+	list_hdr(blk->pred)->size = 0;
+	list_hdr(blk->dom_frontier)->size = 0;
+	list_hdr(blk->regs_def)->size = 0;
+	list_hdr(blk->regs_in)->size = 0;
+	list_hdr(blk->regs_out)->size = 0;
+}
+
+static void reset_fun(ir_func_t *fun)
+{
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		reset_blk(fun->blocks[i]);
+		fun->blocks[i]->visited = false;
+	}
+}
+
 void ir_blk_reguse(ir_func_t *fun)
 {
+	reset_fun(fun);
+	size_t block_amount = list_len(fun->blocks);
+	fill_succ_pred(fun->blocks[0]);
+	for(size_t i = 0; i < block_amount; i++) {
+		fill_defs(fun->blocks[i]);
+	}
+	for(size_t i = 0; i < block_amount; i++) {
+		fill_ins_outs(fun->blocks[i]);
+	}
+	return;
+}
+
+void ir_blk_flow(ir_func_t *fun)
+{
+	reset_fun(fun);
 	size_t block_amount = list_len(fun->blocks);
 	fill_succ_pred(fun->blocks[0]);
 	for(size_t i = 0; i < block_amount; i++) {

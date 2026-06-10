@@ -96,20 +96,6 @@ void reg_delete(reg_t *reg)
 	return;
 }
 
-/* obtain a zero register */
-reg_t *reg_zero(void)
-{
-	reg_t *reg = scr_alloc(sizeof(reg_t));
-
-	reg->rr = -1;
-	reg->spilld = false;
-	reg->def = 0;
-	reg->last_use = 0;
-	reg->vr = 0;
-
-	return reg;
-}
-
 /* make an IR instruction */
 ir_inst_t *ir_inst_make(enum ins_type type, reg_t *r0, reg_t *r1, reg_t *r2,
 						uint64_t imm)
@@ -325,6 +311,7 @@ ir_blk_t *ir_blk_make(ir_inst_t *insts)
 	blk->insts = insts;
 	blk->visited = false;
 	blk->pred = list_make(ir_blk_t *);
+	blk->dom_frontier = list_make(long);
 	blk->regs_def = list_make(reg_t *);
 	blk->regs_in = list_make(reg_t *);
 	blk->regs_out = list_make(reg_t *);
@@ -349,6 +336,7 @@ void ir_blk_add(ir_blk_t *blk, ir_inst_t *inst)
 void ir_blk_delete(ir_blk_t *blk)
 {
 	list_delete(blk->pred);
+	list_delete(blk->dom_frontier);
 	list_delete(blk->regs_def);
 	list_delete(blk->regs_in);
 	list_delete(blk->regs_out);
@@ -460,6 +448,20 @@ static void ir_fix_ins(ir_inst_t *ins)
 	ins->r0 = r0;
 	ins->r1 = r1;
 	ins->r2 = r2;
+
+	ir_blk_t *falseblk = NULL;
+	ir_blk_t *trueblk = NULL;
+
+	if(ir_inst_is_br(ins->type)) {
+		falseblk = ins->false_blk;
+		trueblk = ins->true_blk;
+	}
+	if(ins->type == IR_INST_JMP) {
+		trueblk = ins->true_blk;
+	}
+
+	ins->false_blk = falseblk;
+	ins->true_blk = trueblk;
 }
 
 /* fixes IR function */
@@ -480,8 +482,16 @@ void ir_fix(ir_func_t *func)
 
 char size_suf[9] = { [1] = 'b', [2] = 'w', [4] = 'l', [8] = 'q' };
 
+static void print_phiarg(ir_blk_t *blk, ir_inst_t *phi, int indx)
+{
+	reg_t *r = phi->phi_args[indx];
+	long rn = r ? r->vr : -1;
+	printf("[BB%ld, %%r%ld]", blk->pred[indx]->num, rn);
+	return;
+}
+
 /* print IR instruction */
-void ir_print_inst(ir_inst_t *ins, int mode)
+void ir_print_inst(ir_blk_t *blk, ir_inst_t *ins, int mode)
 {
 #define out(...)         \
 	printf(__VA_ARGS__); \
@@ -596,6 +606,19 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 			printf(", %%r%ld", n);
 		}
 	}; break;
+	case IR_INST_PHI: {
+		printf("%%r%ld = phi ", r0);
+		size_t count = list_len(ins->phi_args);
+		if(count >= 1) {
+			print_phiarg(blk, ins, 0);
+		}
+
+		size_t i = 1;
+		while(i < count) {
+			printf(", ");
+			print_phiarg(blk, ins, i++);
+		}
+	}; break;
 	case IR_INST_BREQ:
 		out("br.eq %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);
@@ -663,7 +686,7 @@ void ir_dump(ir_func_t *fun, int mode)
 		printf("BB%ld:\n", blk->num);
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
 			putchar('\t');
-			ir_print_inst(inst, mode);
+			ir_print_inst(blk, inst, mode);
 			putchar('\n');
 		}
 	}
@@ -716,6 +739,9 @@ void ir_func_emit(FILE *f, ir_func_t *fun, enum ir_arch arch)
 		break;
 	}
 }
+
+extern void ir_ssa_enter(ir_func_t *func);
+extern void ir_ssa_exit(ir_func_t *func);
 
 /* generates code for an IR program */
 /* handles all the function finalization stuff */

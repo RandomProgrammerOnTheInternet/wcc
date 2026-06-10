@@ -79,6 +79,7 @@ enum ins_type {
 	IR_INST_JMP, /* jmp blk */
 	IR_INST_RET, /* ret (%r1) */
 	IR_INST_CALL, /* (%r0) = call Function, %a1, %a2, ... */
+	IR_INST_PHI, /* %r0 = phi [pred1, %a1], [pred2, %a1], ... */
 };
 
 /* a "register" */
@@ -133,6 +134,7 @@ typedef struct ir_inst {
 	uint64_t imm; /* immediate, if needed */
 	struct ir_blk *false_blk, *true_blk; /* for br */
 	LIST(callreg_t *) call_args; /* for call */
+	LIST(reg_t *) phi_args; /* for phi */
 	char *fname; /* for call */
 	bool noopt; /* is this inst volatile? */
 	bool sext; /* sign extend this load? */
@@ -144,12 +146,15 @@ typedef struct ir_inst {
 typedef struct ir_blk {
 	ir_inst_t *insts; /* instructions in this block */
 	ir_inst_t *tail; /* last instruction in block */
+	ir_inst_t *tailprev; /* for SSA deconstruction: ins before tail */
 	bool returns; /* does this block return? */
 	long num; /* this block's # */
+	long postnum; /* this block's postorder num */
 
 	/* register allocation stuff */
 	bool visited;
 	LIST(struct ir_blk *) pred; /* block's predecessors */
+	LIST(long) dom_frontier; /* block's dominance frontier */
 	LIST(reg_t *) regs_def; /* registers in this block */
 	LIST(reg_t *) regs_in; /* registers in */
 	LIST(reg_t *) regs_out; /* registers out */
@@ -282,9 +287,6 @@ callreg_t *callreg_make(reg_t *reg, enum call_argtype class, size_t size);
 /* delete a register */
 void reg_delete(reg_t *reg);
 
-/* obtain a zero register */
-reg_t *reg_zero(void);
-
 /* reset register counter */
 void reg_reset_counter(void);
 
@@ -308,7 +310,7 @@ ir_func_t *ir_func_make(char *name);
 void ir_func_delete(ir_func_t *fun);
 
 /* print IR instruction */
-void ir_print_inst(ir_inst_t *ins, int mode);
+void ir_print_inst(ir_blk_t *blk, ir_inst_t *ins, int mode);
 
 /* dump IR */
 void ir_dump(ir_func_t *fun, int mode);

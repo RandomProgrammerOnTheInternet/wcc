@@ -7,6 +7,9 @@
 /* calculates register use for all blocks in `fun` */
 void ir_blk_reguse(ir_func_t *fun);
 
+/* calculates predeccesors for blocks */
+void ir_blk_flow(ir_func_t *fun);
+
 /* calculates register defs & last use for all blocks in `fun`. returns registers allocated */
 LIST(reg_t *) ir_blk_reglive(ir_func_t *fun);
 
