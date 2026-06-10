@@ -367,13 +367,8 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 	 * br.invcmp %r1, %r0, falseblk (in front), trueblk */
 	if(ir_inst_is_br(ins->type) && ins->type != IR_INST_BR) {
 		if(ins->false_blk->num == thisblk->num + 1) {
-			reg_t *tmp = ins->r1;
 			ir_blk_t *tmpblk = ins->true_blk;
 			ins->type = inverse_brcmp(ins->type);
-			/*
-			ins->r1 = ins->r2;
-			ins->r2 = tmp;
-			*/
 			ins->true_blk = ins->false_blk;
 			ins->false_blk = tmpblk;
 			change = 1;
