@@ -233,7 +233,7 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		size_t sz = ins->size;
 		int64_t imm = (int64_t)ins->imm;
 		switch(ins->type) {
-		case IR_INST_ZEXT:
+		case IR_INST_ZXT:
 			switch(ins->size) {
 			case 1:
 				fprintf(f, "\tuxtb w%d, w%d\n", r0, r1);
@@ -253,7 +253,7 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 				break;
 			}
 			break;
-		case IR_INST_SEXT:
+		case IR_INST_SXT:
 			switch(ins->size) {
 			case 1:
 				fprintf(f, "\tsxtb x%d, x%d\n", r0, r1);
@@ -480,20 +480,21 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 					ins->label->name);
 			break;
 		case IR_INST_LOAD:
-			load(f, sz, ins->sext, r0, "[x%d]", r1);
+			load(f, sz, ins->sign_ext, r0, "[x%d]", r1);
 			break;
 		case IR_INST_LOADS:
 			if(load_fp_imm_x10(f, imm, false)) {
-				load(f, sz, ins->sext, r0, "[fp, x10]");
+				load(f, sz, ins->sign_ext, r0, "[fp, x10]");
 			} else {
-				load(f, sz, ins->sext, r0, "[fp, #%lld]", imm);
+				load(f, sz, ins->sign_ext, r0, "[fp, #%lld]", imm);
 			}
 			break;
 		case IR_INST_LOADSS:
 			if(load_fp_imm_x10(f, imm, false)) {
-				load(f, sz, ins->sext, r0, "[fp, x10]\t ; spilled load");
+				load(f, sz, ins->sign_ext, r0, "[fp, x10]\t ; spilled load");
 			} else {
-				load(f, sz, ins->sext, r0, "[fp, #%lld]\t ; spilled load", imm);
+				load(f, sz, ins->sign_ext, r0, "[fp, #%lld]\t ; spilled load",
+					 imm);
 			}
 			break;
 

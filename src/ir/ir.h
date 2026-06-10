@@ -6,7 +6,7 @@
 #include "zz/list.h"
 
 enum ins_type {
-	IR_INST_NOP, /* does nothing */
+	IR_INST_NOP = 0, /* does nothing */
 
 	/* data transfer */
 	IR_INST_MOV, /* %r0 = %r1 */
@@ -71,8 +71,8 @@ enum ins_type {
 	IR_INST_STORESS, /* stores %r1, #imm */
 
 	/* sign extensions */
-	IR_INST_ZEXT, /* %r0 = zext %r1 */
-	IR_INST_SEXT, /* %r0 = sext %r1 */
+	IR_INST_ZXT, /* %r0 = zxt %r1 */
+	IR_INST_SXT, /* %r0 = sxt %r1 */
 
 	/* basic block stuff */
 	IR_INST_BR, /* br %r1, false-blk, true-blk */
@@ -137,8 +137,8 @@ typedef struct ir_inst {
 	LIST(reg_t *) phi_args; /* for phi */
 	char *fname; /* for call */
 	bool noopt; /* is this inst volatile? */
-	bool sext; /* sign extend this load? */
-	size_t size; /* load/store/zext/sext size */
+	bool sign_ext; /* sign extend this load? */
+	size_t size; /* load/store/zero_ext/sign_ext size */
 	struct ir_global *label; /* for lea, the label */
 } ir_inst_t;
 
@@ -256,18 +256,21 @@ DEF_INS(jmp, ir_blk_t *blk);
 DEF_INS(ret, reg_t *r1);
 DEF_INS(call, reg_t *res, char *fname, LIST(callreg_t *) args);
 
-DEF_INS(zextb, reg_t *r0, reg_t *r1);
-DEF_INS(sextb, reg_t *r0, reg_t *r1);
-DEF_INS(zextw, reg_t *r0, reg_t *r1);
-DEF_INS(sextw, reg_t *r0, reg_t *r1);
-DEF_INS(zextl, reg_t *r0, reg_t *r1);
-DEF_INS(sextl, reg_t *r0, reg_t *r1);
+DEF_INS(zxtb, reg_t *r0, reg_t *r1);
+DEF_INS(sxtb, reg_t *r0, reg_t *r1);
+DEF_INS(zxtw, reg_t *r0, reg_t *r1);
+DEF_INS(sxtw, reg_t *r0, reg_t *r1);
+DEF_INS(zxtl, reg_t *r0, reg_t *r1);
+DEF_INS(sxtl, reg_t *r0, reg_t *r1);
 
 #undef DEF_INS
 #undef INSNAME
 
 /* does this instruction terminate a block? */
 int ir_inst_is_term(enum ins_type type);
+
+/* is this instruction foldable? */
+int ir_inst_is_foldable(enum ins_type type);
 
 /* is this instruction a branch? */
 int ir_inst_is_br(enum ins_type type);

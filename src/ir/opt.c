@@ -1,3 +1,4 @@
+#include "zz/base.h"
 #include "ir.h"
 #include "opt.h"
 #include "aarch64.h"
@@ -154,7 +155,7 @@ static int ir_branchopt(ir_func_t *func)
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-			if(ir_inst_is_cmp(ins->type)) {
+			if(ir_inst_is_cmp(ins->type) && !ins->r0->no_mov_elim) {
 				ins->r0->insty = ins->type;
 				ins->r0->lhs = ins->r1;
 				ins->r0->rhs = ins->r2;
@@ -197,6 +198,18 @@ static int ir_branchopt(ir_func_t *func)
 
 			if(ins->r2 && ir_inst_is_cmp(ins->r2->insty) &&
 			   ins->type != IR_INST_BR) {
+				ins->r2->insty = IR_INST_NOP;
+				ins->r2->lhs = ins->r2->rhs = NULL;
+				continue;
+			}
+
+			if(ins->r1 && ins->r1->no_mov_elim) {
+				ins->r1->insty = IR_INST_NOP;
+				ins->r1->lhs = ins->r1->rhs = NULL;
+				continue;
+			}
+
+			if(ins->r2 && ins->r2->no_mov_elim) {
 				ins->r2->insty = IR_INST_NOP;
 				ins->r2->lhs = ins->r2->rhs = NULL;
 				continue;
@@ -262,9 +275,255 @@ static int inverse_brcmp(enum ins_type ty)
 	}
 }
 
+static void ir_removemarks(ir_func_t *func)
+{
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->r0) {
+				inst->r0->insty = IR_INST_NOP;
+				inst->r0->lhs = inst->r0->rhs = NULL;
+				inst->r0->imm = inst->r0->no_mov_elim = 0;
+			}
+			if(inst->r1) {
+				inst->r1->insty = IR_INST_NOP;
+				inst->r1->lhs = inst->r1->rhs = NULL;
+				inst->r1->imm = inst->r1->no_mov_elim = 0;
+			}
+			if(inst->r2) {
+				inst->r2->insty = IR_INST_NOP;
+				inst->r2->lhs = inst->r2->rhs = NULL;
+				inst->r2->imm = inst->r2->no_mov_elim = 0;
+			}
+			if(inst->type == IR_INST_CALL) {
+				for(size_t i = 0; i < list_len(inst->call_args); i++) {
+					reg_t *arg = inst->call_args[i]->r;
+					arg->insty = IR_INST_NOP;
+					arg->lhs = arg->rhs = NULL;
+					arg->imm = arg->no_mov_elim = 0;
+				}
+			}
+		}
+	}
+}
+
+static void ir_placemarks(ir_func_t *func)
+{
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->r0 && inst->r0->insty != IR_INST_NOP) {
+				inst->r0->insty = IR_INST_NOP;
+				inst->r0->lhs = inst->r0->rhs = NULL;
+				inst->r0->imm = 0;
+				inst->r0->no_mov_elim = true;
+				continue;
+			}
+
+			if(inst->r0 && inst->r0->insty == IR_INST_NOP &&
+			   !inst->r0->no_mov_elim) {
+				inst->r0->insty = inst->type;
+				inst->r0->lhs = inst->r1;
+				inst->r0->rhs = inst->r2;
+				inst->r0->imm = inst->imm;
+			}
+		}
+	}
+}
+
+static uint64_t zxt(uint64_t x, uint64_t size)
+{
+	uint64_t m = (1ULL << size) - 1;
+	return x & m;
+}
+
+static uint64_t sxt(uint64_t x, uint64_t size)
+{
+	/* thank you https://stackoverflow.com/a/17719010 */
+	uint64_t mask = 1ULL << (size - 1);
+	return (x ^ mask) - mask;
+}
+
+static void ir_fold_ins_unaryop(ir_inst_t *ins)
+{
+	uint64_t ua = ins->r1->imm;
+	int64_t sa = *((int64_t *)&ins->r1->imm);
+
+	ins->r1 = NULL;
+	ins->r2 = NULL;
+
+	switch(ins->type) {
+	case IR_INST_MOV:
+		ins->imm = ua;
+		break;
+	case IR_INST_NEG:
+		ins->imm = -sa;
+		break;
+	case IR_INST_NOT:
+		ins->imm = ~ua;
+		break;
+	case IR_INST_MKBOOL:
+		ins->imm = (ua != 0);
+		break;
+	case IR_INST_NOTBOOL:
+		ins->imm = (ua == 0);
+		break;
+	case IR_INST_ZXT:
+		ins->imm = zxt(ua, ins->size * 8);
+		break;
+	case IR_INST_SXT:
+		ins->imm = sxt(ua, ins->size * 8);
+		break;
+	default:
+		break;
+	}
+
+	ins->type = IR_INST_IMM;
+	if(!ins->r0->no_mov_elim) {
+		ins->r0->insty = IR_INST_IMM;
+		ins->r0->imm = ins->imm;
+	}
+	return;
+}
+
+static void ir_fold_ins_binop(ir_inst_t *ins)
+{
+	uint64_t ua = ins->r1->imm;
+	uint64_t ub = ins->r2->imm;
+	int64_t sa = *((int64_t *)&ins->r1->imm);
+	int64_t sb = *((int64_t *)&ins->r2->imm);
+
+	ins->r1 = NULL;
+	ins->r2 = NULL;
+
+	switch(ins->type) {
+	case IR_INST_ADD:
+		ins->imm = ua + ub;
+		break;
+	case IR_INST_SUB:
+		ins->imm = ua - ub;
+		break;
+	case IR_INST_SMUL:
+		ins->imm = sa * sb;
+		break;
+	case IR_INST_UMUL:
+		ins->imm = ua * ub;
+		break;
+	case IR_INST_SDIV:
+		if(sb == 0) {
+			ins->imm = 0;
+		} else {
+			ins->imm = sa / sb;
+		}
+		break;
+	case IR_INST_UDIV:
+		if(ub == 0) {
+			ins->imm = 0;
+		} else {
+			ins->imm = ua / ub;
+		}
+		break;
+	case IR_INST_SMOD:
+		if(sb == 0) {
+			ins->imm = 0;
+		} else {
+			ins->imm = sa % sb;
+		}
+		break;
+	case IR_INST_UMOD:
+		if(ub == 0) {
+			ins->imm = 0;
+		} else {
+			ins->imm = ua % ub;
+		}
+		break;
+	case IR_INST_AND:
+		ins->imm = ua & ub;
+		break;
+	case IR_INST_OR:
+		ins->imm = ua | ub;
+		break;
+	case IR_INST_EOR:
+		ins->imm = ua ^ ub;
+		break;
+	case IR_INST_SHL:
+		ins->imm = ua << (ub & 63);
+		break;
+	case IR_INST_SHR:
+		ins->imm = ua >> (ub & 63);
+		break;
+	case IR_INST_ASHR:
+		ins->imm = sa >> (sb & 63);
+		break;
+	case IR_INST_EQ:
+		ins->imm = ua == ub;
+		break;
+	case IR_INST_NE:
+		ins->imm = ua != ub;
+		break;
+	case IR_INST_SLT:
+		ins->imm = sa < sb;
+		break;
+	case IR_INST_SLE:
+		ins->imm = sa <= sb;
+		break;
+	case IR_INST_SGT:
+		ins->imm = sa > sb;
+		break;
+	case IR_INST_SGE:
+		ins->imm = sa >= sb;
+		break;
+	case IR_INST_ULT:
+		ins->imm = ua < ub;
+		break;
+	case IR_INST_ULE:
+		ins->imm = ua <= ub;
+		break;
+	case IR_INST_UGT:
+		ins->imm = ua > ub;
+		break;
+	case IR_INST_UGE:
+		ins->imm = ua >= ub;
+		break;
+
+	default:
+		break;
+	}
+
+	ins->type = IR_INST_IMM;
+	if(!ins->r0->no_mov_elim) {
+		ins->r0->insty = IR_INST_IMM;
+		ins->r0->imm = ins->imm;
+	}
+
+	return;
+}
+
 static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 {
 	int change = 0;
+
+	/* move elimination */
+	if(ins->r1 && ins->r1->insty == IR_INST_MOV) {
+		ins->r1 = ins->r1->lhs;
+		change = 1;
+	}
+
+	if(ins->r2 && ins->r2->insty == IR_INST_MOV) {
+		ins->r2 = ins->r2->lhs;
+		change = 1;
+	}
+
+	if(ins->type == IR_INST_CALL) {
+		for(size_t i = 0; i < list_len(ins->call_args); i++) {
+			reg_t *arg = ins->call_args[i]->r;
+			if(arg && arg->insty == IR_INST_MOV) {
+				ins->call_args[i]->r = arg->lhs;
+				change = 1;
+			}
+		}
+	}
+
 	/* %r0 = eor/sub/sdiv/udiv/smod/umod %r1, %r1
 	 * ->
 	 * %r0 = imm #0 */
@@ -287,11 +546,11 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 		change = 1;
 	}
 
-	/* %r0 = sext.i64/zext.i64 %r1
+	/* %r0 = sign_ext.i64/zero_ext.i64 %r1
 	 * ->
 	 * %r0 = %r1
 	 */
-	if((ins->type == IR_INST_SEXT || ins->type == IR_INST_ZEXT) &&
+	if((ins->type == IR_INST_SXT || ins->type == IR_INST_ZXT) &&
 	   ins->size == 8) {
 		ins->type = IR_INST_MOV;
 		change = 1;
@@ -374,6 +633,80 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 			ins->false_blk = tmpblk;
 			change = 1;
 		}
+	}
+
+	/* constant folding */
+	if(ir_inst_is_foldable(ins->type)) {
+		if(ins->r1 && ins->r2 && ins->r1->insty == IR_INST_IMM &&
+		   ins->r2->insty == IR_INST_IMM) {
+			ir_fold_ins_binop(ins);
+			change = 1;
+		}
+
+		if(ins->r1 && ins->r1->insty == IR_INST_IMM) {
+			ir_fold_ins_unaryop(ins);
+			change = 1;
+		}
+	}
+
+	if(ins->type == IR_INST_BR && ins->r1->insty == IR_INST_IMM) {
+		ins->type = IR_INST_JMP;
+		if(!ins->r1->imm) {
+			ins->true_blk = ins->false_blk;
+		}
+		ins->false_blk = NULL;
+		change = 1;
+	}
+
+	if(ir_inst_is_br(ins->type) && ins->type != IR_INST_BR &&
+	   ins->r1->insty == IR_INST_IMM && ins->r2->insty == IR_INST_IMM) {
+		int cond;
+		uint64_t ua = ins->r1->imm;
+		uint64_t ub = ins->r2->imm;
+		int64_t sa = *((int64_t *)&ins->r1->imm);
+		int64_t sb = *((int64_t *)&ins->r2->imm);
+		switch(ins->type) {
+		case IR_INST_BREQ:
+			cond = ua == ub;
+			break;
+		case IR_INST_BRNE:
+			cond = ua != ub;
+			break;
+		case IR_INST_BRSLT:
+			cond = sa < sb;
+			break;
+		case IR_INST_BRSLE:
+			cond = sa <= sb;
+			break;
+		case IR_INST_BRSGT:
+			cond = sa > sb;
+			break;
+		case IR_INST_BRSGE:
+			cond = sa >= sb;
+			break;
+		case IR_INST_BRULT:
+			cond = ua < ub;
+			break;
+		case IR_INST_BRULE:
+			cond = ua <= ub;
+			break;
+		case IR_INST_BRUGT:
+			cond = ua > ub;
+			break;
+		case IR_INST_BRUGE:
+			cond = ua >= ub;
+			break;
+		default:
+			cond = 0;
+			break;
+		}
+
+		ins->type = IR_INST_JMP;
+		if(!cond) {
+			ins->true_blk = ins->false_blk;
+		}
+		ins->false_blk = NULL;
+		change = 1;
 	}
 
 	return change;
@@ -465,9 +798,9 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 	while(left) {
 		change = 0;
 
-		/* trivial optimizations */
+		/* branch opts */
 		{
-			change |= ir_simpleopt(func);
+			change |= ir_branchopt(func);
 			ir_nopremover(func);
 			ir_fix(func);
 		}
@@ -481,9 +814,12 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 			ir_fix(func);
 		}
 
-		/* branch opts */
+		/* trivial optimizations */
 		{
-			change |= ir_branchopt(func);
+			/* TODO: investigate why the mark placement/removing is not working */
+			// ir_placemarks(func);
+			change |= ir_simpleopt(func);
+			// ir_removemarks(func);
 			ir_nopremover(func);
 			ir_fix(func);
 		}

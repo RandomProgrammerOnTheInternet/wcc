@@ -23,6 +23,17 @@ int ir_inst_is_term(enum ins_type type)
 	return ir_inst_is_br(type) || type == IR_INST_JMP || type == IR_INST_RET;
 }
 
+int ir_inst_is_foldable(enum ins_type type)
+{
+	return ir_inst_is_assoc(type) || type == IR_INST_UDIV ||
+		   type == IR_INST_SDIV || type == IR_INST_UMOD ||
+		   type == IR_INST_SMOD || type == IR_INST_SHL || type == IR_INST_SHR ||
+		   type == IR_INST_ASHR || type == IR_INST_MOV || type == IR_INST_NEG ||
+		   type == IR_INST_NOT || type == IR_INST_MKBOOL ||
+		   type == IR_INST_NOTBOOL || type == IR_INST_ZXT ||
+		   type == IR_INST_SXT;
+}
+
 /* is this instruction a branch? */
 int ir_inst_is_br(enum ins_type type)
 {
@@ -42,14 +53,12 @@ int ir_inst_is_cmp(enum ins_type type)
 		   type == IR_INST_UGE;
 }
 
-/* is this instruction associative? (F(B, C) == F(C, B)) */
+/* is this instruction associative/trivally associative? (F(B, C) == F(C, B)) */
 int ir_inst_is_assoc(enum ins_type type)
 {
-	return type == IR_INST_EQ || type == IR_INST_NE || type == IR_INST_SLT ||
-		   type == IR_INST_SLE || type == IR_INST_SGT || type == IR_INST_SGE ||
-		   type == IR_INST_ULT || type == IR_INST_ULE || type == IR_INST_UGT ||
-		   type == IR_INST_UGE || type == IR_INST_ADD || type == IR_INST_UMUL ||
-		   type == IR_INST_SMUL;
+	return ir_inst_is_cmp(type) || type == IR_INST_ADD ||
+		   type == IR_INST_UMUL || type == IR_INST_SMUL ||
+		   type == IR_INST_AND || type == IR_INST_OR || type == IR_INST_EOR;
 }
 
 /* reset register counter */
@@ -110,7 +119,7 @@ ir_inst_t *ir_inst_make(enum ins_type type, reg_t *r0, reg_t *r1, reg_t *r2,
 	ins->true_blk = NULL;
 	ins->imm = imm;
 	ins->noopt = false;
-	ins->sext = false;
+	ins->sign_ext = false;
 
 	return ins;
 }
@@ -254,12 +263,12 @@ GEN_BRCMP(IR_INST_BRUGE, bruge);
 		return inst;                                        \
 	}
 
-GEN_EXT(IR_INST_ZEXT, zextb, 1);
-GEN_EXT(IR_INST_SEXT, sextb, 1);
-GEN_EXT(IR_INST_ZEXT, zextw, 2);
-GEN_EXT(IR_INST_SEXT, sextw, 2);
-GEN_EXT(IR_INST_ZEXT, zextl, 4);
-GEN_EXT(IR_INST_SEXT, sextl, 4);
+GEN_EXT(IR_INST_ZXT, zxtb, 1);
+GEN_EXT(IR_INST_SXT, sxtb, 1);
+GEN_EXT(IR_INST_ZXT, zxtw, 2);
+GEN_EXT(IR_INST_SXT, sxtw, 2);
+GEN_EXT(IR_INST_ZXT, zxtl, 4);
+GEN_EXT(IR_INST_SXT, sxtl, 4);
 
 #undef GEN_EXT
 
@@ -426,8 +435,8 @@ static void ir_fix_ins(ir_inst_t *ins)
 		FIX(BRULE, xx, r1, r2);
 		FIX(BRUGT, xx, r1, r2);
 		FIX(BRUGE, xx, r1, r2);
-		FIX(ZEXT, r0, r1, xx);
-		FIX(SEXT, r0, r1, xx);
+		FIX(ZXT, r0, r1, xx);
+		FIX(SXT, r0, r1, xx);
 		FIX(LOAD, r0, r1, xx);
 		FIX(STORE, xx, r1, r2);
 		FIX(LEAS, r0, xx, xx);
@@ -511,7 +520,7 @@ void ir_print_inst(ir_blk_t *blk, ir_inst_t *ins, int mode)
 	uint64_t imm = ins->imm;
 	char *suf =
 		(char *[]){ "", ".i8", ".i16", "", ".i32", "", "", "", "" }[ins->size];
-	char *ext = ins->sext ? ".x" : "";
+	char *ext = ins->sign_ext ? ".x" : "";
 
 	switch(ins->type) {
 	case IR_INST_NOP:
@@ -588,10 +597,10 @@ void ir_print_inst(ir_blk_t *blk, ir_inst_t *ins, int mode)
 		out("stores%s #%ld, %%r%ld", suf, (long)imm, r1);
 	case IR_INST_STORESS:
 		out("spill_store%s #%ld, %%r%ld", suf, (long)imm, r1);
-	case IR_INST_ZEXT:
-		out("%%r%ld = zext%s %%r%ld", r0, suf, r1);
-	case IR_INST_SEXT:
-		out("%%r%ld = sext%s %%r%ld", r0, suf, r1);
+	case IR_INST_ZXT:
+		out("%%r%ld = zero_ext%s %%r%ld", r0, suf, r1);
+	case IR_INST_SXT:
+		out("%%r%ld = sign_ext%s %%r%ld", r0, suf, r1);
 	case IR_INST_BR:
 		out("br %%r%ld, BB%ld, BB%ld", r1, ins->true_blk->num,
 			ins->false_blk->num);
@@ -740,8 +749,17 @@ void ir_func_emit(FILE *f, ir_func_t *fun, enum ir_arch arch)
 	}
 }
 
-extern void ir_ssa_enter(ir_func_t *func);
-extern void ir_ssa_exit(ir_func_t *func);
+static ir_inst_t *find_last_or_flow_ins(ir_inst_t *root)
+{
+	ir_inst_t *ret = root;
+	for(; ret; ret = ret->next) {
+		if(ir_inst_is_term(ret->type)) {
+			return ret;
+		}
+	}
+	ASSERT(ir_inst_is_term(ret->type), "IR is not constructed properly");
+	return NULL;
+}
 
 /* generates code for an IR program */
 /* handles all the function finalization stuff */
@@ -777,6 +795,13 @@ void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt)
 	for(size_t i = 0; i < list_len(prog->funcs); i++) {
 		ir_func_t *func = prog->funcs[i];
 		ir_fix(func);
+
+		for(size_t j = 0; j < list_len(func->blocks); j++) {
+			ir_blk_t *blk = func->blocks[j];
+			blk->tail = find_last_or_flow_ins(blk->insts);
+			blk->tail->next = NULL;
+		}
+
 		ir_opt(func, opt, arch);
 		ir_finalize(func, arch == IR_ARCH_AARCH64_APPLE ? 9 : 5, arch);
 		if(debug) {

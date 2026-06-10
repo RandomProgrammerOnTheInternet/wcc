@@ -254,7 +254,7 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		const UNUSEDA char *r2d =
 			ins->r2 && ins->r2->rr >= 0 ? x64_reg32[ins->r2->rr] : NULL;
 		switch(ins->type) {
-		case IR_INST_ZEXT: {
+		case IR_INST_ZXT: {
 			switch(ins->size) {
 			case 8:
 				fprintf(f, "\tmov %s, %s\n", r0, r1);
@@ -270,7 +270,7 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 				break;
 			}
 		}; break;
-		case IR_INST_SEXT: {
+		case IR_INST_SXT: {
 			switch(ins->size) {
 			case 8:
 				fprintf(f, "\tmov %s, %s\n", r0, r1);
@@ -564,11 +564,11 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			fprintf(f, "\tlea %s, [rbp - %lld]\n", r0, (int64_t)ins->imm);
 			break;
 		case IR_INST_LOAD:
-			load(f, ins->size, ins->sext, r0i, "[%s]", r1);
+			load(f, ins->size, ins->sign_ext, r0i, "[%s]", r1);
 			break;
 		case IR_INST_LOADS:
 		case IR_INST_LOADSS:
-			load(f, ins->size, ins->sext, r0i, "[rbp - %lld]",
+			load(f, ins->size, ins->sign_ext, r0i, "[rbp - %lld]",
 				 i64abs((int64_t)ins->imm));
 			break;
 			break;

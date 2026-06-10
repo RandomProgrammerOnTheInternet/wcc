@@ -114,7 +114,7 @@ static UNUSEDA void emit_load_sz(type_t *typ, reg_t *r0, reg_t *r1)
 
 	ir_inst_t *ins = ins_load(new_r0, r1);
 	if(typ->size < 8 && type_is_signed(typ)) {
-		ins->sext = true;
+		ins->sign_ext = true;
 	}
 	ins->size = typ->size;
 	ir_blk_add(outblk, ins);
@@ -163,12 +163,12 @@ GEN_BRCMP(IR_INST_BRUGE, bruge);
 		return;                                               \
 	}
 
-DEF_INS(zextb);
-DEF_INS(sextb);
-DEF_INS(zextw);
-DEF_INS(sextw);
-DEF_INS(zextl);
-DEF_INS(sextl);
+DEF_INS(zxtb);
+DEF_INS(sxtb);
+DEF_INS(zxtw);
+DEF_INS(sxtw);
+DEF_INS(zxtl);
+DEF_INS(sxtl);
 
 #undef GEN_BRCMP
 #undef INSNAME
@@ -406,7 +406,7 @@ void codegen_expr_stmt(node_t *node)
 		if(node->lhs && rettype->kind != TYPE_VOID) {
 			reg_t *retval = codegen_expr(node->lhs);
 			reg_t *ext = reg_make();
-			ir_inst_t *ins = ins_sextl(ext, retval);
+			ir_inst_t *ins = ins_sxtl(ext, retval);
 			ins->size = node->lhs->type->size;
 			ir_blk_add(outblk, ins);
 			emit_ret(ext);
