@@ -201,10 +201,11 @@ static type_t *parse_parameter_declaration(token_t *tok, token_t **rest);
 
 static bool is_declspec(token_t *tok)
 {
-	if(token_eq(tok, "void") || token_eq(tok, "char") ||
-	   token_eq(tok, "short") || token_eq(tok, "long") ||
-	   token_eq(tok, "int") || token_eq(tok, "signed") ||
-	   token_eq(tok, "unsigned") || token_eq(tok, "_Alignas")) {
+	if(token_eq(tok, "void") || token_eq(tok, "_Bool") ||
+	   token_eq(tok, "char") || token_eq(tok, "short") ||
+	   token_eq(tok, "long") || token_eq(tok, "int") ||
+	   token_eq(tok, "signed") || token_eq(tok, "unsigned") ||
+	   token_eq(tok, "_Alignas")) {
 		return true;
 	}
 	return false;
@@ -248,6 +249,13 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 			tok = token_skip(tok, "void");
 			*rest = tok;
 			res = TY_VOID;
+			break;
+		}
+
+		if(token_eq(tok, "_Bool")) {
+			tok = token_skip(tok, "_Bool");
+			*rest = tok;
+			res = TY_BOOL;
 			break;
 		}
 

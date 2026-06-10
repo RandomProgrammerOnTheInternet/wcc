@@ -53,13 +53,17 @@ type_t *TY_USHORT = &(type_t){ .kind = TYPE_SHORT,
 type_t *TY_VOID =
 	&(type_t){ .kind = TYPE_VOID, .size = 0, .align = 1, .to = NULL };
 
+type_t *TY_BOOL =
+	&(type_t){ .kind = TYPE_BOOL, .size = 1, .align = 1, .to = NULL };
+
 type_t *TY_PTR =
 	&(type_t){ .kind = TYPE_PTR, .size = 8, .align = 8, .to = NULL };
 
 bool type_is_int(type_t *ty)
 {
 	return ty && (ty->kind == TYPE_INT || ty->kind == TYPE_LONG ||
-				  ty->kind == TYPE_SHORT || ty->kind == TYPE_CHAR);
+				  ty->kind == TYPE_SHORT || ty->kind == TYPE_CHAR ||
+				  ty->kind == TYPE_BOOL);
 }
 
 bool type_is_ptr(type_t *ty)

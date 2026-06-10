@@ -6,6 +6,7 @@
 
 enum type_kind {
 	TYPE_VOID, /* void */
+	TYPE_BOOL, /* _Bool */
 	TYPE_CHAR, /* char */
 	TYPE_SHORT, /* short */
 	TYPE_INT, /* int */
@@ -26,6 +27,7 @@ typedef struct type {
 } type_t;
 
 extern type_t *TY_VOID;
+extern type_t *TY_BOOL;
 extern type_t *TY_CHAR;
 extern type_t *TY_SHORT;
 extern type_t *TY_INT;
