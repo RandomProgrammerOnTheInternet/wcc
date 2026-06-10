@@ -2,6 +2,7 @@
 #include "opt.h"
 #include "aarch64.h"
 #include "x64.h"
+#include "ssa.h"
 
 extern int debug;
 
@@ -433,6 +434,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		func->blocks[i]->tail = find_last_or_flow_ins(func->blocks[i]->insts);
 	}
 
+	// ir_ssa_enter(func);
 	int change = 0;
 	int max_tolerated_change;
 	switch(opt_level) {
@@ -497,6 +499,8 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		list_hdr(func->blocks[i]->pred)->size = 0;
 	}
+
+	// ir_ssa_exit(func);
 
 	if(debug) {
 		printf("After common opts:\n");
