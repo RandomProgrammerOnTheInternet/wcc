@@ -1,4 +1,6 @@
 #include "lex.h"
+#include "zz/base.h"
+#include "type.h"
 
 /* makes a token */
 token_t *token_make(enum token_kind kind, char *start, char *end)
@@ -189,6 +191,22 @@ token_t *lex_do(char *prog)
 
 			token_t *ident = token_make(type, start, prog);
 			tok->next = ident;
+			tok = tok->next;
+			continue;
+		}
+
+		/* tokenize strings */
+		if(*prog == '"') {
+			/* this is absolutely not correct but I will fix it later */
+			char *end = strstr(prog + 1, "\"");
+			if(!end) {
+				compile_err(prog, "unclosed string");
+			}
+			token_t *str = token_make(TOK_STR, prog + 1, end - 1);
+			str->str = mystrndup(str->loc, (end - prog) - 1);
+			str->type = type_arr_to(TY_CHAR, (end - prog));
+			prog = end + 1;
+			tok->next = str;
 			tok = tok->next;
 			continue;
 		}

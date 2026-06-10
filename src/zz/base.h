@@ -36,6 +36,9 @@ void *memdup(void *mem, size_t size);
 /* memdup() but allocates extra space */
 void *memdup_extra(void *mem, size_t src_size, size_t dst_size);
 
+/* fnv1a hash */
+uint64_t fnv1a(void *data, size_t size);
+
 /* memset(mem, 0, size) */
 #define wipe(mem, size)           \
 	do {                          \

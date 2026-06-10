@@ -12,16 +12,20 @@ enum token_kind {
 	TOK_KEYWORD, /* keywords */
 	TOK_PUNCT, /* punctuators + - * / */
 	TOK_IDENT, /* identifiers az */
+	TOK_STR, /* strings "str" */
 	TOK_NUM, /* numbers 1234 */
 	TOK_END, /* end */
 };
 
+struct type;
 /* a lexed token */
 typedef struct token {
 	enum token_kind kind;
 	struct token *next; /* linked list fun */
 	uint64_t num; /* for TOK_NUM */
 	char *loc; /* location of token in program */
+	char *str; /* parsed string for TOK_STR */
+	struct type *type; /* type for TOK_STR */
 	size_t len;
 } token_t;
 

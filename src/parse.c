@@ -6,6 +6,17 @@
 LIST(obj_t *) locals = NULL;
 LIST(obj_t *) globals = NULL;
 
+/* ron's universal number kounter */
+/* very important, critical piece of code */
+static long runk(int reset)
+{
+	static int counter = 1;
+	if(reset) {
+		counter = 0;
+	}
+	return counter++;
+}
+
 /* makes a node */
 node_t *node_make(enum node_kind kind, token_t *tok)
 {
@@ -112,7 +123,19 @@ obj_t *obj_make_global(char *name, type_t *type, bool is_func)
 {
 	obj_t *obj = obj_make_noadd(name, type, is_func);
 	obj->is_global = true;
+	obj->data = NULL;
 	list_append(globals, obj);
+	return obj;
+}
+
+#define STR_SIZE (32)
+obj_t *obj_make_str(token_t *str)
+{
+	char *name;
+	asprintf(&name, ".str%ld", runk(0));
+	obj_t *obj = obj_make_global(name, str->type, false);
+	obj->data = (void *)str->str;
+	obj->data_size = strlen(str->str);
 	return obj;
 }
 
@@ -440,7 +463,9 @@ static node_t *node_add(node_t *lhs, node_t *rhs, token_t *tok)
 	/* must be ptr + int now */
 	/* pointer arithmetic is fun so the int is multiplied by pointer base size */
 	node_t *mul =
-		node_bin(NODE_MUL, node_num(lhs->type->to->size, NULL), rhs, tok);
+		lhs->type->to->size > 1 ?
+			node_bin(NODE_MUL, node_num(lhs->type->to->size, NULL), rhs, tok) :
+			rhs;
 	return node_bin(NODE_ADD, lhs, mul, tok);
 }
 
@@ -857,6 +882,13 @@ static node_t *parse_prim(token_t *tok, token_t **rest)
 	/* num case */
 	if(tok->kind == TOK_NUM) {
 		node_t *node = node_num(tok->num, tok);
+		*rest = tok->next;
+		return node;
+	}
+
+	/* string case */
+	if(tok->kind == TOK_STR) {
+		node_t *node = node_var(obj_make_str(tok), tok);
 		*rest = tok->next;
 		return node;
 	}

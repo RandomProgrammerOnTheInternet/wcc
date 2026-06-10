@@ -81,8 +81,16 @@ void ir_glob_emit_aarch64_apple(FILE *f, ir_global_t *glob)
 {
 	fprintf(f, "\t.globl _%s\n", glob->name);
 	fprintf(f, "\t.data\n");
-	fprintf(f, "\t.zerofill __DATA, __common, _%s, %zu, %zu\n", glob->name,
-			glob->size, glob->align);
+	if(!glob->has_data) {
+		fprintf(f, "\t.zerofill __DATA, __common, _%s, %zu, %zu\n", glob->name,
+				glob->size, glob->align);
+	} else {
+		fprintf(f, "_%s:\n", glob->name);
+		for(size_t i = 0; i < glob->size; i++) {
+			fprintf(f, "\t.byte %hhu\n", glob->data[i]);
+		}
+	}
+	fprintf(f, "\n");
 	return;
 }
 

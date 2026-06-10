@@ -1,4 +1,4 @@
-prim = "(" expr ")" | ident args? | num
+prim = "(" expr ")" | ident args? | num | strlit
 funcall = ident "(" (assign ("," assign)*)? ")"
 postfix = prim ("[" expr "]")*
 unary = ("+" | "-" | "*" | "&" | "~" | "!") unary
@@ -18,7 +18,7 @@ log-or-expr = log-and-expr ("||" log-and-expr)*
 assign = log-or-expr ("=" assign)?
 expr = assign
 expr-stmt = expr? ";"
-type-specifier = "void" | "char" | "short" | "int" | "long" | "signed" | "unsigned"
+type-specifier = "_Bool" | "void" | "char" | "short" | "int" | "long" | "signed" | "unsigned"
 alignment-specifier = "_Alignas" "(" num ")"
 declspec = (type-specifier | alignment-specififer)*
 direct-declarator = ident ("[" num "]")*

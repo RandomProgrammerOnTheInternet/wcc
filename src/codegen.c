@@ -522,8 +522,8 @@ static UNUSEDA void assign_globals(LIST(obj_t *) globals)
 		if(!glob || glob->is_func) {
 			continue;
 		}
-		glob->glob =
-			ir_glob_make(glob->name, glob->type->size, glob->type->align, NULL);
+		glob->glob = ir_glob_make(glob->name, glob->type->size,
+								  glob->type->align, glob->data);
 	}
 	return;
 }

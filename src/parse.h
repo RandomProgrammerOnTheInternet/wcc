@@ -55,6 +55,8 @@ typedef struct obj {
 	char *name; /* name of variable */
 	bool is_global; /* is this variable global? */
 	ir_global_t *glob; /* the global assoc with it */
+	uint8_t *data; /* data for this global */
+	size_t data_size; /* data size for this global */
 	type_t *type; /* type of this var */
 	bool addressed; /* is this variable addressed? (used for optimization) */
 	bool skip; /* has this variable been turned into a register? */

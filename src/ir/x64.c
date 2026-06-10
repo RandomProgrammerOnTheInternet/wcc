@@ -93,7 +93,14 @@ void ir_glob_emit_x64_sysv(FILE *f, ir_global_t *glob)
 	fprintf(f, "\t.global %s\n", glob->name);
 	fprintf(f, "\t.bss\n");
 	fprintf(f, "%s:\n", glob->name);
-	fprintf(f, "\t.zero %zu\n", glob->size);
+	if(glob->has_data) {
+		for(size_t i = 0; i < glob->size; i++) {
+			fprintf(f, "\t.byte %hhu\n", glob->data[i]);
+		}
+	} else {
+		fprintf(f, "\t.zero %zu\n", glob->size);
+	}
+	fprintf(f, "\n");
 	return;
 }
 

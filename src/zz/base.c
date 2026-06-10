@@ -57,6 +57,25 @@ void *memdup_extra(void *mem, size_t src_size, size_t dst_size)
 	return newmem;
 }
 
+#define FNV_OFFSET_BASIS (14695981039346656037LLU)
+#define FNV_PRIME (1099511628211LLU)
+
+/* fnv1a hash */
+uint64_t fnv1a(void *data_, size_t size)
+{
+	ASSERT(data_, "cannot hash NULL");
+	ASSERT(size >= 0, "cannot hash nothing");
+	uint8_t *data = (uint8_t *)data_;
+
+	uint64_t hash = FNV_OFFSET_BASIS;
+	for(size_t i = 0; i < size; i++) {
+		hash ^= data[i];
+		hash *= FNV_PRIME;
+	}
+
+	return hash;
+}
+
 /* globals representing file, file name */
 
 char *base;
