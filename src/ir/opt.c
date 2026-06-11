@@ -562,79 +562,78 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 	}
 
 	/* constant folding */
-	if(0) {
-		if(ir_inst_is_foldable(ins->type)) {
-			if(ins->r1 && ins->r2 && ins->r1->insty == IR_INST_IMM &&
-			   ins->r2->insty == IR_INST_IMM) {
-				ir_fold_ins_binop(ins);
-				change = 1;
-			}
-
-			if(ins->r1 && ins->r1->insty == IR_INST_IMM) {
-				ir_fold_ins_unaryop(ins);
-				change = 1;
-			}
-		}
-
-		if(ins->type == IR_INST_BR && ins->r1->insty == IR_INST_IMM) {
-			ins->type = IR_INST_JMP;
-			if(!ins->r1->imm) {
-				ins->true_blk = ins->false_blk;
-			}
-			ins->false_blk = NULL;
+	if(ir_inst_is_foldable(ins->type)) {
+		if(ins->r1 && ins->r2 && ins->r1->insty == IR_INST_IMM &&
+		   ins->r2->insty == IR_INST_IMM) {
+			ir_fold_ins_binop(ins);
 			change = 1;
 		}
 
-		if(ir_inst_is_br(ins->type) && ins->type != IR_INST_BR &&
-		   ins->r1->insty == IR_INST_IMM && ins->r2->insty == IR_INST_IMM) {
-			int cond;
-			uint64_t ua = ins->r1->imm;
-			uint64_t ub = ins->r2->imm;
-			int64_t sa = *((int64_t *)&ins->r1->imm);
-			int64_t sb = *((int64_t *)&ins->r2->imm);
-			switch(ins->type) {
-			case IR_INST_BREQ:
-				cond = ua == ub;
-				break;
-			case IR_INST_BRNE:
-				cond = ua != ub;
-				break;
-			case IR_INST_BRSLT:
-				cond = sa < sb;
-				break;
-			case IR_INST_BRSLE:
-				cond = sa <= sb;
-				break;
-			case IR_INST_BRSGT:
-				cond = sa > sb;
-				break;
-			case IR_INST_BRSGE:
-				cond = sa >= sb;
-				break;
-			case IR_INST_BRULT:
-				cond = ua < ub;
-				break;
-			case IR_INST_BRULE:
-				cond = ua <= ub;
-				break;
-			case IR_INST_BRUGT:
-				cond = ua > ub;
-				break;
-			case IR_INST_BRUGE:
-				cond = ua >= ub;
-				break;
-			default:
-				cond = 0;
-				break;
-			}
-
-			ins->type = IR_INST_JMP;
-			if(!cond) {
-				ins->true_blk = ins->false_blk;
-			}
-			ins->false_blk = NULL;
+		if(ir_inst_is_foldable(ins->type) && ins->r1 &&
+		   ins->r1->insty == IR_INST_IMM && !ins->r2) {
+			ir_fold_ins_unaryop(ins);
 			change = 1;
 		}
+	}
+
+	if(ins->type == IR_INST_BR && ins->r1->insty == IR_INST_IMM) {
+		ins->type = IR_INST_JMP;
+		if(!ins->r1->imm) {
+			ins->true_blk = ins->false_blk;
+		}
+		ins->false_blk = NULL;
+		change = 1;
+	}
+
+	if(ins->type != IR_INST_BR && ir_inst_is_br(ins->type) &&
+	   ins->r1->insty == IR_INST_IMM && ins->r2->insty == IR_INST_IMM) {
+		int cond;
+		uint64_t ua = ins->r1->imm;
+		uint64_t ub = ins->r2->imm;
+		int64_t sa = *((int64_t *)&ins->r1->imm);
+		int64_t sb = *((int64_t *)&ins->r2->imm);
+		switch(ins->type) {
+		case IR_INST_BREQ:
+			cond = ua == ub;
+			break;
+		case IR_INST_BRNE:
+			cond = ua != ub;
+			break;
+		case IR_INST_BRSLT:
+			cond = sa < sb;
+			break;
+		case IR_INST_BRSLE:
+			cond = sa <= sb;
+			break;
+		case IR_INST_BRSGT:
+			cond = sa > sb;
+			break;
+		case IR_INST_BRSGE:
+			cond = sa >= sb;
+			break;
+		case IR_INST_BRULT:
+			cond = ua < ub;
+			break;
+		case IR_INST_BRULE:
+			cond = ua <= ub;
+			break;
+		case IR_INST_BRUGT:
+			cond = ua > ub;
+			break;
+		case IR_INST_BRUGE:
+			cond = ua >= ub;
+			break;
+		default:
+			cond = 0;
+			break;
+		}
+
+		ins->type = IR_INST_JMP;
+		if(!cond) {
+			ins->true_blk = ins->false_blk;
+		}
+		ins->false_blk = NULL;
+		change = 1;
 	}
 
 	return change;
@@ -746,10 +745,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 
 		/* trivial optimizations */
 		{
-			/* TODO: investigate why the mark placement/removing is not working */
-			// ir_placemarks(func);
 			change |= ir_simpleopt(func);
-			// ir_removemarks(func);
 			ir_nopremover(func);
 			ir_fix(func);
 		}

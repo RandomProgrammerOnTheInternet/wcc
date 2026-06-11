@@ -89,8 +89,7 @@ static void fill_ins_outs_reg(ir_blk_t *blk, reg_t *reg)
 
 	/* to the predeccesors it's also an output reg: add it there */
 	for(size_t i = 0; i < list_len(blk->pred); i++) {
-		if(has_reg(blk->pred[i]->regs_def, reg) &&
-		   !has_reg(blk->pred[i]->regs_out, reg)) {
+		if(!has_reg(blk->pred[i]->regs_out, reg)) {
 			list_append(blk->pred[i]->regs_out, reg);
 			fill_ins_outs_reg(blk->pred[i], reg);
 		}
@@ -121,7 +120,6 @@ static void fill_ins_outs(ir_blk_t *blk)
 static void reset_blk(ir_blk_t *blk)
 {
 	list_hdr(blk->pred)->size = 0;
-	// list_hdr(blk->dom_frontier)->size = 0;
 	list_hdr(blk->regs_def)->size = 0;
 	list_hdr(blk->regs_in)->size = 0;
 	list_hdr(blk->regs_out)->size = 0;
@@ -152,14 +150,7 @@ void ir_blk_reguse(ir_func_t *fun)
 void ir_blk_flow(ir_func_t *fun)
 {
 	reset_fun(fun);
-	size_t block_amount = list_len(fun->blocks);
 	fill_succ_pred(fun->blocks[0]);
-	// for(size_t i = 0; i < block_amount; i++) {
-	// 	fill_defs(fun->blocks[i]);
-	// }
-	// for(size_t i = 0; i < block_amount; i++) {
-	// 	fill_ins_outs(fun->blocks[i]);
-	// }
 	return;
 }
 
