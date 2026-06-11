@@ -292,8 +292,9 @@ static void rewrite_make_2op(ir_inst_t *ins_prev, ir_inst_t *ins)
 {
 	ir_inst_t *mov = ins_mov(ins->r0, ins->r1);
 	ins->r1 = ins->r0;
-	ins_prev->next = mov;
+	mov->noopt = true;
 	mov->next = ins;
+	ins_prev->next = mov;
 	return;
 }
 
@@ -304,12 +305,7 @@ static void rewrite_ins(ir_inst_t *ins_prev, ir_inst_t *ins)
 		return;
 	}
 
-	/* edge case */
-	if(ins->r0 && ins->r1 && ins->r2 && ins->r0->spilld && ins->r1->spilld &&
-	   ins->r2->spilld) {
-		rewrite_make_2op(ins_prev, ins);
-		ins_prev = ins_prev->next;
-	}
+	int noedge = 0;
 
 	if(ins->r0 && ins->r0->spilld) {
 		rewrite_store_spill(ins);
@@ -320,11 +316,25 @@ static void rewrite_ins(ir_inst_t *ins_prev, ir_inst_t *ins)
 		ins_prev = ins_prev->next;
 	}
 
+	/* edge case */
+	if(ins->r0 && ins->r1 && ins->r2 && ins->r0->spilld && ins->r1->spilld &&
+	   ins->r2->spilld) {
+		rewrite_make_2op(ins_prev, ins);
+		ins_prev = ins_prev->next;
+		noedge = 1;
+	}
+
+	/* edge case 2 */
+	if(!noedge && ins->r0 && ins->r1 && ins->r2 && ins->r2->spilld &&
+	   ins->r1->spilld) {
+		rewrite_make_2op(ins_prev, ins);
+		ins_prev = ins_prev->next;
+	}
+
 	if(ins->r2 && ins->r2->spilld) {
 		rewrite_load_spill(ins_prev, ins, ins->r2);
 		ins_prev = ins_prev->next;
 	}
-
 	return;
 }
 
@@ -534,7 +544,7 @@ static void ir_simplify(ir_func_t *fun, int amount)
 			/* simplify useless moves where the source
 			 * and destination have same real register */
 			if(ins->type == IR_INST_MOV && ins->r0->rr != -1 &&
-			   ins->r0->rr == ins->r1->rr) {
+			   ins->r0->rr == ins->r1->rr && !ins->noopt) {
 				prev->next = nxt;
 				ir_inst_delete(ins);
 				ins = nxt;
@@ -549,14 +559,15 @@ static void ir_simplify(ir_func_t *fun, int amount)
 			 * %r0 = %r1
 			 * nop */
 			if(nxt && ins->type == IR_INST_MOV && nxt->type == IR_INST_MOV &&
-			   ins->r0->rr == nxt->r1->rr && ins->r1->rr == nxt->r0->rr) {
+			   ins->r0->rr == nxt->r1->rr && ins->r1->rr == nxt->r0->rr &&
+			   !ins->noopt && !nxt->noopt) {
 				nxt->type = IR_INST_NOP;
 			}
 
 			/* remove useless insts where thing stored is never used
 			 * beyond this inst */
 			if(ins->r0 && ins->r0->def == ins->r0->last_use &&
-			   ins->type != IR_INST_CALL) {
+			   ins->type != IR_INST_CALL && !ins->noopt) {
 				prev->next = nxt;
 				ir_inst_delete(ins);
 				ins = nxt;
