@@ -1,5 +1,4 @@
-#include "ir.h"
-#include "regalloc.h"
+#include "bird.h"
 
 /* simple linear search */
 static int has_reg(LIST(reg_t *) list, reg_t *target)

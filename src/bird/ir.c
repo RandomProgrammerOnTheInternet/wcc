@@ -1,8 +1,4 @@
-#include "ir.h"
-#include "regalloc.h"
-#include "opt.h"
-#include "aarch64.h"
-#include "x64.h"
+#include "bird.h"
 #include "zz/arena.h"
 
 extern int debug;

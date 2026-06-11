@@ -1,5 +1,4 @@
-#include "ir.h"
-#include "x64.h"
+#include "bird.h"
 
 /* is the instruction in form A = F(B, C) where it needs A and B to be separate? */
 static bool ins_is_3source(enum ins_type t)

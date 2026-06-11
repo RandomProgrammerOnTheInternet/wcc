@@ -1,5 +1,4 @@
-#include "ir.h"
-#include "aarch64.h"
+#include "bird.h"
 
 void ir_func_opt_aarch64(ir_func_t *fun, int opt_level)
 {

@@ -1,9 +1,5 @@
 #include "zz/base.h"
-#include "ir.h"
-#include "opt.h"
-#include "aarch64.h"
-#include "x64.h"
-#include "ssa.h"
+#include "bird.h"
 
 extern int debug;
 
