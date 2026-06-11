@@ -79,7 +79,7 @@ enum ins_type {
 	IR_INST_JMP, /* jmp blk */
 	IR_INST_RET, /* ret (%r1) */
 	IR_INST_CALL, /* (%r0) = call Function, %a1, %a2, ... */
-	IR_INST_PHI, /* %r0 = phi [pred1, %a1], [pred2, %a1], ... */
+	IR_INST_PHI /* %r0 = phi [pred1, %a1], [pred2, %a1], ... */
 };
 
 /* a "register" */
