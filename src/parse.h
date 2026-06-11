@@ -1,7 +1,7 @@
 #ifndef PARSE_H_
 #define PARSE_H_
 
-#include "ir/ir.h"
+#include "bird/ir.h"
 #include "zz/base.h"
 #include "lex.h"
 #include "type.h"

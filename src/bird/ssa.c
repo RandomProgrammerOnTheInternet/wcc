@@ -1,6 +1,6 @@
 #include "ssa.h"
-#include "ir/ir.h"
-#include "ir/regalloc.h"
+#include "bird/ir.h"
+#include "bird/regalloc.h"
 
 static void find_before_last_term_ins(ir_blk_t *blk)
 {

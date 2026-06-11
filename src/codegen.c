@@ -2,9 +2,9 @@
 #include "parse.h"
 #include "type.h"
 #include <stdlib.h>
-#include "ir/ir.h"
-#include "ir/regalloc.h"
-#include "ir/opt.h"
+#include "bird/ir.h"
+#include "bird/regalloc.h"
+#include "bird/opt.h"
 
 static ir_func_t *fun;
 static obj_t *fun_obj;

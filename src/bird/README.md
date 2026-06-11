@@ -1,5 +1,4 @@
-# `wcc` IR backend (name pending, please suggest)
-
+# `bIRd` - `Best IR backenD`
 IR backend for `wcc`. The IR is not 100% complete but almost everything is in place.
 
 May need a refactor for floats.

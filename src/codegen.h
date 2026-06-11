@@ -3,7 +3,7 @@
 
 #include "zz/base.h"
 #include "lex.h"
-#include "ir/ir.h"
+#include "bird/ir.h"
 #include "parse.h"
 
 /* generates code for a function */

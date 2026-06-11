@@ -98,7 +98,7 @@ dirs:
 	@# Create bin dir
 	@mkdir -p $(BINDIR)
 	@mkdir -p $(BINDIR)/zz
-	@mkdir -p $(BINDIR)/ir
+	@mkdir -p $(BINDIR)/bird
 
 # compile each single file
 $(BINDIR)/%.o: src/%.c

@@ -677,6 +677,49 @@ void ir_print_inst(ir_blk_t *blk, ir_inst_t *ins, int mode)
 #undef r1
 #undef r2
 }
+static void print_reglist(LIST(reg_t *) list)
+{
+	for(size_t i = 0; i < list_len(list); i++) {
+		reg_t *reg = list[i];
+		printf("%%r%ld, ", reg->vr);
+	}
+	printf("\n");
+}
+
+static void print_blklist(LIST(ir_blk_t *) list)
+{
+	for(size_t i = 0; i < list_len(list); i++) {
+		ir_blk_t *blk = list[i];
+		printf("BB%ld, ", blk->num);
+	}
+	printf("\n");
+}
+
+static void ir_dump_stats(ir_func_t *fun)
+{
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		printf("BB%ld:\n", blk->num);
+		printf("\tregs_in = ");
+		print_reglist(blk->regs_in);
+		printf("\tregs_out = ");
+		print_reglist(blk->regs_out);
+		// printf("\tregs_def = ");
+		// print_reglist(blk->regs_def);
+
+		printf("\tpreds = ");
+		print_blklist(blk->pred);
+
+		printf("\tsuccs = ");
+		if(blk->tail->false_blk) {
+			printf("BB%ld, ", blk->tail->false_blk->num);
+		}
+		if(blk->tail->true_blk) {
+			printf("BB%ld, ", blk->tail->true_blk->num);
+		}
+		printf("\n");
+	}
+}
 
 /* dump IR */
 void ir_dump(ir_func_t *fun, int mode)
