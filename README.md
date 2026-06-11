@@ -5,7 +5,7 @@ Curently the "version" of C it can compile is Turing Complete and has functions,
 
 Generates code for aarch64 & x86_64. I have not tested if the x86_64 backend works on the latest commit because I don't have an x86 machine.
 
-You can also check out the IR backend in `src/ir`, which can probably be ported to other projects.
+You can also check out the IR backend, `bIRd` in `src/bird`, which can probably be ported to other projects.
 
 
 ## Usage
@@ -52,4 +52,4 @@ $ make help
 ```sh
 $ make count
 ```
-Swag Point Counter: `6404`
+Swag Point Counter: `6542`
