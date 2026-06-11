@@ -433,6 +433,48 @@ static void ir_fold_ins_binop(ir_inst_t *ins)
 	return;
 }
 
+static void ir_zeroopt(ir_inst_t *inst)
+{
+	ir_blk_t *trueblk = inst->true_blk;
+	ir_blk_t *falseblk = inst->false_blk;
+	switch(inst->type) {
+	case IR_INST_ADD:
+	case IR_INST_SUB:
+	case IR_INST_AND:
+	case IR_INST_OR:
+	case IR_INST_EOR:
+	case IR_INST_SHL:
+	case IR_INST_SHR:
+	case IR_INST_ASHR:
+		inst->type = IR_INST_MOV;
+		break;
+	case IR_INST_UMUL:
+	case IR_INST_SMUL:
+	case IR_INST_UDIV:
+	case IR_INST_SDIV:
+		inst->type = IR_INST_IMM;
+		inst->imm = 0;
+		break;
+	case IR_INST_EQ:
+		inst->type = IR_INST_NOTBOOL;
+		break;
+	case IR_INST_NE:
+		inst->type = IR_INST_MKBOOL;
+		break;
+	case IR_INST_BRNE:
+		inst->type = IR_INST_BR;
+		break;
+	case IR_INST_BREQ:
+		inst->type = IR_INST_BR;
+		inst->true_blk = falseblk;
+		inst->false_blk = trueblk;
+		break;
+	default:
+		break;
+	}
+	return;
+}
+
 static int ir_fold(ir_func_t *func)
 {
 	int change = 0;
@@ -511,6 +553,67 @@ static int ir_fold(ir_func_t *func)
 					ins->true_blk = ins->false_blk;
 				}
 				ins->false_blk = NULL;
+				change = 1;
+			}
+
+			/* reorder
+			 * fold_assoc %r0(imm), %r1(reg)
+			 * ->
+			 * fold_assoc %r1(reg), %r0(imm)
+			 */
+
+			if(ir_inst_is_foldable(ins->type) && ir_inst_is_assoc(ins->type) &&
+			   ins->r1 && ins->r2 && ins->r1->insty == IR_INST_IMM &&
+			   ins->r2->insty != IR_INST_IMM) {
+				reg_t *tmp = ins->r1;
+				ins->r1 = ins->r2;
+				ins->r2 = tmp;
+				change = 1;
+			}
+
+			/* replace
+			 * %r0 = foldins %r1(reg), %r2(imm 0)
+			 * into
+			 * %r0 = ... whatever it evaluates to ...
+			 */
+			if(ins->r2) {
+				ins->r2 = mov_root(ins->r2);
+			}
+			if(ir_inst_is_foldable(ins->type) && ins->r1 && ins->r2 &&
+			   ins->r2->insty == IR_INST_IMM && ins->r2->imm == 0) {
+				ir_zeroopt(ins);
+				change = 1;
+			}
+
+			/* turn
+			 * %r2 = neg %r3
+			 * %r0 = add %r1, %r2
+			 * ->
+			 * %r0 = sub %r1, %r3
+			 */
+			if((ins->type == IR_INST_ADD || ins->type == IR_INST_SUB) &&
+			   mov_root(ins->r2)->insty == IR_INST_NEG) {
+				ins->r2 = mov_root(ins->r2);
+				ins->type = ins->type == IR_INST_ADD ? IR_INST_SUB :
+													   IR_INST_ADD;
+				ins->r2 = ins->r2->lhs;
+				change = 1;
+			}
+
+			/* turn
+			 * %r1 = neg %r3
+			 * %r0 = add %r1, %r2
+			 * ->
+			 * %r0 = sub %r2, %r3
+			 */
+			if(ins->type == IR_INST_ADD &&
+			   mov_root(ins->r1)->insty == IR_INST_NEG) {
+				ins->r1 = mov_root(ins->r1);
+				ins->type = IR_INST_SUB;
+				reg_t *r1 = ins->r1;
+				reg_t *r2 = ins->r2;
+				ins->r2 = r1->lhs;
+				ins->r1 = r2;
 				change = 1;
 			}
 		}

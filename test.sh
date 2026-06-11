@@ -64,6 +64,7 @@ assert 1 "arrays.c"
 assert 164 "sizeof_alignof.c"
 assert 4 "globals.c"
 assert 1 "strings.c"
+assert 0 "fold.c"
 
 if [ "$passing" = "1" ]; then
   echo "all tests passed"
