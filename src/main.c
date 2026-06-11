@@ -170,10 +170,6 @@ int main(int argc, char *argv[])
 		ERROR("need an input file");
 	}
 
-	if(arch == IR_ARCH_X64_SYSV) {
-		// WARN("x64-sysv backend is experimental");
-	}
-
 	if(!emit_to) {
 		emit_to = stdout;
 	}

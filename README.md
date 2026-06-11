@@ -11,7 +11,7 @@ You can also check out the IR backend in `src/ir`, which can probably be ported 
 ## Usage
 
 ```
-wcc version 0.0.1 build May 27 2026
+wcc version 0.0.1 build Jun 10 2026
 Usage: ./bin/wcc <input file> [-o <output asm file>] [-t <arch>-<abi>] [-d] [-?/--help]
   -o <output>:          file to output assembly to (stdout is default)
   -t <arch>-<abi>:      target architecture, abi
@@ -52,4 +52,4 @@ $ make help
 ```sh
 $ make count
 ```
-Swag Point Counter: `5512`
+Swag Point Counter: `6404`

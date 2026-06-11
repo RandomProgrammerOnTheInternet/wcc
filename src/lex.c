@@ -211,6 +211,21 @@ token_t *lex_do(char *prog)
 			continue;
 		}
 
+		if(*prog == '\'') {
+			char *chr = prog + 1;
+			if(chr[1] != '\'') {
+				compile_err(prog, "unclosed character literal");
+			}
+
+			token_t *chrlit = token_make(TOK_STR, chr, chr);
+			chrlit->str = mystrndup(chrlit->loc, 1);
+			chrlit->type = TY_CHAR;
+			prog += 3;
+			tok->next = chrlit;
+			tok = tok->next;
+			continue;
+		}
+
 		/* tokenize puncts */
 		int plen = punct_len(prog);
 		if(plen) {
