@@ -151,89 +151,10 @@ static int cmp_to_br(enum ins_type ins)
 static int ir_branchopt(ir_func_t *func)
 {
 	int changed = 0;
-	/* scan comparisons */
-	for(size_t i = 0; i < list_len(func->blocks); i++) {
-		ir_blk_t *blk = func->blocks[i];
-		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-			if(ir_inst_is_cmp(ins->type) && !ins->r0->no_mov_elim) {
-				ins->r0->insty = ins->type;
-				ins->r0->lhs = ins->r1;
-				ins->r0->rhs = ins->r2;
-				if(!ins->r2) {
-					ins->r0->imm = ins->imm;
-				}
-				ins->r1->insty = ins->type;
-				ins->r1->lhs = ins->r1;
-				ins->r1->rhs = ins->r2;
-				if(ins->r2) {
-					ins->r2->insty = ins->type;
-					ins->r2->lhs = ins->r1;
-					ins->r2->rhs = ins->r2;
-				}
-				continue;
-			}
-
-			/* if written to discard this opt */
-			if(ins->r0 && ir_inst_is_cmp(ins->r0->insty)) {
-				ins->r0->insty = IR_INST_NOP;
-				ins->r0->lhs = ins->r0->rhs = NULL;
-				if(ins->r1) {
-					ins->r1->insty = IR_INST_NOP;
-					ins->r1->lhs = ins->r1->rhs = NULL;
-				}
-				if(ins->r2) {
-					ins->r2->insty = IR_INST_NOP;
-					ins->r2->lhs = ins->r2->rhs = NULL;
-				}
-				continue;
-			}
-
-			/* if read from any ins except `br` discard this opt */
-			if(ins->r1 && ir_inst_is_cmp(ins->r1->insty) &&
-			   ins->type != IR_INST_BR) {
-				ins->r1->insty = IR_INST_NOP;
-				ins->r1->lhs = ins->r1->rhs = NULL;
-				continue;
-			}
-
-			if(ins->r2 && ir_inst_is_cmp(ins->r2->insty) &&
-			   ins->type != IR_INST_BR) {
-				ins->r2->insty = IR_INST_NOP;
-				ins->r2->lhs = ins->r2->rhs = NULL;
-				continue;
-			}
-
-			if(ins->r1 && ins->r1->no_mov_elim) {
-				ins->r1->insty = IR_INST_NOP;
-				ins->r1->lhs = ins->r1->rhs = NULL;
-				continue;
-			}
-
-			if(ins->r2 && ins->r2->no_mov_elim) {
-				ins->r2->insty = IR_INST_NOP;
-				ins->r2->lhs = ins->r2->rhs = NULL;
-				continue;
-			}
-		}
-	}
-
-	/* eliminate comparisons that have been merged with branches */
 
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-			if(ir_inst_is_cmp(ins->type) && ins->r0->insty == ins->type &&
-			   ins->r1->insty == ins->type) {
-				if(ins->r2 && ins->r2->insty != ins->type) {
-					goto false_pos;
-				}
-				ins->type = IR_INST_NOP;
-				changed = 1;
-				ins->r0 = ins->r1 = ins->r2 = NULL;
-				continue;
-			}
-false_pos:
-
 			if(ins->type == IR_INST_BR && ir_inst_is_cmp(ins->r1->insty)) {
 				reg_t *cmp = ins->r1;
 				ins->type = cmp_to_br(cmp->insty);
@@ -283,24 +204,24 @@ static void ir_removemarks(ir_func_t *func)
 			if(inst->r0) {
 				inst->r0->insty = IR_INST_NOP;
 				inst->r0->lhs = inst->r0->rhs = NULL;
-				inst->r0->imm = inst->r0->no_mov_elim = 0;
+				inst->r0->imm = inst->r0->multiple_defs = 0;
 			}
 			if(inst->r1) {
 				inst->r1->insty = IR_INST_NOP;
 				inst->r1->lhs = inst->r1->rhs = NULL;
-				inst->r1->imm = inst->r1->no_mov_elim = 0;
+				inst->r1->imm = inst->r1->multiple_defs = 0;
 			}
 			if(inst->r2) {
 				inst->r2->insty = IR_INST_NOP;
 				inst->r2->lhs = inst->r2->rhs = NULL;
-				inst->r2->imm = inst->r2->no_mov_elim = 0;
+				inst->r2->imm = inst->r2->multiple_defs = 0;
 			}
 			if(inst->type == IR_INST_CALL) {
 				for(size_t i = 0; i < list_len(inst->call_args); i++) {
 					reg_t *arg = inst->call_args[i]->r;
 					arg->insty = IR_INST_NOP;
 					arg->lhs = arg->rhs = NULL;
-					arg->imm = arg->no_mov_elim = 0;
+					arg->imm = arg->multiple_defs = 0;
 				}
 			}
 		}
@@ -312,16 +233,20 @@ static void ir_placemarks(ir_func_t *func)
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->r0 && inst->r0->no_mov_elim) {
+				inst->r0->multiple_defs = true;
+			}
+
 			if(inst->r0 && inst->r0->insty != IR_INST_NOP) {
 				inst->r0->insty = IR_INST_NOP;
 				inst->r0->lhs = inst->r0->rhs = NULL;
 				inst->r0->imm = 0;
-				inst->r0->no_mov_elim = true;
+				inst->r0->multiple_defs = true;
 				continue;
 			}
 
 			if(inst->r0 && inst->r0->insty == IR_INST_NOP &&
-			   !inst->r0->no_mov_elim) {
+			   !inst->r0->multiple_defs) {
 				inst->r0->insty = inst->type;
 				inst->r0->lhs = inst->r1;
 				inst->r0->rhs = inst->r2;
@@ -379,7 +304,7 @@ static void ir_fold_ins_unaryop(ir_inst_t *ins)
 	}
 
 	ins->type = IR_INST_IMM;
-	if(!ins->r0->no_mov_elim) {
+	if(!ins->r0->multiple_defs) {
 		ins->r0->insty = IR_INST_IMM;
 		ins->r0->imm = ins->imm;
 	}
@@ -491,7 +416,7 @@ static void ir_fold_ins_binop(ir_inst_t *ins)
 	}
 
 	ins->type = IR_INST_IMM;
-	if(!ins->r0->no_mov_elim) {
+	if(!ins->r0->multiple_defs) {
 		ins->r0->insty = IR_INST_IMM;
 		ins->r0->imm = ins->imm;
 	}
@@ -504,6 +429,8 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 	int change = 0;
 
 	/* move elimination */
+
+	/*
 	if(ins->r1 && ins->r1->insty == IR_INST_MOV) {
 		ins->r1 = ins->r1->lhs;
 		change = 1;
@@ -514,6 +441,7 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 		change = 1;
 	}
 
+
 	if(ins->type == IR_INST_CALL) {
 		for(size_t i = 0; i < list_len(ins->call_args); i++) {
 			reg_t *arg = ins->call_args[i]->r;
@@ -523,6 +451,7 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 			}
 		}
 	}
+	*/
 
 	/* %r0 = eor/sub/sdiv/udiv/smod/umod %r1, %r1
 	 * ->
@@ -624,7 +553,7 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 	/* simplify
 	 * br.cmp %r0, %r1, trueblk, falseblk (in front)
 	 * to
-	 * br.invcmp %r1, %r0, falseblk (in front), trueblk */
+	 * br.invcmp %r0, %r1, falseblk (in front), trueblk */
 	if(ir_inst_is_br(ins->type) && ins->type != IR_INST_BR) {
 		if(ins->false_blk->num == thisblk->num + 1) {
 			ir_blk_t *tmpblk = ins->true_blk;
@@ -636,6 +565,7 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 	}
 
 	/* constant folding */
+	/*
 	if(ir_inst_is_foldable(ins->type)) {
 		if(ins->r1 && ins->r2 && ins->r1->insty == IR_INST_IMM &&
 		   ins->r2->insty == IR_INST_IMM) {
@@ -708,6 +638,7 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 		ins->false_blk = NULL;
 		change = 1;
 	}
+	*/
 
 	return change;
 }
@@ -798,6 +729,8 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 	while(left) {
 		change = 0;
 
+		ir_placemarks(func);
+
 		/* branch opts */
 		{
 			change |= ir_branchopt(func);
@@ -827,6 +760,8 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		if(!change) {
 			break;
 		}
+
+		ir_removemarks(func);
 
 		left--;
 	}

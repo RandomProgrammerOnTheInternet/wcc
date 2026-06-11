@@ -101,6 +101,7 @@ typedef struct reg {
 	struct reg *lhs;
 	struct reg *rhs;
 	bool no_mov_elim; /* do not move eliminate this reg */
+	bool multiple_defs; /* register was assigned multiple times */
 } reg_t;
 
 /* ABI argument type */
