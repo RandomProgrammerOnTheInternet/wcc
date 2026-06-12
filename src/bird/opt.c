@@ -251,7 +251,7 @@ static void ir_placemarks(ir_func_t *func)
 			}
 
 			if(inst->r0 && inst->r0->insty == IR_INST_NOP &&
-			   !inst->r0->multiple_defs) {
+			   inst->type != IR_INST_PHI && !inst->r0->multiple_defs) {
 				inst->r0->insty = inst->type;
 				inst->r0->lhs = inst->r1;
 				inst->r0->rhs = inst->r2;
@@ -889,17 +889,14 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 	}
 
 	ir_nopremover(func);
-	for(size_t i = 0; i < list_len(func->blocks); i++) {
-		list_hdr(func->blocks[i]->pred)->size = 0;
-	}
-
-	// ir_ssa_exit(func);
 
 	if(debug) {
 		printf("After common opts:\n");
 		ir_dump(func, 'v');
 		printf("****\n");
 	}
+
+	// ir_ssa_exit(func);
 
 	/* apply arch specific opts */
 	switch(arch) {

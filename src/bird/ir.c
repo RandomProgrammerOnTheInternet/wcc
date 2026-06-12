@@ -316,7 +316,7 @@ ir_blk_t *ir_blk_make(ir_inst_t *insts)
 	blk->insts = insts;
 	blk->visited = false;
 	blk->pred = list_make(ir_blk_t *);
-	blk->dom_frontier = list_make(long);
+	blk->incomplete_phis = list_make(ir_inst_t *);
 	blk->regs_def = list_make(reg_t *);
 	blk->regs_in = list_make(reg_t *);
 	blk->regs_out = list_make(reg_t *);
@@ -341,7 +341,7 @@ void ir_blk_add(ir_blk_t *blk, ir_inst_t *inst)
 void ir_blk_delete(ir_blk_t *blk)
 {
 	list_delete(blk->pred);
-	list_delete(blk->dom_frontier);
+	list_delete(blk->incomplete_phis);
 	list_delete(blk->regs_def);
 	list_delete(blk->regs_in);
 	list_delete(blk->regs_out);
@@ -487,10 +487,16 @@ void ir_fix(ir_func_t *func)
 
 char size_suf[9] = { [1] = 'b', [2] = 'w', [4] = 'l', [8] = 'q' };
 
-static void print_phiarg(ir_blk_t *blk, ir_inst_t *phi, int indx)
+static void print_phiarg(ir_blk_t *blk, ir_inst_t *phi, int indx, int mode)
 {
 	reg_t *r = phi->phi_args[indx];
-	long rn = r ? r->vr : -1;
+	long rn;
+	if(mode == 'v') {
+		rn = r ? r->vr : -1;
+	} else {
+		rn = r ? r->rr : -1;
+	}
+
 	printf("[BB%ld, %%r%ld]", blk->pred[indx]->num, rn);
 	return;
 }
@@ -615,13 +621,13 @@ void ir_print_inst(ir_blk_t *blk, ir_inst_t *ins, int mode)
 		printf("%%r%ld = phi ", r0);
 		size_t count = list_len(ins->phi_args);
 		if(count >= 1) {
-			print_phiarg(blk, ins, 0);
+			print_phiarg(blk, ins, 0, mode);
 		}
 
 		size_t i = 1;
 		while(i < count) {
 			printf(", ");
-			print_phiarg(blk, ins, i++);
+			print_phiarg(blk, ins, i++, mode);
 		}
 	}; break;
 	case IR_INST_BREQ:
@@ -720,6 +726,7 @@ static void ir_dump_stats(ir_func_t *fun)
 /* dump IR */
 void ir_dump(ir_func_t *fun, int mode)
 {
+	// ir_dump_stats(fun);
 	printf("func %s(", fun->name);
 
 	for(size_t i = 0; i < list_len(fun->args); i++) {

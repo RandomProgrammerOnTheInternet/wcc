@@ -82,6 +82,7 @@ enum ins_type {
 	IR_INST_PHI /* %r0 = phi [pred1, %a1], [pred2, %a1], ... */
 };
 
+struct blkreg;
 /* a "register" */
 typedef struct reg {
 	long vr; /* virtual register # */
@@ -93,6 +94,10 @@ typedef struct reg {
 	bool spilld; /* is this reg spilled? */
 	uint64_t imm; /* immediate associated with this reg */
 	long off; /* stack offset of register */
+
+	/* for SSA construction: */
+	LIST(struct blkreg *) blkregs; /* associated block regs */
+	struct reg *ssareg; /* varialbe associated with this reg */
 	/* for optimization: */
 	bool stack_loc; /* is this register from a leas instruction? */
 	long stack_off; /* if so, it's offset */
@@ -155,11 +160,17 @@ typedef struct ir_blk {
 	/* register allocation stuff */
 	bool visited;
 	LIST(struct ir_blk *) pred; /* block's predecessors */
-	LIST(long) dom_frontier; /* block's dominance frontier */
+	LIST(ir_inst_t *) incomplete_phis; /* block's incomplete phis */
 	LIST(reg_t *) regs_def; /* registers in this block */
 	LIST(reg_t *) regs_in; /* registers in */
 	LIST(reg_t *) regs_out; /* registers out */
 } ir_blk_t;
+
+/* for SSA construction */
+typedef struct blkreg {
+	ir_blk_t *blk;
+	reg_t *reg;
+} blkreg_t;
 
 /* IR function (collection of blocks) */
 typedef struct ir_func {

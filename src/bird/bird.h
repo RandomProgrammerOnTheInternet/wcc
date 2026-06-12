@@ -3,7 +3,6 @@
 
 #include "ir.h"
 #include "opt.h"
-#include "ssa.h"
 #include "regalloc.h"
 #include "aarch64.h"
 #include "x64.h"

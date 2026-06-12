@@ -37,8 +37,8 @@ static void fill_defs(ir_blk_t *blk)
 	return;
 }
 
-/* fill out successors and predecessors (and also if block returns) */
-static void fill_succ_pred(ir_blk_t *blk)
+/* fill out predecessors (and also if block returns) */
+static void fill_pred(ir_blk_t *blk)
 {
 	if(!blk || blk->visited) {
 		return;
@@ -54,15 +54,15 @@ static void fill_succ_pred(ir_blk_t *blk)
 	}
 
 	if(flow->false_blk) {
-		/* add successor, predecessor */
+		/* add predecessor */
 		list_append(flow->false_blk->pred, blk);
-		fill_succ_pred(flow->false_blk);
+		fill_pred(flow->false_blk);
 	}
 
 	if(flow->true_blk) {
-		/* add successor, predecessor */
+		/* add predecessor */
 		list_append(flow->true_blk->pred, blk);
-		fill_succ_pred(flow->true_blk);
+		fill_pred(flow->true_blk);
 	}
 
 	return;
@@ -136,7 +136,7 @@ void ir_blk_reguse(ir_func_t *fun)
 {
 	reset_fun(fun);
 	size_t block_amount = list_len(fun->blocks);
-	fill_succ_pred(fun->blocks[0]);
+	fill_pred(fun->blocks[0]);
 	for(size_t i = 0; i < block_amount; i++) {
 		fill_defs(fun->blocks[i]);
 	}
@@ -149,7 +149,7 @@ void ir_blk_reguse(ir_func_t *fun)
 void ir_blk_flow(ir_func_t *fun)
 {
 	reset_fun(fun);
-	fill_succ_pred(fun->blocks[0]);
+	fill_pred(fun->blocks[0]);
 	return;
 }
 
@@ -192,9 +192,6 @@ static void reg_update_counter(reg_t *reg, long ins_counter)
 		return;
 	if(reg->last_use < ins_counter) {
 		reg->last_use = ins_counter;
-	}
-	if(reg->no_mov_elim) {
-		reg->last_use = INT64_MAX;
 	}
 	return;
 }
