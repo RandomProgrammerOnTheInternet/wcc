@@ -445,7 +445,7 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_SHL:
 		case IR_INST_SHR:
 		case IR_INST_ASHR:
-			fprintf(f, "\tmovzx ecx, %s\n", x64_reg8[r2i]);
+			fprintf(f, "\tmov ecx, %s\n", r0d);
 			switch(ins->type) {
 			case IR_INST_SHL:
 				fprintf(f, "\tshl %s, cl\n", r0);
