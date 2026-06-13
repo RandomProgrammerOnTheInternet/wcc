@@ -41,6 +41,9 @@ void token_delete_all(token_t *root);
 /* checks if a `tok`'s content is equal to `content` */
 int token_eq(token_t *tok, char *content);
 
+/* checks if a `tok`'s content is equal to `content`. if so, skips to next token and returns 1 */
+int token_eat(token_t **tok, char *content);
+
 /* skips `tok` and returns next token if `tok`'s content is equal to `content` */
 token_t *token_skip(token_t *tok, char *content);
 

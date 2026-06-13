@@ -210,6 +210,7 @@ static node_t *parse_logand(token_t *tok, token_t **rest);
 static node_t *parse_logor(token_t *tok, token_t **rest);
 static node_t *parse_expr_stmt(token_t *tok, token_t **rest);
 static node_t *parse_stmt(token_t *tok, token_t **rest);
+static node_t *parse_stmt_expr(token_t *tok, token_t **rest);
 static node_t *parse_assign(token_t *tok, token_t **rest);
 static node_t *parse_compound_stmt(token_t *tok, token_t **rest);
 static type_t *parse_declspec(token_t *tok, token_t **rest);
@@ -832,8 +833,25 @@ static node_t *parse_expr(token_t *tok, token_t **rest)
 	return parse_assign(tok, rest);
 }
 
+static node_t *parse_stmt_expr(token_t *tok, token_t **rest)
+{
+	node_t *stmt_expr = node_make(NODE_STMT_EXPR, tok);
+
+	tok = token_skip(tok, "(");
+	stmt_expr->body = parse_compound_stmt(tok, &tok)->body;
+	tok = token_skip(tok, ")");
+
+	*rest = tok;
+	return stmt_expr;
+}
+
 static node_t *parse_prim(token_t *tok, token_t **rest)
 {
+	/* statement expr */
+	if(tok->next && token_eq(tok, "(") && token_eq(tok->next, "{")) {
+		return parse_stmt_expr(tok, rest);
+	}
+
 	/* ( expr ) case */
 	if(token_eq(tok, "(")) {
 		node_t *node = parse_expr(tok->next, &tok);

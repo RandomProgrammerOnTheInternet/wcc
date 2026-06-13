@@ -43,6 +43,7 @@ enum node_kind {
 	NODE_ADDR, /* & */
 	NODE_DEREF, /* * */
 	NODE_FUNCALL, /* func() */
+	NODE_STMT_EXPR, /* statement expression */
 };
 
 /* a variable */

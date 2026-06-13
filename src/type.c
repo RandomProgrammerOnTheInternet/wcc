@@ -192,6 +192,26 @@ void type_propagate(node_t *node)
 			compile_err(node->lhs->type->ident->loc, "invalid void decltype");
 		}
 		break;
+	case NODE_STMT_EXPR: {
+		if(!node->body) {
+			compile_err(node->tok->loc,
+						"statement expression must have at least 1 statement");
+		}
+
+		node_t *end = node->body;
+		while(end->next) {
+			end = end->next;
+		}
+
+		if(end->kind != NODE_EXPR_STMT) {
+			compile_err(
+				node->tok->loc,
+				"statement expression must end with expression statement");
+		}
+
+		node->type = end->lhs->type;
+	}; break;
+
 	default:
 		break;
 	}

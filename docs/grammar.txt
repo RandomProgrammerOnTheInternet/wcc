@@ -1,4 +1,5 @@
-prim = "(" expr ")" | ident args? | num | strlit
+gnu-stmt-expr = "(" "{" compound-stmt "}" ")"
+prim = "(" expr ")" | gnu-stmt-expr | ident args? | num | strlit
 funcall = ident "(" (assign ("," assign)*)? ")"
 postfix = prim ("[" expr "]")*
 unary = ("+" | "-" | "*" | "&" | "~" | "!") unary

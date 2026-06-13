@@ -226,6 +226,8 @@ static reg_t *calc_addr(node_t *node)
 	return NULL;
 }
 
+void codegen_expr_stmt(node_t *node);
+
 /* generates code given AST tree */
 reg_t *codegen_expr(node_t *node)
 {
@@ -302,6 +304,15 @@ reg_t *codegen_expr(node_t *node)
 		emit_call(res, node->fname, callargs);
 		return res;
 	};
+
+	case NODE_STMT_EXPR: {
+		node_t *nod;
+		for(nod = node->body; nod->next; nod = nod->next) {
+			(void)codegen_expr_stmt(nod);
+		}
+		return codegen_expr(nod->lhs);
+	}; break;
+
 	default:
 		break;
 	}
@@ -401,6 +412,7 @@ void codegen_expr_stmt(node_t *node)
 	case NODE_EXPR_STMT:
 		(void)codegen_expr(node->lhs);
 		break;
+
 	case NODE_RET: {
 		type_t *rettype = fun_obj->type->to;
 		if(node->lhs && rettype->kind != TYPE_VOID) {

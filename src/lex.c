@@ -50,6 +50,16 @@ token_t *token_skip(token_t *tok, char *content)
 	return tok->next;
 }
 
+/* checks if a `tok`'s content is equal to `content`. if so, skips to next token and returns 1 */
+int token_eat(token_t **tok, char *content)
+{
+	if(token_eq(*tok, content)) {
+		*tok = (*tok)->next;
+		return 1;
+	}
+	return 0;
+}
+
 /* returns the number in `tok` if the token's kind is a number */
 uint64_t token_num(token_t *tok)
 {
