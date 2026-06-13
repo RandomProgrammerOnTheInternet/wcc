@@ -90,7 +90,7 @@ void ir_prog_end_x64_sysv(FILE *f, ir_prog_t *prog)
 void ir_glob_emit_x64_sysv(FILE *f, ir_global_t *glob)
 {
 	fprintf(f, "\t.global %s\n", glob->name);
-	fprintf(f, "\t.bss\n");
+	fprintf(f, glob->has_data ? "\t.data\n" : "\t.bss\n");
 	fprintf(f, "%s:\n", glob->name);
 	if(glob->has_data) {
 		for(size_t i = 0; i < glob->size; i++) {
@@ -445,16 +445,16 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_SHL:
 		case IR_INST_SHR:
 		case IR_INST_ASHR:
-			fprintf(f, "\tmovzx cl, %s\n", r2);
+			fprintf(f, "\tmovzx ecx, %s\n", x64_reg8[r2i]);
 			switch(ins->type) {
 			case IR_INST_SHL:
-				fprintf(f, "\tshl %s, cl", r0);
+				fprintf(f, "\tshl %s, cl\n", r0);
 				break;
 			case IR_INST_SHR:
-				fprintf(f, "\tshr %s, cl", r0);
+				fprintf(f, "\tshr %s, cl\n", r0);
 				break;
 			case IR_INST_ASHR:
-				fprintf(f, "\tsar %s, cl", r0);
+				fprintf(f, "\tsar %s, cl\n", r0);
 				break;
 			default: /* wth? */
 				break;
