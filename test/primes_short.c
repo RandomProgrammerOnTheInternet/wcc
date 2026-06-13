@@ -1,5 +1,7 @@
 /* prime number generator, returns maximum prime number in [0, 1000] */
 // comment test 5000
+
+#include "test/one.c"
 int primes()
 {
 	short array[1000];

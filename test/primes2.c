@@ -1,3 +1,5 @@
+#include "test/one.c"
+
 int main()
 {
 	int max_prime = 1;

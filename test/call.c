@@ -1,3 +1,5 @@
+#include "test/one.c"
+
 int main()
 {
 	long a = one();

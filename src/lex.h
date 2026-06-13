@@ -9,6 +9,7 @@
 /* -- token -- */
 
 enum token_kind {
+	TOK_START, /* tmp */
 	TOK_KEYWORD, /* keywords */
 	TOK_PUNCT, /* punctuators + - * / */
 	TOK_IDENT, /* identifiers az */
@@ -27,6 +28,8 @@ typedef struct token {
 	char *str; /* parsed string for TOK_STR */
 	struct type *type; /* type for TOK_STR */
 	size_t len;
+	bool start_line; /* is this token the start of the line? */
+	bool skip; /* skip this token, for preprocessing */
 } token_t;
 
 /* makes a token */
@@ -62,6 +65,6 @@ int isidentfirst(int c);
 int isident(int c);
 
 /* does the lexing */
-token_t *lex_do(char *prog);
+token_t *lex_do(char *prog, token_t **end);
 
 #endif /* LEX_H_ */

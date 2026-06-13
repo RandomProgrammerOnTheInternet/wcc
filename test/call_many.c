@@ -4,6 +4,8 @@ long argument_waster2(long a, long b, long c, long d, long e, long f, long g,
 	return a + b + c + d + e + f + g + h + i + j + k + l;
 }
 
+#include "test/one.c"
+
 int main()
 {
 	long n = 12;

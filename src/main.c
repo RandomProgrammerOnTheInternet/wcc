@@ -6,6 +6,7 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include "lex.h"
+#include "preproc.h"
 #include "parse.h"
 #include "codegen.h"
 
@@ -22,52 +23,10 @@ char *next_arg(int max, int *argc, char *argv[])
 	return arg;
 }
 
-char *file_reader(FILE *f)
-{
-	fseek(f, 0, SEEK_END);
-	long size = ftell(f);
-	fseek(f, 0, SEEK_SET);
-
-	char *prog = zalloc(size + 2);
-	char *crlf_to_lf = zalloc(size + 1);
-
-	long pos = 0;
-	while(pos < size) {
-		long readback = fread(prog + pos, 1, size - pos, f);
-		ENSURE(readback, "failed to read from file");
-		pos += readback;
-	}
-
-	size_t j = 0;
-	/* turn CRLF -> LF because yes */
-	for(size_t i = 0; i < (size_t)size; i++) {
-		if(prog[i] != '\r' && prog[i] != '\n') {
-			crlf_to_lf[j++] = prog[i];
-			continue;
-		}
-
-		if(prog[i] == '\r' && prog[i + 1] == '\n') {
-			crlf_to_lf[j++] = '\n';
-			continue;
-		}
-
-		if(prog[i] == '\n') {
-			crlf_to_lf[j++] = '\n';
-			continue;
-		}
-
-		ERROR("how did you get here");
-	}
-
-	free(prog);
-
-	return crlf_to_lf;
-}
-
 static void version(char *pname)
 {
 	UNUSED(pname);
-	printf("wcc version 0.0.1 build %s\n", __DATE__);
+	printf("wcc version 0.0.2 build %s\n", __DATE__);
 	return;
 }
 
@@ -178,7 +137,9 @@ int main(int argc, char *argv[])
 	fclose(read_from);
 	compile_setsrc(prog, read_from_name);
 
-	token_t *head = lex_do(prog);
+	token_t *head = lex_do(prog, NULL);
+	head = preproc_do(head);
+
 	token_t *cur = head;
 	LIST(obj_t *) globals = parse_do(cur);
 	codegen_func(emit_to, globals, opt_level, arch);

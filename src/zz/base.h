@@ -137,6 +137,9 @@ char *mystrdup(char *str);
 /* strndup() but portable */
 char *mystrndup(char *str, size_t n);
 
+/* reads a file; turns "\r\n" -> "\n" */
+char *file_reader(FILE *f);
+
 #if defined(__x86_64__) || defined(_M_X64)
 #define DEFAULT_BACKEND IR_ARCH_X64_SYSV
 #endif /* x86 */

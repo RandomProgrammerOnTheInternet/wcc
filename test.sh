@@ -2,8 +2,8 @@
 
 passing=1
 
-./bin/wcc test/one.c -o test/one.s -O3
-cc -c -o one.o test/one.s
+# ./bin/wcc test/one.c -o test/one.s -O3
+# cc -c -o one.o test/one.s
 
 assert() {
   
@@ -19,7 +19,7 @@ assert() {
     return
   fi
   
-  cc -o prog prog.s one.o && ./prog
+  cc -o prog prog.s && ./prog
   status="$?"
   rm prog prog.s
   

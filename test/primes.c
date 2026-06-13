@@ -35,6 +35,8 @@ int primes()
 	return max;
 }
 
+#include "test/one.c"
+
 int main()
 {
 	return primes();

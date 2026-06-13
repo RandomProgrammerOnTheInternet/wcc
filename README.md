@@ -11,7 +11,7 @@ You can also check out the IR backend, `bIRd` in `src/bird`, which can probably 
 ## Usage
 
 ```
-wcc version 0.0.1 build Jun 10 2026
+wcc version 0.0.2 build Jun 12 2026
 Usage: ./bin/wcc <input file> [-o <output asm file>] [-t <arch>-<abi>] [-d] [-?/--help]
   -o <output>:          file to output assembly to (stdout is default)
   -t <arch>-<abi>:      target architecture, abi

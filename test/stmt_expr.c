@@ -1,8 +1,10 @@
+#include "test/something.c"
+
 int main()
 {
 	int b = 0;
 	int a = ({
-		b = 3;
+		b = three();
 		3;
 	});
 	return a == b;

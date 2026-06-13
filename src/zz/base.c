@@ -213,3 +213,46 @@ char *mystrndup(char *str, size_t n)
 {
 	return memdup_extra(str, strnlen(str, n), strnlen(str, n) + 1);
 }
+
+/* reads a file; turns "\r\n" -> "\n" */
+char *file_reader(FILE *f)
+{
+	fseek(f, 0, SEEK_END);
+	long size = ftell(f);
+	fseek(f, 0, SEEK_SET);
+
+	char *prog = zalloc(size + 2);
+	char *crlf_to_lf = zalloc(size + 1);
+
+	long pos = 0;
+	while(pos < size) {
+		long readback = fread(prog + pos, 1, size - pos, f);
+		ENSURE(readback, "failed to read from file");
+		pos += readback;
+	}
+
+	size_t j = 0;
+	/* turn CRLF -> LF because yes */
+	for(size_t i = 0; i < (size_t)size; i++) {
+		if(prog[i] != '\r' && prog[i] != '\n') {
+			crlf_to_lf[j++] = prog[i];
+			continue;
+		}
+
+		if(prog[i] == '\r' && prog[i + 1] == '\n') {
+			crlf_to_lf[j++] = '\n';
+			continue;
+		}
+
+		if(prog[i] == '\n') {
+			crlf_to_lf[j++] = '\n';
+			continue;
+		}
+
+		ERROR("how did you get here");
+	}
+
+	free(prog);
+
+	return crlf_to_lf;
+}

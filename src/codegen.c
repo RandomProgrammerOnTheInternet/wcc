@@ -3,8 +3,6 @@
 #include "type.h"
 #include <stdlib.h>
 #include "bird/ir.h"
-#include "bird/regalloc.h"
-#include "bird/opt.h"
 
 static ir_func_t *fun;
 static obj_t *fun_obj;
@@ -226,7 +224,7 @@ static reg_t *calc_addr(node_t *node)
 	return NULL;
 }
 
-void codegen_expr_stmt(node_t *node);
+void codegen_stmt(node_t *node);
 
 /* generates code given AST tree */
 reg_t *codegen_expr(node_t *node)
@@ -308,7 +306,7 @@ reg_t *codegen_expr(node_t *node)
 	case NODE_STMT_EXPR: {
 		node_t *nod;
 		for(nod = node->body; nod->next; nod = nod->next) {
-			(void)codegen_expr_stmt(nod);
+			codegen_stmt(nod);
 		}
 		return codegen_expr(nod->lhs);
 	}; break;
@@ -406,7 +404,7 @@ reg_t *codegen_expr(node_t *node)
 	return res;
 }
 
-void codegen_expr_stmt(node_t *node)
+void codegen_stmt(node_t *node)
 {
 	switch(node->kind) {
 	case NODE_EXPR_STMT:
@@ -433,7 +431,7 @@ void codegen_expr_stmt(node_t *node)
 	}
 	case NODE_BLOCK:
 		for(node_t *nod = node->body; nod; nod = nod->next) {
-			codegen_expr_stmt(nod);
+			codegen_stmt(nod);
 		}
 		break;
 	case NODE_DOWHILE: {
@@ -441,7 +439,7 @@ void codegen_expr_stmt(node_t *node)
 		ir_blk_t *resume = emit_blk();
 		emit_jmp(then);
 		outblk = then;
-		codegen_expr_stmt(node->then);
+		codegen_stmt(node->then);
 		reg_t *cond = codegen_expr(node->cond);
 		emit_br(cond, then, resume);
 		outblk = resume;
@@ -458,13 +456,13 @@ void codegen_expr_stmt(node_t *node)
 		emit_br(cond, loop, resume);
 
 		outblk = loop;
-		codegen_expr_stmt(node->then);
+		codegen_stmt(node->then);
 		emit_jmp(condchk);
 		outblk = resume;
 	}; break;
 	case NODE_FOR: {
 		/* initializer */
-		codegen_expr_stmt(node->init);
+		codegen_stmt(node->init);
 
 		ir_blk_t *condchk = emit_blk(); /* check if need to go loop or resume */
 		ir_blk_t *then = emit_blk();
@@ -484,7 +482,7 @@ void codegen_expr_stmt(node_t *node)
 		emit_br(cond, then, resume);
 
 		outblk = then;
-		codegen_expr_stmt(node->then);
+		codegen_stmt(node->then);
 		if(node->inc) {
 			UNUSED(codegen_expr(node->inc));
 		}
@@ -507,11 +505,11 @@ void codegen_expr_stmt(node_t *node)
 
 		emit_br(cond, then, elze);
 		outblk = then;
-		codegen_expr_stmt(node->then);
+		codegen_stmt(node->then);
 		emit_jmp(resume);
 		if(node->elze) {
 			outblk = elze;
-			codegen_expr_stmt(node->elze);
+			codegen_stmt(node->elze);
 			emit_jmp(resume);
 		}
 
@@ -717,7 +715,7 @@ void codegen_func(FILE *f, LIST(obj_t *) globals, int opt_level,
 		}
 
 		fun->stack_needed = align_to(cur_fn->stack_size, 16);
-		codegen_expr_stmt(cur_fn->body);
+		codegen_stmt(cur_fn->body);
 
 		varopt(func);
 

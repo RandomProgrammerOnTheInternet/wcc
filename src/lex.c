@@ -140,14 +140,18 @@ static int iskeyword(char *prog, size_t plen)
 }
 
 /* does the lexing */
-token_t *lex_do(char *prog)
+token_t *lex_do(char *prog, token_t **end)
 {
 	token_t start;
 	token_t *tok = &start;
 
+	int start_line = 1;
 	while(*prog) {
 		/* skip over whitespace */
 		while(iswhitespace(*prog)) {
+			if(*prog == '\n' || *prog == '\r') {
+				start_line = 1;
+			}
 			prog++;
 		}
 
@@ -158,6 +162,7 @@ token_t *lex_do(char *prog)
 		/* if we encounter a //, it is a single line comment.
 		 * go to next newline */
 		if(*prog == '/' && *(prog + 1) == '/') {
+			start_line = 0;
 			while(*prog != '\n') {
 				prog++;
 			}
@@ -167,6 +172,7 @@ token_t *lex_do(char *prog)
 		/* if we see a /\*, it is a multi-line comment.
 		 * skip all characters until we see a */
 		if(*prog == '/' && *(prog + 1) == '*') {
+			start_line = 0;
 			char *end = strstr(prog, "*/");
 			if(!end) {
 				compile_err(prog, "unclosed multi-line comment");
@@ -181,6 +187,8 @@ token_t *lex_do(char *prog)
 			uint64_t intlit = strtol(prog, &prog, 10);
 			token_t *numb = token_make(TOK_NUM, num, prog);
 			numb->num = intlit;
+			numb->start_line = start_line;
+			start_line = 0;
 			tok->next = numb;
 			tok = tok->next;
 			continue;
@@ -201,6 +209,8 @@ token_t *lex_do(char *prog)
 
 			token_t *ident = token_make(type, start, prog);
 			tok->next = ident;
+			ident->start_line = start;
+			start_line = 0;
 			tok = tok->next;
 			continue;
 		}
@@ -215,6 +225,8 @@ token_t *lex_do(char *prog)
 			token_t *str = token_make(TOK_STR, prog + 1, end - 1);
 			str->str = mystrndup(str->loc, (end - prog) - 1);
 			str->type = type_arr_to(TY_CHAR, (end - prog));
+			str->start_line = start_line;
+			start_line = 0;
 			prog = end + 1;
 			tok->next = str;
 			tok = tok->next;
@@ -230,6 +242,8 @@ token_t *lex_do(char *prog)
 			token_t *chrlit = token_make(TOK_STR, chr, chr);
 			chrlit->str = mystrndup(chrlit->loc, 1);
 			chrlit->type = TY_CHAR;
+			chrlit->start_line = start_line;
+			start_line = 0;
 			prog += 3;
 			tok->next = chrlit;
 			tok = tok->next;
@@ -242,6 +256,8 @@ token_t *lex_do(char *prog)
 			token_t *punct = token_make(TOK_PUNCT, prog, prog + plen);
 			prog += plen;
 			tok->next = punct;
+			punct->start_line = start_line;
+			start_line = 0;
 			tok = tok->next;
 			continue;
 		}
@@ -249,6 +265,11 @@ token_t *lex_do(char *prog)
 		compile_err(prog, "unknown expression '%d'", *prog);
 	}
 
-	tok = tok->next = token_make(TOK_END, prog, prog);
+	if(end) {
+		*end = tok;
+	} else {
+		tok = tok->next = token_make(TOK_END, prog, prog);
+	}
+
 	return start.next;
 }
