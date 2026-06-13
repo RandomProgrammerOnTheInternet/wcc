@@ -103,7 +103,6 @@ typedef struct reg {
 	long stack_off; /* if so, it's offset */
 	/* instruction register comes from */
 	enum ins_type insty;
-	size_t size;
 	struct reg *lhs;
 	struct reg *rhs;
 	bool no_mov_elim; /* do not move eliminate this reg */
@@ -146,7 +145,6 @@ typedef struct ir_inst {
 	bool noopt; /* is this inst volatile? */
 	bool sign_ext; /* sign extend this load? */
 	size_t size; /* load/store/zero_ext/sign_ext size */
-	size_t data_size; /* instruction data size */
 	struct ir_global *label; /* for lea, the label */
 } ir_inst_t;
 

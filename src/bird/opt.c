@@ -156,7 +156,6 @@ static int ir_branchopt(ir_func_t *func)
 				ins->type = cmp_to_br(cmp->insty);
 				ins->r1 = cmp->lhs;
 				ins->r2 = cmp->rhs;
-				ins->data_size = cmp->size;
 				ins->imm = cmp->imm;
 				changed = 1;
 			}
@@ -211,28 +210,23 @@ static void ir_removemarks(ir_func_t *func)
 				inst->r0->insty = IR_INST_NOP;
 				inst->r0->lhs = inst->r0->rhs = NULL;
 				inst->r0->imm = inst->r0->multiple_defs = 0;
-				inst->r0->size = 8;
 			}
 			if(inst->r1) {
 				inst->r1->insty = IR_INST_NOP;
 				inst->r1->lhs = inst->r1->rhs = NULL;
 				inst->r1->imm = inst->r1->multiple_defs = 0;
-				inst->r1->size = 8;
 			}
 			if(inst->r2) {
 				inst->r2->insty = IR_INST_NOP;
 				inst->r2->lhs = inst->r2->rhs = NULL;
 				inst->r2->imm = inst->r2->multiple_defs = 0;
-				inst->r2->size = 8;
 			}
-
 			if(inst->type == IR_INST_CALL) {
 				for(size_t i = 0; i < list_len(inst->call_args); i++) {
 					reg_t *arg = inst->call_args[i]->r;
 					arg->insty = IR_INST_NOP;
 					arg->lhs = arg->rhs = NULL;
 					arg->imm = arg->multiple_defs = 0;
-					arg->size = 8;
 				}
 			}
 		}
@@ -241,7 +235,6 @@ static void ir_removemarks(ir_func_t *func)
 
 static void ir_placemarks(ir_func_t *func)
 {
-	ir_fix(func);
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
@@ -253,7 +246,6 @@ static void ir_placemarks(ir_func_t *func)
 				inst->r0->insty = IR_INST_NOP;
 				inst->r0->lhs = inst->r0->rhs = NULL;
 				inst->r0->imm = 0;
-				inst->r0->size = 8;
 				inst->r0->multiple_defs = true;
 				continue;
 			}
@@ -264,7 +256,6 @@ static void ir_placemarks(ir_func_t *func)
 				inst->r0->lhs = inst->r1;
 				inst->r0->rhs = inst->r2;
 				inst->r0->imm = inst->imm;
-				inst->r0->size = inst->data_size;
 			}
 		}
 	}
@@ -296,10 +287,10 @@ static void ir_fold_ins_unaryop(ir_inst_t *ins)
 		ins->imm = ua;
 		break;
 	case IR_INST_NEG:
-		ins->imm = zxt(-sa, ins->data_size);
+		ins->imm = -sa;
 		break;
 	case IR_INST_NOT:
-		ins->imm = zxt(~ua, ins->data_size);
+		ins->imm = ~ua;
 		break;
 	case IR_INST_MKBOOL:
 		ins->imm = (ua != 0);
@@ -628,7 +619,6 @@ static int ir_fold(ir_func_t *func)
 
 static int ir_mov_elim(ir_func_t *func)
 {
-	ir_fix(func);
 	int change = 0;
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
@@ -684,58 +674,26 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 		change = 1;
 	}
 
-	/* %r0 = sign_ext.i64.i64/zero_ext.i64.i64 %r1
+	/* %r0 = sign_ext.i64/zero_ext.i64 %r1
 	 * ->
 	 * %r0 = %r1
 	 */
 	if((ins->type == IR_INST_SXT || ins->type == IR_INST_ZXT) &&
-	   ins->size == 8 && ins->data_size == 8) {
+	   ins->size == 8) {
 		ins->type = IR_INST_MOV;
 		change = 1;
 	}
 
-	/* %r0 = sign_ext.i32.i32/zero_ext.i32.i32 %r1
-	 * ->
-	 * %r0 = zero_ext.i64.i32 %r1
-	 */
-	if((ins->type == IR_INST_SXT || ins->type == IR_INST_ZXT) &&
-	   ins->size == 4 && ins->data_size == 4) {
-		ins->type = IR_INST_ZXT;
-		ins->data_size = 8;
-		change = 1;
-	}
-
-	/* %r0 = i64 %r0
+	/* %r0 = %r0
 	 * ->
 	 * nop
 	 */
-	if(ins->type == IR_INST_MOV && ins->r0->vr == ins->r1->vr &&
-	   ins->data_size == 8) {
+	if(ins->type == IR_INST_MOV && ins->r0->vr == ins->r1->vr) {
 		ins->type = IR_INST_NOP;
 		change = 1;
 	}
 
-	/* %r0 = i32 %r0
-	 * ->
-	 * %r0 = zext.i64.i32 %r0
-	 */
-	if(ins->type == IR_INST_MOV && ins->r0->vr == ins->r1->vr &&
-	   ins->data_size == 4) {
-		ins->type = IR_INST_ZXT;
-		ins->data_size = 8;
-		ins->size = 4;
-	}
-
-	/* %r0 = i64 #imm (zxt32(imm) == imm)
-	 * ->
-	 * %r0 = i32 #imm
-	 */
-	if(ins->type == IR_INST_IMM && ins->data_size == 8 &&
-	   zxt(ins->imm, 32) == ins->imm) {
-		ins->data_size = 4;
-	}
-
-	/* %r0 = cmp.*.i* %r1, %r1
+	/* %r0 = cmp.* %r1, %r1
 	 * ->
 	 * %r0 = imm #res */
 	if(ir_inst_is_cmp(ins->type) && ins->r1->vr == ins->r2->vr) {
@@ -915,7 +873,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		/* trivial optimizations */
 		{
 			change |= ir_mov_elim(func);
-			// change |= ir_fold(func);
+			change |= ir_fold(func);
 			change |= ir_simpleopt(func);
 			ir_nopremover(func);
 			ir_fix(func);

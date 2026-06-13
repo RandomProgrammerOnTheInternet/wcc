@@ -23,7 +23,7 @@ static ir_blk_t *outblk;
 		return;                                        \
 	}
 
-DEF_INS(nop, NOP, NULL, NULL, NULL, 0);
+DEF_INS(nop, NOP, NULL, NULL, NULL, 0, void);
 DEF_INS(mov, MOV, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
 DEF_INS(imm, IMM, r0, NULL, NULL, imm, reg_t *r0, uint64_t imm);
 DEF_INS(add, ADD, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
