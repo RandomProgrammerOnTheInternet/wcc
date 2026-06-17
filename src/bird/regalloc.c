@@ -198,9 +198,64 @@ static void reg_update_counter(reg_t *reg, long ins_counter)
 	return;
 }
 
+#define RESET(x)                          \
+	do {                                  \
+		if((x)) {                         \
+			(x)->def = (x)->last_use = 0; \
+		}                                 \
+	} while(0)
+
+static void reset_liveness(ir_func_t *fun)
+{
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			RESET(ins->r0);
+		}
+	}
+	return;
+}
+
+void ir_blk_liveness(ir_func_t *fun)
+{
+	reset_liveness(fun);
+	long ins_count = 1;
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			reg_update_counter(ins->r0, ins_count);
+			if(ins->r0 && ins->r0->def == 0) {
+				ins->r0->def = ins_count;
+			}
+			reg_update_counter(ins->r1, ins_count);
+			reg_update_counter(ins->r2, ins_count);
+
+			if(ins->type == IR_INST_CALL) {
+				for(size_t j = 0; j < list_len(ins->call_args); j++) {
+					reg_t *reg = ins->call_args[j]->r;
+					reg_update_counter(reg, ins_count);
+				}
+			}
+
+			if(ins->type == IR_INST_PHI) {
+				for(size_t j = 0; j < list_len(ins->phi_args); j++) {
+					reg_t *reg = ins->phi_args[j];
+					reg_update_counter(reg, ins_count);
+				}
+			}
+
+			ins_count++;
+		}
+		for(size_t j = 0; j < list_len(blk->regs_out); j++) {
+			reg_update_counter(blk->regs_out[j], ins_count);
+		}
+	}
+}
+
 /* calculates register defs & last use for all blocks in `fun` */
 LIST(reg_t *) ir_blk_reglive(ir_func_t *fun)
 {
+	reset_liveness(fun);
 	LIST(reg_t *) allocated = list_make(reg_t *);
 	/* the algorithm here is quite simple. basically,
 	 * we assume the blocks are laid out in order,

@@ -733,7 +733,6 @@ void codegen_func(FILE *f, LIST(obj_t *) globals, int opt_level,
 
 			ir_inst_t *nxt = trail->next;
 			ir_inst_t *imml = ins_imm(var->eq_reg, 0);
-			var->eq_reg->no_mov_elim = true;
 			imml->next = nxt;
 			trail->next = imml;
 		}

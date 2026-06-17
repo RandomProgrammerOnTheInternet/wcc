@@ -13,6 +13,9 @@ void ir_blk_flow(ir_func_t *fun);
 /* calculates register defs & last use for all blocks in `fun`. returns registers allocated */
 LIST(reg_t *) ir_blk_reglive(ir_func_t *fun);
 
+/* calculates register defs & last use */
+void ir_blk_liveness(ir_func_t *fun);
+
 /* needs ir_blk_reguse; defines the input registers to be zero for the entry block */
 void ir_blk_fixup_entry(ir_func_t *fun);
 

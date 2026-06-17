@@ -18,15 +18,6 @@ static void find_before_last_term_ins(ir_blk_t *blk)
 	ASSERT(ir_inst_is_term(ret->type), "IR is not constructed properly");
 }
 
-static void print_list(LIST(long) list)
-{
-	for(size_t i = 0; i < list_len(list); i++) {
-		printf("%ld, ", list[i]);
-	}
-	printf("\n");
-	return;
-}
-
 static bool has_long(LIST(long) list, long want)
 {
 	for(size_t i = 0; i < list_len(list); i++) {
@@ -38,16 +29,6 @@ static bool has_long(LIST(long) list, long want)
 }
 
 static bool has_blk(LIST(ir_blk_t *) list, ir_blk_t *want)
-{
-	for(size_t i = 0; i < list_len(list); i++) {
-		if(list[i] == want) {
-			return true;
-		}
-	}
-	return false;
-}
-
-static bool has_reg(LIST(reg_t *) list, reg_t *want)
 {
 	for(size_t i = 0; i < list_len(list); i++) {
 		if(list[i] == want) {
@@ -80,9 +61,7 @@ static size_t find_blkreg(LIST(blkreg_t *) list, ir_blk_t *blk)
 	return -1;
 }
 
-/* I'm using A Simple, Fast Dominance Algorithm by Keith D. Cooper, Timothy J. Harvey, and Ken Kennedy. */
 /* The postorder computation was inspired from (here)[https://github.com/sampsyo/bril/blob/main/examples/dom.py#L34]. */
-/* The computation was also inspired from (here)[https://github.com/Golf0ned/PANNICC/blob/main/src/middleend/analysis/dominator_tree.cpp]. */
 
 static void union_(LIST(long) l, long x)
 {
@@ -96,8 +75,6 @@ static void postorder_visit(LIST(long) postorder, ir_blk_t *blk)
 	if(blk->visited) {
 		return;
 	}
-
-	size_t len = list_len(postorder);
 
 	blk->visited = true;
 	union_(postorder, blk->num);
@@ -131,30 +108,6 @@ static LIST(long) postorder_get(LIST(ir_blk_t *) blocks)
 	return postorder;
 }
 
-static LIST(long) reverse_postorder(LIST(long) postorder)
-{
-	LIST(long) rev_postorder = list_make(long);
-
-	for(size_t i = list_len(postorder) - 1; i >= 0; i--) {
-		list_append(rev_postorder, postorder[i]);
-		if(i == 0) {
-			break;
-		}
-	}
-
-	return rev_postorder;
-}
-
-static bool block_contains_regdef(ir_blk_t *blk, reg_t *reg)
-{
-	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-		if(ins->r0 && ins->r0->vr == reg->vr) {
-			return true;
-		}
-	}
-	return false;
-}
-
 static blkreg_t *blkreg_make(ir_blk_t *blk, reg_t *reg)
 {
 	blkreg_t *r = zalloc(sizeof(blkreg_t));
@@ -173,21 +126,13 @@ static reg_t *ssa_tmp(reg_t *var)
 
 static reg_t *find_var(reg_t *reg)
 {
-	return reg->ssareg ? find_var(reg->ssareg) : reg;
-}
-
-static reg_t *read_reg_lvn(ir_blk_t *blk, reg_t *reg)
-{
-	reg_t *var = find_var(reg);
-	if(has_blkreg(var->blkregs, blk)) {
-		return var->blkregs[find_blkreg(var->blkregs, blk)]->reg;
+	reg_t *r = reg;
+	while(r->ssareg) {
+		r = r->ssareg;
 	}
-
-	/* can't do right now */
-	return var;
+	return r;
 }
 
-static ir_func_t *func;
 static LIST(ir_blk_t *) sealed_blks;
 
 static reg_t *write_reg(ir_blk_t *blk, reg_t *reg, reg_t *val)
@@ -214,12 +159,24 @@ static ir_inst_t *insert_phi(ir_blk_t *blk)
 
 static reg_t *read_reg_gvn(ir_blk_t *blk, reg_t *reg);
 
+static reg_t *try_remove_trivial_phi(ir_inst_t *phi)
+{
+	if(list_len(phi->phi_args) == 1) {
+		phi->type = IR_INST_MOV;
+		phi->r1 = phi->phi_args[0];
+		list_delete(phi->phi_args);
+		return phi->r0;
+	}
+
+	return phi->r0;
+}
+
 static reg_t *add_phi_ops(ir_blk_t *blk, reg_t *var, ir_inst_t *phi)
 {
 	for(size_t i = 0; i < list_len(blk->pred); i++) {
 		list_append(phi->phi_args, read_reg_gvn(blk->pred[i], var));
 	}
-	return phi->r0;
+	return try_remove_trivial_phi(phi);
 }
 
 static reg_t *read_var_rec(ir_blk_t *blk, reg_t *reg)
@@ -242,21 +199,12 @@ static reg_t *read_var_rec(ir_blk_t *blk, reg_t *reg)
 	return val;
 }
 
-static void breakpoint(reg_t *var, ir_blk_t *blk, reg_t *reg)
-{
-	return;
-}
-
 static reg_t *read_reg_gvn(ir_blk_t *blk, reg_t *reg)
 {
 	reg_t *var = find_var(reg);
-	if(!var->blkregs) {
-		breakpoint(var, blk, reg);
-	}
 
 	if(has_blkreg(var->blkregs, blk)) {
 		return var->blkregs[find_blkreg(var->blkregs, blk)]->reg;
-		// return reg;
 	}
 
 	return read_var_rec(blk, reg);
@@ -282,7 +230,6 @@ void ir_ssa_enter(ir_func_t *fun)
 	ir_fix(fun);
 	ir_nopremover(fun);
 	ir_blk_flow(fun);
-	func = fun;
 
 	sealed_blks = list_make(ir_blk_t *);
 
@@ -295,21 +242,21 @@ void ir_ssa_enter(ir_func_t *fun)
 		find_before_last_term_ins(blk);
 	}
 
+	LIST(reg_t *) allocated = list_make(reg_t *);
+
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
 			if(inst->r0 && !inst->r0->blkregs) {
 				inst->r0->blkregs = list_make(blkreg_t *);
+				list_append(allocated, inst->r0);
 			}
 		}
 	}
 
 	LIST(long) postorder = postorder_get(fun->blocks);
-	LIST(long) rev_postorder = reverse_postorder(postorder);
-	// print_list(postorder);
 
 	/* local value numbering */
-
 	for(size_t ip = 0; ip < list_len(postorder); ip++) {
 		size_t i = postorder[ip];
 		ir_blk_t *blk = fun->blocks[i];
@@ -333,40 +280,21 @@ void ir_ssa_enter(ir_func_t *fun)
 	}
 
 	ir_nopremover(fun);
-	// ir_dump(fun, 'v');
-	// exit(1);
-
 	for(size_t i = 0; i < list_len(postorder); i++) {
-		// printf("******\n\n\n\n\n\n");
-		// ir_dump(fun, 'v');
 		seal_block(fun->blocks[i]);
 	}
+	ir_fix(fun);
 
-	/* global value numbering */
-	/*
-	for(size_t ip = 0; ip < list_len(postorder); ip++) {
-		size_t i = postorder[ip];
-		ir_blk_t *blk = fun->blocks[i];
-		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
-			if(inst->r1) {
-				inst->r1 = read_reg_gvn_normal(blk, inst->r1);
-			}
-			if(inst->r2) {
-				inst->r2 = read_reg_gvn_normal(blk, inst->r2);
-			}
-			if(inst->type == IR_INST_CALL) {
-				for(size_t i = 0; i < list_len(inst->call_args); i++) {
-					inst->call_args[i]->r =
-						read_reg_gvn_normal(blk, inst->call_args[i]->r);
-				}
-			}
+	for(size_t i = 0; i < list_len(allocated); i++) {
+		for(size_t j = 0; j < list_len(allocated[i]->blkregs); j++) {
+			free(allocated[i]->blkregs[j]);
 		}
+		list_delete(allocated[i]->blkregs);
 	}
-	*/
 
 	list_delete(sealed_blks);
 	list_delete(postorder);
-	list_delete(rev_postorder);
+	list_delete(allocated);
 
 	return;
 }

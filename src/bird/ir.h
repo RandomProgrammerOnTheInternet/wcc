@@ -105,7 +105,7 @@ typedef struct reg {
 	enum ins_type insty;
 	struct reg *lhs;
 	struct reg *rhs;
-	bool no_mov_elim; /* do not move eliminate this reg */
+	bool phi_arg; /* argument to phi; do NOT eliminate */
 	bool multiple_defs; /* register was assigned multiple times */
 } reg_t;
 
@@ -161,7 +161,6 @@ typedef struct ir_blk {
 	bool visited;
 	LIST(struct ir_blk *) pred; /* block's predecessors */
 	LIST(ir_inst_t *) incomplete_phis; /* block's incomplete phis */
-	LIST(long) dom_frontier; /* this block's dominance frontier */
 	LIST(reg_t *) regs_def; /* registers in this block */
 	LIST(reg_t *) regs_in; /* registers in */
 	LIST(reg_t *) regs_out; /* registers out */

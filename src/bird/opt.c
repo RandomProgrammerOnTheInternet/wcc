@@ -239,10 +239,6 @@ static void ir_placemarks(ir_func_t *func)
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
-			if(inst->r0 && inst->r0->no_mov_elim) {
-				inst->r0->multiple_defs = true;
-			}
-
 			if(inst->r0 && inst->r0->insty != IR_INST_NOP) {
 				inst->r0->insty = IR_INST_NOP;
 				inst->r0->lhs = inst->r0->rhs = NULL;
@@ -252,11 +248,17 @@ static void ir_placemarks(ir_func_t *func)
 			}
 
 			if(inst->r0 && inst->r0->insty == IR_INST_NOP &&
-			   inst->type != IR_INST_PHI && !inst->r0->multiple_defs) {
+			   inst->type != IR_INST_PHI) {
 				inst->r0->insty = inst->type;
 				inst->r0->lhs = inst->r1;
 				inst->r0->rhs = inst->r2;
 				inst->r0->imm = inst->imm;
+			}
+
+			if(inst->type == IR_INST_PHI) {
+				for(size_t i = 0; i < list_len(inst->phi_args); i++) {
+					inst->phi_args[i]->phi_arg = true;
+				}
 			}
 		}
 	}
@@ -815,6 +817,36 @@ static int ir_stackreduce(ir_func_t *func)
 	return changed;
 }
 
+static int ir_dce(ir_func_t *func)
+{
+	int change = 0;
+
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(!ins->r0) {
+				continue;
+			}
+
+			if(ins->r0->phi_arg) {
+				continue;
+			}
+
+			/* todo: this might break in some scenarios */
+			if(ins->r0->def == ins->r0->last_use) {
+				change = 1;
+				if(ins->type == IR_INST_CALL) {
+					ins->r0 = NULL;
+				} else {
+					ins->type = IR_INST_NOP;
+				}
+			}
+		}
+	}
+
+	return change;
+}
+
 /* optimizes an IR function */
 void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 {
@@ -848,15 +880,22 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		printf("****\n");
 	}
 
-	max_tolerated_change = 0;
-
 	ir_ssa_enter(func);
+	ir_placemarks(func);
 
 	int left = max_tolerated_change;
 	while(left) {
 		change = 0;
 
-		ir_placemarks(func);
+		ir_blk_reguse(func);
+		ir_blk_liveness(func);
+
+		/* dead code elim */
+		{
+			change |= ir_dce(func);
+			ir_nopremover(func);
+			ir_fix(func);
+		}
 
 		/* branch opts */
 		{
@@ -874,29 +913,18 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 			ir_fix(func);
 		}
 
-		/* trivial optimizations */
-		/*
-		{
-			change |= ir_mov_elim(func);
-			change |= ir_fold(func);
-			change |= ir_simpleopt(func);
-			ir_nopremover(func);
-			ir_fix(func);
-		}
-		*/
+		/* todo: simpleopts */
 
 		if(!change) {
 			break;
 		}
 
-		ir_removemarks(func);
-
 		left--;
 	}
 
 	ir_nopremover(func);
-
 	ir_ssa_exit(func);
+	ir_nopremover(func);
 
 	if(debug) {
 		printf("After common opts:\n");
