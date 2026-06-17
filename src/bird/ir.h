@@ -1,4 +1,4 @@
-/* simple three-address-code IR, might do SSA later */
+/* simple three-address-code/SSA IR */
 #ifndef IR_H_
 #define IR_H_
 

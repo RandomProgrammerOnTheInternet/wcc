@@ -1,3 +1,4 @@
+#include "bird/ir.h"
 #include "zz/base.h"
 #include "bird.h"
 #include "ssa.h"
@@ -195,43 +196,13 @@ static int inverse_brcmp(enum ins_type ty)
 
 static reg_t *mov_root(reg_t *reg)
 {
-	reg_t *found = reg;
-	while(found->insty == IR_INST_MOV) {
-		found = found->lhs;
+	if(reg->phi_arg) {
+		return reg;
 	}
-	return found;
-}
-
-static void ir_removemarks(ir_func_t *func)
-{
-	for(size_t i = 0; i < list_len(func->blocks); i++) {
-		ir_blk_t *blk = func->blocks[i];
-		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
-			if(inst->r0) {
-				inst->r0->insty = IR_INST_NOP;
-				inst->r0->lhs = inst->r0->rhs = NULL;
-				inst->r0->imm = inst->r0->multiple_defs = 0;
-			}
-			if(inst->r1) {
-				inst->r1->insty = IR_INST_NOP;
-				inst->r1->lhs = inst->r1->rhs = NULL;
-				inst->r1->imm = inst->r1->multiple_defs = 0;
-			}
-			if(inst->r2) {
-				inst->r2->insty = IR_INST_NOP;
-				inst->r2->lhs = inst->r2->rhs = NULL;
-				inst->r2->imm = inst->r2->multiple_defs = 0;
-			}
-			if(inst->type == IR_INST_CALL) {
-				for(size_t i = 0; i < list_len(inst->call_args); i++) {
-					reg_t *arg = inst->call_args[i]->r;
-					arg->insty = IR_INST_NOP;
-					arg->lhs = arg->rhs = NULL;
-					arg->imm = arg->multiple_defs = 0;
-				}
-			}
-		}
+	if(reg->insty == IR_INST_MOV) {
+		return reg->lhs;
 	}
+	return reg;
 }
 
 static void ir_placemarks(ir_func_t *func)
@@ -239,16 +210,8 @@ static void ir_placemarks(ir_func_t *func)
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
-			if(inst->r0 && inst->r0->insty != IR_INST_NOP) {
-				inst->r0->insty = IR_INST_NOP;
-				inst->r0->lhs = inst->r0->rhs = NULL;
-				inst->r0->imm = 0;
-				inst->r0->multiple_defs = true;
-				continue;
-			}
-
-			if(inst->r0 && inst->r0->insty == IR_INST_NOP &&
-			   inst->type != IR_INST_PHI) {
+			if(inst->r0 &&
+			   (inst->type != IR_INST_PHI && inst->type != IR_INST_MOV)) {
 				inst->r0->insty = inst->type;
 				inst->r0->lhs = inst->r1;
 				inst->r0->rhs = inst->r2;
@@ -620,37 +583,6 @@ static int ir_fold(ir_func_t *func)
 	return change;
 }
 
-static int ir_mov_elim(ir_func_t *func)
-{
-	int change = 0;
-	for(size_t i = 0; i < list_len(func->blocks); i++) {
-		ir_blk_t *blk = func->blocks[i];
-		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-			if(ins->r1 && ins->r1->insty == IR_INST_MOV) {
-				ins->r1 = mov_root(ins->r1);
-				change = 1;
-			}
-
-			if(ins->r2 && ins->r2->insty == IR_INST_MOV) {
-				ins->r2 = mov_root(ins->r2);
-				change = 1;
-			}
-
-			if(ins->type == IR_INST_CALL) {
-				for(size_t i = 0; i < list_len(ins->call_args); i++) {
-					reg_t *arg = ins->call_args[i]->r;
-					if(arg && arg->insty == IR_INST_MOV) {
-						ins->call_args[i]->r = mov_root(arg);
-						change = 1;
-					}
-				}
-			}
-		}
-	}
-
-	return change;
-}
-
 static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 {
 	int change = 0;
@@ -817,6 +749,55 @@ static int ir_stackreduce(ir_func_t *func)
 	return changed;
 }
 
+#define REPLACE(x)               \
+	do {                         \
+		if((x)) {                \
+			(x) = mov_root((x)); \
+		}                        \
+	} while(0)
+
+/* or copy propagation, whatever you call it */
+/* doesn't work */
+static int ir_mov_elim(ir_func_t *func)
+{
+	/* mark moves */
+
+	int change = 0;
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type == IR_INST_MOV && !inst->r0->phi_arg &&
+			   !inst->r1->phi_arg && inst->r0->def == inst->r1->last_use) {
+				change = 1;
+				inst->type = IR_INST_NOP;
+				inst->r0->insty = IR_INST_MOV;
+				inst->r0->lhs = inst->r1;
+				continue;
+			}
+		}
+	}
+
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			REPLACE(inst->r0);
+			REPLACE(inst->r1);
+			REPLACE(inst->r2);
+			if(inst->type == IR_INST_CALL) {
+				for(size_t j = 0; j < list_len(inst->call_args); j++) {
+					REPLACE(inst->call_args[j]->r);
+				}
+			}
+			if(inst->type == IR_INST_PHI) {
+				for(size_t j = 0; j < list_len(inst->phi_args); j++) {
+					REPLACE(inst->phi_args[j]);
+				}
+			}
+		}
+	}
+	return change;
+}
+
 static int ir_dce(ir_func_t *func)
 {
 	int change = 0;
@@ -881,7 +862,6 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 	}
 
 	ir_ssa_enter(func);
-	ir_placemarks(func);
 
 	int left = max_tolerated_change;
 	while(left) {
@@ -889,10 +869,12 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 
 		ir_blk_reguse(func);
 		ir_blk_liveness(func);
+		ir_placemarks(func);
 
 		/* dead code elim */
 		{
 			change |= ir_dce(func);
+
 			ir_nopremover(func);
 			ir_fix(func);
 		}
