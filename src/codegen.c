@@ -681,6 +681,7 @@ void codegen_func(FILE *f, LIST(obj_t *) globals, int opt_level,
 	assign_globals(globals);
 
 	for(size_t i = 0; i < list_len(globals); i++) {
+		blk_num = 0;
 		obj_t *cur_fn = globals[i];
 
 		if(cur_fn && cur_fn->is_global) {

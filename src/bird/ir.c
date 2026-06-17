@@ -840,6 +840,7 @@ void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt)
 	}
 
 	/* functions */
+	long acc = 0;
 	for(size_t i = 0; i < list_len(prog->funcs); i++) {
 		ir_func_t *func = prog->funcs[i];
 		ir_fix(func);
@@ -852,6 +853,11 @@ void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt)
 
 		ir_opt(func, opt, arch);
 		ir_finalize(func, arch == IR_ARCH_AARCH64_APPLE ? 9 : 5, arch);
+
+		for(size_t j = 0; j < list_len(func->blocks); j++) {
+			func->blocks[j]->num = acc++;
+		}
+
 		if(debug) {
 			printf("Final IR:\n");
 			printf("\tvirtual:\n");
