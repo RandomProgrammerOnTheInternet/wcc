@@ -1,4 +1,5 @@
 #include "bird.h"
+#include "ir.h"
 #include <limits.h>
 #include <stdlib.h>
 
@@ -574,26 +575,15 @@ static void ir_simplify(ir_func_t *fun, int amount)
 		}
 		ir_blk_t *blk = fun->blocks[i];
 
-		ir_inst_t *nop = ir_inst_make(IR_INST_NOP, NULL, NULL, NULL, 0);
-		nop->next = blk->insts;
-		blk->insts = nop;
-
-		ir_inst_t *prev = nop;
 		ir_inst_t *nxt = blk->insts;
-		int removed = 0;
 		for(ir_inst_t *ins = blk->insts; ins; ins = nxt) {
-			removed = 0;
 			nxt = ins->next;
 
 			/* simplify useless moves where the source
 			 * and destination have same real register */
 			if(ins->type == IR_INST_MOV && ins->r0->rr != -1 &&
 			   ins->r0->rr == ins->r1->rr && !ins->noopt) {
-				prev->next = nxt;
-				ir_inst_delete(ins);
-				ins = nxt;
-				removed = 1;
-				goto end;
+				ins->type = IR_INST_NOP;
 			}
 
 			/* simplify
@@ -612,11 +602,7 @@ static void ir_simplify(ir_func_t *fun, int amount)
 			 * beyond this inst */
 			if(ins->r0 && ins->r0->def == ins->r0->last_use &&
 			   ins->type != IR_INST_CALL && !ins->noopt) {
-				prev->next = nxt;
-				ir_inst_delete(ins);
-				ins = nxt;
-				removed = 1;
-				goto end;
+				ins->type = IR_INST_NOP;
 			}
 
 			/* if call ins, and the val is not used at all, remove
@@ -631,11 +617,7 @@ static void ir_simplify(ir_func_t *fun, int amount)
 				/* remove useless immediate loads */
 				if(are_imm[ins->r0->rr] &&
 				   ins->imm == (uint64_t)imm[ins->r0->rr]) {
-					prev->next = nxt;
-					ir_inst_delete(ins);
-					ins = nxt;
-					removed = 1;
-					goto end;
+					ins->type = IR_INST_NOP;
 				}
 				are_imm[ins->r0->rr] = 1;
 				imm[ins->r0->rr] = ins->imm;
@@ -643,13 +625,13 @@ static void ir_simplify(ir_func_t *fun, int amount)
 				are_imm[ins->r0->rr] = 0;
 			}
 
-end:
-			if(!removed) {
-				prev = ins;
+			if(ins->type == IR_INST_MOV && are_imm[ins->r1->rr]) {
+				ins->type = IR_INST_IMM;
+				ins->imm = imm[ins->r1->rr];
 			}
 		}
-		blk->insts = blk->insts->next;
-		ir_inst_delete(nop);
+
+		ir_nopremover(fun);
 	}
 
 	free(imm);

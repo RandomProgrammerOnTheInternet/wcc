@@ -133,5 +133,6 @@ test: $(BINDIR)/$(APP)
 	@./test.sh
 
 testsanitizers:
-	@make -B SANITIZERS=yes test
+	@make -B SANITIZERS=yes
+	@ASAN_OPTIONS=detect_leaks=1 ./test.sh
 	@make -B clean

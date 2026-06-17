@@ -22,7 +22,7 @@ void print_num_helper(int num)
 		print_num_helper(num / 10);
 	}
 
-	putchar((num % 10) + 48);
+	putchar((num % 10) + '0');
 
 	return;
 }

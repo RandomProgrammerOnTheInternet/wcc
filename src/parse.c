@@ -5,6 +5,7 @@
 
 LIST(obj_t *) locals = NULL;
 LIST(obj_t *) globals = NULL;
+LIST(obj_t *) all = NULL;
 
 /* ron's universal number kounter */
 /* very important, critical piece of code */
@@ -20,7 +21,7 @@ static long runk(int reset)
 /* makes a node */
 node_t *node_make(enum node_kind kind, token_t *tok)
 {
-	node_t *node = zalloc(sizeof(node_t));
+	node_t *node = scr_alloc(sizeof(node_t));
 	node->kind = kind;
 	node->tok = tok;
 	return node;
@@ -29,7 +30,7 @@ node_t *node_make(enum node_kind kind, token_t *tok)
 /* deallocates a node */
 void node_delete(node_t *node)
 {
-	free(node);
+	// free(node);
 	return;
 }
 
@@ -174,6 +175,8 @@ static obj_t *find_var(token_t *tok)
 /* delete an object */
 void obj_delete(obj_t *obj)
 {
+	if(obj->data)
+		free(obj->data);
 	free(obj->name);
 	// scr_free(obj);
 }
@@ -838,7 +841,9 @@ static node_t *parse_stmt_expr(token_t *tok, token_t **rest)
 	node_t *stmt_expr = node_make(NODE_STMT_EXPR, tok);
 
 	tok = token_skip(tok, "(");
-	stmt_expr->body = parse_compound_stmt(tok, &tok)->body;
+	node_t *compound_stmt = parse_compound_stmt(tok, &tok);
+	stmt_expr->body = compound_stmt->body;
+	node_delete(compound_stmt);
 	tok = token_skip(tok, ")");
 
 	*rest = tok;
@@ -1079,10 +1084,11 @@ end:
 }
 
 /* does the parsing */
-LIST(obj_t *) parse_do(token_t *toks)
+parse_res_t parse_do(token_t *toks)
 {
 	token_t *tok = toks;
 	globals = list_make(obj_t *);
+	all = list_make(obj_t *);
 	while(tok->kind != TOK_END) {
 		type_t *declspec = parse_declspec(tok, &tok);
 		type_t *decl = parse_declarator(declspec, tok, &tok);
@@ -1100,8 +1106,14 @@ LIST(obj_t *) parse_do(token_t *toks)
 			parse_global_var(decl, tok, &tok);
 		}
 
+		if(locals) {
+			for(size_t i = 0; i < list_len(locals); i++) {
+				list_append(all, locals[i]);
+			}
+		}
+
 		locals = NULL;
 	}
 
-	return globals;
+	return (parse_res_t){ .globals = globals, .locals = all };
 }

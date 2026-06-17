@@ -26,6 +26,7 @@ static token_t *preproc_handle_directive(token_t **prev, token_t *dir)
 		(*prev)->next = new;
 		end->next = nxt->next;
 
+		token_delete(dir->next->next);
 		token_delete(dir->next);
 		token_delete(dir);
 

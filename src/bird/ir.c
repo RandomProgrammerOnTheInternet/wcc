@@ -304,6 +304,9 @@ void ir_inst_delete(ir_inst_t *ins)
 	if(ins->type == IR_INST_CALL) {
 		list_delete(ins->call_args);
 	}
+	if(ins->type == IR_INST_PHI) {
+		list_delete(ins->phi_args);
+	}
 	free(ins);
 	return;
 }
@@ -846,6 +849,11 @@ void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt)
 		for(size_t j = 0; j < list_len(func->blocks); j++) {
 			ir_blk_t *blk = func->blocks[j];
 			blk->tail = find_last_or_flow_ins(blk->insts);
+			ir_inst_t *nxt;
+			for(ir_inst_t *inst = blk->tail->next; inst; inst = nxt) {
+				nxt = inst->next;
+				ir_inst_delete(inst);
+			}
 			blk->tail->next = NULL;
 		}
 

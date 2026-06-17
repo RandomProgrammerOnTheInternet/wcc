@@ -210,8 +210,7 @@ static void ir_placemarks(ir_func_t *func)
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
-			if(inst->r0 &&
-			   (inst->type != IR_INST_PHI && inst->type != IR_INST_MOV)) {
+			if(inst->r0 && inst->type != IR_INST_PHI) {
 				inst->r0->insty = inst->type;
 				inst->r0->lhs = inst->r1;
 				inst->r0->rhs = inst->r2;
@@ -275,10 +274,8 @@ static void ir_fold_ins_unaryop(ir_inst_t *ins)
 	}
 
 	ins->type = IR_INST_IMM;
-	if(!ins->r0->multiple_defs) {
-		ins->r0->insty = IR_INST_IMM;
-		ins->r0->imm = ins->imm;
-	}
+	ins->r0->insty = IR_INST_IMM;
+	ins->r0->imm = ins->imm;
 	return;
 }
 
@@ -387,10 +384,8 @@ static void ir_fold_ins_binop(ir_inst_t *ins)
 	}
 
 	ins->type = IR_INST_IMM;
-	if(!ins->r0->multiple_defs) {
-		ins->r0->insty = IR_INST_IMM;
-		ins->r0->imm = ins->imm;
-	}
+	ins->r0->insty = IR_INST_IMM;
+	ins->r0->imm = ins->imm;
 
 	return;
 }
@@ -752,6 +747,27 @@ static int ir_stackreduce(ir_func_t *func)
 		}                        \
 	} while(0)
 
+static int ir_imm_elim(ir_func_t *func)
+{
+	int change = 0;
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type != IR_INST_MOV) {
+				continue;
+			}
+			if(inst->r1->insty == IR_INST_IMM) {
+				inst->type = IR_INST_IMM;
+				inst->imm = inst->r1->imm;
+				inst->r0->insty = IR_INST_IMM;
+				inst->r0->imm = inst->imm;
+				change = 1;
+			}
+		}
+	}
+	return change;
+}
+
 /* or copy propagation, whatever you call it */
 /* doesn't work */
 static int ir_mov_elim(ir_func_t *func)
@@ -871,6 +887,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		{
 			change |= ir_dce(func);
 			change |= ir_simpleopt(func);
+			change |= ir_imm_elim(func);
 
 			ir_nopremover(func);
 			ir_fix(func);

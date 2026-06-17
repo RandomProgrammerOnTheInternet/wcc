@@ -130,7 +130,12 @@ void obj_delete(obj_t *obj);
 /* deletes all objects in list */
 void obj_delete_all(LIST(obj_t *) objs);
 
+typedef struct parse_res {
+	LIST(obj_t *) locals;
+	LIST(obj_t *) globals;
+} parse_res_t;
+
 /* does the parsing */
-LIST(obj_t *) parse_do(token_t *toks);
+parse_res_t parse_do(token_t *toks);
 
 #endif /* PARSE_H_ */

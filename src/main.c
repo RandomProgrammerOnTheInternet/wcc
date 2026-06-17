@@ -141,10 +141,10 @@ int main(int argc, char *argv[])
 	head = preproc_do(head);
 
 	token_t *cur = head;
-	LIST(obj_t *) globals = parse_do(cur);
+	parse_res_t res = parse_do(cur);
+	LIST(obj_t *) globals = res.globals;
+	LIST(obj_t *) locals = res.locals;
 	codegen_func(emit_to, globals, opt_level, arch);
-
-	free(prog);
 
 	fclose(emit_to);
 
@@ -165,7 +165,16 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	/*
+	for(size_t i = 0; i < list_len(locals); i++) {
+		if(locals[i]) {
+			obj_delete_all(locals[i]->vars);
+		}
+	}
+	*/
+
 	list_delete(globals);
+	list_delete(locals);
 
 	scr_cleanup();
 	return 0;

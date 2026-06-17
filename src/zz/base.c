@@ -222,7 +222,7 @@ char *file_reader(FILE *f)
 	fseek(f, 0, SEEK_SET);
 
 	char *prog = zalloc(size + 2);
-	char *crlf_to_lf = zalloc(size + 1);
+	char *crlf_to_lf = scr_alloc(size + 1);
 
 	long pos = 0;
 	while(pos < size) {

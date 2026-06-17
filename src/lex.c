@@ -16,6 +16,9 @@ token_t *token_make(enum token_kind kind, char *start, char *end)
 /* deallocates a single token */
 void token_delete(token_t *tok)
 {
+	if(tok->str) {
+		free(tok->str);
+	}
 	free(tok);
 	return;
 }
