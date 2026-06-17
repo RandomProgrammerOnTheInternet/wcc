@@ -593,7 +593,7 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 	if((ins->type == IR_INST_EOR || ins->type == IR_INST_SUB ||
 		ins->type == IR_INST_SDIV || ins->type == IR_INST_UDIV ||
 		ins->type == IR_INST_SMOD || ins->type == IR_INST_UMOD) &&
-	   ins->r1->vr == ins->r2->vr) {
+	   ins->r1 == ins->r2) {
 		ins->type = IR_INST_IMM;
 		ins->imm = 0;
 		change = 1;
@@ -604,7 +604,7 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 	 * %r0 = %r1
 	 */
 	if((ins->type == IR_INST_AND || ins->type == IR_INST_OR) &&
-	   ins->r1->vr == ins->r2->vr) {
+	   ins->r1 == ins->r2) {
 		ins->type = IR_INST_MOV;
 		change = 1;
 	}
@@ -666,6 +666,7 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 	}
 
 	/* simplify dead block jumps */
+	/*
 	if(ir_inst_is_br(ins->type) || ins->type == IR_INST_JMP) {
 		ir_inst_t *first = ins->true_blk->insts;
 		if(first->type == IR_INST_JMP) {
@@ -683,6 +684,7 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 			change = 1;
 		}
 	}
+	*/
 
 	/* simplify
 	 * br.cmp %r0, %r1, trueblk, falseblk (in front)
@@ -874,6 +876,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		/* dead code elim */
 		{
 			change |= ir_dce(func);
+			change |= ir_simpleopt(func);
 
 			ir_nopremover(func);
 			ir_fix(func);
