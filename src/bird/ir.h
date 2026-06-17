@@ -161,6 +161,7 @@ typedef struct ir_blk {
 	bool visited;
 	LIST(struct ir_blk *) pred; /* block's predecessors */
 	LIST(ir_inst_t *) incomplete_phis; /* block's incomplete phis */
+	LIST(long) dom_frontier; /* this block's dominance frontier */
 	LIST(reg_t *) regs_def; /* registers in this block */
 	LIST(reg_t *) regs_in; /* registers in */
 	LIST(reg_t *) regs_out; /* registers out */

@@ -1,4 +1,4 @@
-#include "test/one.c"
+// #include "test/one.c"
 
 int main()
 {
@@ -17,7 +17,7 @@ int main()
 		}
 	}
 
-	print_num(max_prime);
+	// print_num(max_prime);
 
 	return max_prime;
 }

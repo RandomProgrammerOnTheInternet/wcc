@@ -1,4 +1,6 @@
 #include "bird.h"
+#include <limits.h>
+#include <stdlib.h>
 
 /* simple linear search */
 static int has_reg(LIST(reg_t *) list, reg_t *target)

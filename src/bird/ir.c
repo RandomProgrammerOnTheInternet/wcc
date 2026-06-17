@@ -317,6 +317,7 @@ ir_blk_t *ir_blk_make(ir_inst_t *insts)
 	blk->visited = false;
 	blk->pred = list_make(ir_blk_t *);
 	blk->incomplete_phis = list_make(ir_inst_t *);
+	blk->dom_frontier = list_make(long);
 	blk->regs_def = list_make(reg_t *);
 	blk->regs_in = list_make(reg_t *);
 	blk->regs_out = list_make(reg_t *);
@@ -345,6 +346,7 @@ void ir_blk_delete(ir_blk_t *blk)
 	list_delete(blk->regs_def);
 	list_delete(blk->regs_in);
 	list_delete(blk->regs_out);
+	list_delete(blk->dom_frontier);
 	free(blk);
 	return;
 }

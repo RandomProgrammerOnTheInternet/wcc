@@ -1,5 +1,6 @@
 #include "zz/base.h"
 #include "bird.h"
+#include "ssa.h"
 
 extern int debug;
 
@@ -821,7 +822,6 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		func->blocks[i]->tail = find_last_or_flow_ins(func->blocks[i]->insts);
 	}
 
-	// ir_ssa_enter(func);
 	int change = 0;
 	int max_tolerated_change;
 	switch(opt_level) {
@@ -848,6 +848,10 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		printf("****\n");
 	}
 
+	max_tolerated_change = 0;
+
+	ir_ssa_enter(func);
+
 	int left = max_tolerated_change;
 	while(left) {
 		change = 0;
@@ -871,6 +875,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		}
 
 		/* trivial optimizations */
+		/*
 		{
 			change |= ir_mov_elim(func);
 			change |= ir_fold(func);
@@ -878,6 +883,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 			ir_nopremover(func);
 			ir_fix(func);
 		}
+		*/
 
 		if(!change) {
 			break;
@@ -890,13 +896,13 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 
 	ir_nopremover(func);
 
+	ir_ssa_exit(func);
+
 	if(debug) {
 		printf("After common opts:\n");
 		ir_dump(func, 'v');
 		printf("****\n");
 	}
-
-	// ir_ssa_exit(func);
 
 	/* apply arch specific opts */
 	switch(arch) {
