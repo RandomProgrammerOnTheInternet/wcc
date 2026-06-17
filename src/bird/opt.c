@@ -538,9 +538,6 @@ static int ir_fold(ir_func_t *func)
 			 * into
 			 * %r0 = ... whatever it evaluates to ...
 			 */
-			if(ins->r2) {
-				ins->r2 = mov_root(ins->r2);
-			}
 			if(ir_inst_is_foldable(ins->type) && ins->r1 && ins->r2 &&
 			   ins->r2->insty == IR_INST_IMM && ins->r2->imm == 0) {
 				ir_zeroopt(ins);
@@ -554,8 +551,7 @@ static int ir_fold(ir_func_t *func)
 			 * %r0 = sub %r1, %r3
 			 */
 			if((ins->type == IR_INST_ADD || ins->type == IR_INST_SUB) &&
-			   mov_root(ins->r2)->insty == IR_INST_NEG) {
-				ins->r2 = mov_root(ins->r2);
+			   ins->r2->insty == IR_INST_NEG) {
 				ins->type = ins->type == IR_INST_ADD ? IR_INST_SUB :
 													   IR_INST_ADD;
 				ins->r2 = ins->r2->lhs;
@@ -568,9 +564,7 @@ static int ir_fold(ir_func_t *func)
 			 * ->
 			 * %r0 = sub %r2, %r3
 			 */
-			if(ins->type == IR_INST_ADD &&
-			   mov_root(ins->r1)->insty == IR_INST_NEG) {
-				ins->r1 = mov_root(ins->r1);
+			if(ins->type == IR_INST_ADD && ins->r1->insty == IR_INST_NEG) {
 				ins->type = IR_INST_SUB;
 				reg_t *r1 = ins->r1;
 				reg_t *r2 = ins->r2;
