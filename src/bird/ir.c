@@ -1,3 +1,4 @@
+#include "bird/ir.h"
 #include "bird.h"
 #include "zz/arena.h"
 
@@ -632,6 +633,14 @@ void ir_print_inst(ir_blk_t *blk, ir_inst_t *ins, int mode)
 			printf(", ");
 			print_phiarg(blk, ins, i++, mode);
 		}
+	}; break;
+	case IR_INST_PMOV: {
+		printf("{\n");
+		for(size_t i = 0; i < list_len(ins->pmov_args); i++) {
+			reg_pmov_t mov = ins->pmov_args[i];
+			printf("\t%%r%ld = %%r%ld\n", mov.dst->vr, mov.src->vr);
+		}
+		printf("}");
 	}; break;
 	case IR_INST_BREQ:
 		out("br.eq %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,

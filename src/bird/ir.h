@@ -79,7 +79,10 @@ enum ins_type {
 	IR_INST_JMP, /* jmp blk */
 	IR_INST_RET, /* ret (%r1) */
 	IR_INST_CALL, /* (%r0) = call Function, %a1, %a2, ... */
-	IR_INST_PHI /* %r0 = phi [pred1, %a1], [pred2, %a1], ... */
+
+	/* SSA */
+	IR_INST_PHI, /* %r0 = phi [pred1, %a1], [pred2, %a1], ... */
+	IR_INST_PMOV, /* parallel move */
 };
 
 struct blkreg;
@@ -108,6 +111,12 @@ typedef struct reg {
 	bool phi_arg; /* argument to phi; do NOT eliminate */
 	bool multiple_defs; /* register was assigned multiple times */
 } reg_t;
+
+typedef struct reg_pmov {
+	/* %dst = %src */
+	reg_t *dst;
+	reg_t *src;
+} reg_pmov_t;
 
 /* ABI argument type */
 enum call_argtype {
@@ -141,6 +150,7 @@ typedef struct ir_inst {
 	struct ir_blk *false_blk, *true_blk; /* for br */
 	LIST(callreg_t *) call_args; /* for call */
 	LIST(reg_t *) phi_args; /* for phi */
+	LIST(reg_pmov_t) pmov_args; /* for pmov */
 	char *fname; /* for call */
 	bool noopt; /* is this inst volatile? */
 	bool sign_ext; /* sign extend this load? */

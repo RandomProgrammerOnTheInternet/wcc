@@ -1,3 +1,5 @@
+/* Implementation of the "Simple and Efficient Construction of Static Single Assignment Form" algorithm, by Matthias Braun, Sebastian Buchwald, Sebastian Hack, Roland Leißa, Christoph Mallon, and Andreas Zwinkau. */
+
 #include "bird/bird.h"
 #include "bird.h"
 #include "bird/ir.h"
@@ -375,9 +377,30 @@ void ir_ssa_enter(ir_func_t *fun)
 	return;
 }
 
-/* turn the IR from an SSA form into a typical 3AC IR.
- * Removes and deallocates all phis, turning them into NOPs. */
-void ir_ssa_exit(ir_func_t *fun)
+static bool has_several_outgoing_edges(ir_inst_t *ins)
+{
+	if(ins->type == IR_INST_JMP || ins->type == IR_INST_RET) {
+		return false;
+	}
+
+	/* else, if true block != false block, true */
+	return ins->true_blk != ins->false_blk;
+}
+
+static void replace_edge(ir_blk_t *blk, ir_blk_t *orig, ir_blk_t *replace)
+{
+	ir_inst_t *last = blk->tail;
+	if(last->true_blk && last->true_blk == orig) {
+		last->true_blk = replace;
+	}
+	if(last->false_blk && last->false_blk == orig) {
+		last->false_blk = replace;
+	}
+	return;
+}
+
+/* pre-step to destroying SSA form */
+static void split_critical(ir_func_t *fun)
 {
 	/* append NOP to each block, find befores */
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
@@ -388,39 +411,157 @@ void ir_ssa_exit(ir_func_t *fun)
 		find_before_last_term_ins(blk);
 	}
 
-	/* turn
-	 * blk1: ...         blk2: ...
-	 *		 jmp blk3         jmp blk3
-	 * blk3: %r0 = phi [blk1, %r1], [blk2, %r2]
-	 * ====into
-	 * blk1: ...         blk2: ...
-	 *       %r0 = %r1         %r0 = %r2
-	 *       jmp blk3          jmp blk3
-	 * blk3: nop
-	*/
-
-	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+	long counter = fun->blocks[list_len(fun->blocks) - 1]->num;
+	size_t orig_len = list_len(fun->blocks);
+	for(size_t i = 0; i < orig_len; i++) {
 		ir_blk_t *blk = fun->blocks[i];
-		LIST(ir_blk_t *) preds = blk->pred;
-		size_t preds_len = list_len(preds);
+
+		bool has_phis = false;
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type == IR_INST_PHI) {
+				has_phis = true;
+				break;
+			}
+		}
+
+		if(!has_phis) {
+			continue;
+		}
+
+		ir_inst_t **pmovs = zcalloc(list_len(blk->pred), sizeof(ir_inst_t *));
+
+		for(size_t j = 0; j < list_len(blk->pred); j++) {
+			ir_blk_t *pred = blk->pred[j];
+			ir_inst_t *pmov = ir_inst_make(IR_INST_PMOV, NULL, NULL, NULL, 0);
+			pmovs[j] = pmov;
+			pmov->pmov_args = list_make(reg_pmov_t);
+			/* TODO: this doesn't work.. why? */
+			if(0 && has_several_outgoing_edges(pred->tail)) {
+				ir_inst_t *jmp = ins_jmp(blk);
+				pmov->next = jmp;
+				ir_blk_t *newblk = ir_blk_make(pmov);
+				newblk->num = ++counter;
+				list_append(fun->blocks, newblk);
+				replace_edge(pred, blk, newblk);
+			} else {
+				pred->tailprev->next = pmov;
+				pmov->next = pred->tail;
+				pred->tailprev = pred->tailprev->next;
+			}
+		}
+
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
 			if(inst->type != IR_INST_PHI) {
 				continue;
 			}
-			LIST(reg_t *) args = inst->phi_args;
-			reg_t *reg = inst->r0;
-			ASSERT(list_len(args) == preds_len, "invalid SSA form");
-			inst->type = IR_INST_NOP;
 
-			for(size_t i = 0; i < preds_len; i++) {
-				ir_inst_t *mov = ins_mov(reg, args[i]);
-				mov->next = preds[i]->tail;
-				preds[i]->tailprev->next = mov;
-				preds[i]->tailprev = mov;
+			inst->type = IR_INST_NOP;
+			for(size_t j = 0; j < list_len(inst->phi_args); j++) {
+				reg_pmov_t mov = { .dst = inst->r0, .src = inst->phi_args[j] };
+				list_append(pmovs[j]->pmov_args, mov);
 			}
 
-			list_delete(args);
+			list_delete(inst->phi_args);
+		}
+
+		free(pmovs);
+	}
+}
+
+static LIST(reg_pmov_t) deparallelize_pmov(ir_inst_t *pmov)
+{
+	UNUSEDA int useless = 0;
+	for(size_t i = 0; i < list_len(pmov->pmov_args); i++) {
+		reg_pmov_t arg = pmov->pmov_args[i];
+		for(size_t j = 0; j < list_len(pmov->pmov_args); j++) {
+			reg_pmov_t chk = pmov->pmov_args[j];
+			if(chk.src == arg.dst) {
+				reg_t *orig = arg.dst;
+				arg.dst = reg_make();
+				arg.dst->insty = IR_INST_PMOV;
+				arg.dst->lhs = orig;
+				pmov->pmov_args[i].dst = arg.dst;
+				goto comehere;
+			}
+		}
+comehere:
+		useless = 0;
+	}
+
+	LIST(reg_pmov_t) seq = list_make(reg_pmov_t);
+
+	for(size_t i = 0; i < list_len(pmov->pmov_args); i++) {
+		list_append(seq, pmov->pmov_args[i]);
+	}
+
+	for(size_t i = 0; i < list_len(pmov->pmov_args); i++) {
+		if(pmov->pmov_args[i].dst->insty == IR_INST_PMOV) {
+			list_append(seq, ((reg_pmov_t){ .dst = pmov->pmov_args[i].dst->lhs,
+											.src = pmov->pmov_args[i].dst }));
 		}
 	}
+
+	return seq;
+}
+
+/* turns parallel moves -> sequential moves */
+static void deparallelize_pmovs(ir_func_t *fun)
+{
+	/* append NOP to each block, find befores */
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		ir_inst_t *nop = ins_nop();
+		nop->next = blk->insts;
+		blk->insts = nop;
+		find_before_last_term_ins(blk);
+	}
+
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		ir_inst_t *prev = blk->insts;
+		for(ir_inst_t *inst = blk->insts->next; inst; inst = inst->next) {
+			ir_inst_t *nxt = inst->next;
+			LIST(reg_pmov_t) seq = NULL;
+			if(inst->type != IR_INST_PMOV) {
+				goto end;
+			}
+			inst->type = IR_INST_NOP;
+
+			seq = deparallelize_pmov(inst);
+			if(list_len(seq) == 0) {
+				goto end;
+			}
+
+			ir_inst_t *mov = ins_mov(NULL, NULL);
+			ir_inst_t *prev_mov = NULL;
+			prev->next = mov;
+			for(size_t i = 0; i < list_len(seq); i++) {
+				reg_pmov_t cur_mov = seq[i];
+				mov->r0 = cur_mov.dst;
+				mov->r1 = cur_mov.src;
+				ir_inst_t *newmov = ins_mov(NULL, NULL);
+				prev_mov = mov;
+				mov->next = newmov;
+				mov = newmov;
+			}
+			ir_inst_delete(prev_mov->next);
+			prev_mov->next = nxt;
+
+end:
+			if(seq) {
+				list_delete(seq);
+			}
+			prev = inst;
+		}
+	}
+}
+
+/* turn the IR from an SSA form into a typical 3AC IR.
+ * Removes and deallocates all phis, turning them into NOPs. */
+void ir_ssa_exit(ir_func_t *fun)
+{
+	ir_blk_flow(fun);
+	split_critical(fun);
+	deparallelize_pmovs(fun);
 	return;
 }

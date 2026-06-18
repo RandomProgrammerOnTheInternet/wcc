@@ -587,6 +587,35 @@ static void ir_simplify(ir_func_t *fun, int amount)
 			}
 
 			/* simplify
+			 * %r0 = spill_load #loc
+			 * spill_store #loc, %r0
+			 * ->
+			 * %r0 = spill_load #loc
+			 * nop
+			 */
+			if(ins->type == IR_INST_LOADSS && nxt->type == IR_INST_STORESS &&
+			   ins->imm == nxt->imm) {
+				nxt->type = IR_INST_NOP;
+			}
+
+			/* simplify
+			 * spill_store #loc, %r0
+			 * %r1 = spill_load #loc
+			 * ->
+			 * spill_store #loc, %r0
+			 * IF(%r0 == %r1): nop ELSE %r1 = %r0
+			 */
+			if(ins->type == IR_INST_STORESS && nxt->type == IR_INST_LOADSS &&
+			   ins->imm == nxt->imm) {
+				if(nxt->r0->rr == ins->r1->rr) {
+					nxt->type = IR_INST_NOP;
+				} else {
+					nxt->type = IR_INST_MOV;
+					nxt->r1 = ins->r1;
+				}
+			}
+
+			/* simplify
 			 * %r0 = %r1
 			 * %r1 = %r0
 			 * into
