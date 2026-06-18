@@ -7,11 +7,11 @@ int primes()
 	int iter = 0;
 	int *array = malloc(1000 * sizeof i);
 
-	for(i = 0; i < 1000; i += 1) {
+	for(i = 0; i < 1000; i++) {
 		*(array + i) = 0;
 	}
 
-	for(i = 2; i < 1000; i += 1) {
+	for(i = 2; i < 1000; i++) {
 		iter = 2 * i;
 		while(iter < 1000) {
 			*(array + iter) = 1;
@@ -19,7 +19,7 @@ int primes()
 		}
 	}
 
-	for(i = 0; i < 1000; i += 1) {
+	for(i = 0; i < 1000; i++) {
 		if(!*(array + i)) {
 			if(i > max) {
 				max = i;

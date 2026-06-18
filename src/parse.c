@@ -839,7 +839,10 @@ parse:
 /* cond ? x : y   -> ({ T res; if(cond) { res = x; } else { res = y } res;  }) */
 static node_t *make_cond_expr(node_t *cond, node_t *x, node_t *y, token_t *tok)
 {
+	type_propagate(x);
+	type_propagate(y);
 	node_t *res = node_var(obj_make_anon(x->type), tok);
+	type_propagate(res);
 
 	node_t *res_stmt = node_unary(NODE_EXPR_STMT, res, tok);
 	node_t *assignx =

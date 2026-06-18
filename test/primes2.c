@@ -4,12 +4,10 @@ int main()
 {
 	int max_prime = 1;
 
-	for(int i = 2; i < 1000; i += 1) {
+	for(int i = 2; i < 1000; i++) {
 		int is_prime = 1;
-		for(int j = 2; j < i - 1; j += 1) {
-			if(!(i % j)) {
-				is_prime = 0;
-			}
+		for(int j = 2; j < i - 1; j++) {
+			is_prime = i % j ? is_prime : 0;
 		}
 
 		if(is_prime) {
