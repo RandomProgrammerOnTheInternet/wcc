@@ -15,5 +15,7 @@ int main()
 		}
 	}
 
+	printf("\tHello, World!\r\n");
+
 	return (str[0] == first_letter) && (str[0] == first_letter_lit);
 }

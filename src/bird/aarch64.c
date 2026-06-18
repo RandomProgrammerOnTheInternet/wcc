@@ -77,24 +77,24 @@ void ir_prog_end_aarch64_apple(FILE *f, ir_prog_t *prog)
 	return;
 }
 
-static void emit_str(const char *str, size_t len)
+static void emit_str(FILE *f, const char *str, size_t len)
 {
 	if(str[len - 1]) {
-		printf("\t.ascii \"");
+		fprintf(f, "\t.ascii \"");
 	} else {
-		printf("\t.asciz \"");
+		fprintf(f, "\t.asciz \"");
 		len--;
 	}
 
 	for(size_t i = 0; i < len; i++) {
 		if(isprint(str[i])) {
-			putchar(str[i]);
+			fputc(str[i], f);
 		} else {
-			printf("\\x%02x", str[i]);
+			fprintf(f, "\\x%02x", str[i]);
 		}
 	}
 
-	printf("\"\n");
+	fprintf(f, "\"\n");
 }
 
 void ir_glob_emit_aarch64_apple(FILE *f, ir_global_t *glob)
@@ -107,7 +107,7 @@ void ir_glob_emit_aarch64_apple(FILE *f, ir_global_t *glob)
 	} else {
 		fprintf(f, "_%s:\n", glob->name);
 		if(glob->is_str) {
-			emit_str((const char *)glob->data, glob->size);
+			emit_str(f, (const char *)glob->data, glob->size);
 		} else {
 			for(size_t i = 0; i < glob->size; i++) {
 				fprintf(f, "\t.byte %hhu\n", glob->data[i]);
