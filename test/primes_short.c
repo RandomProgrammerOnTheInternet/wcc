@@ -8,19 +8,19 @@ int primes()
 	short max = 0;
 	short iter = 0;
 
-	for(int i = 0; i < 1000; i = i + 1) {
-		array[i] = array[i] ^ array[i];
+	for(int i = 0; i < 1000; ++i) {
+		array[i] ^= array[i];
 	}
 
-	for(int i = 2; i < 1000; i = i + 1) {
+	for(int i = 2; i < 1000; i++) {
 		iter = i << 1;
 		while(iter < 1000) {
-			array[iter] = array[iter] | 1;
-			iter = iter + i;
+			array[iter] |= 1;
+			iter += i;
 		}
 	}
 
-	for(int i = 0; i < 1000; i = i + 1) {
+	for(int i = 0; i < 1000; ++i) {
 		if(!array[i] && i > max) {
 			max = i;
 		}

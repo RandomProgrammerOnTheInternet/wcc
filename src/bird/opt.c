@@ -210,7 +210,7 @@ static void ir_placemarks(ir_func_t *func)
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
-			if(inst->r0 && inst->type != IR_INST_PHI) {
+			if(inst->r0) {
 				inst->r0->insty = inst->type;
 				inst->r0->lhs = inst->r1;
 				inst->r0->rhs = inst->r2;
@@ -740,13 +740,6 @@ static int ir_stackreduce(ir_func_t *func)
 	return changed;
 }
 
-#define REPLACE(x)               \
-	do {                         \
-		if((x)) {                \
-			(x) = mov_root((x)); \
-		}                        \
-	} while(0)
-
 static int ir_imm_elim(ir_func_t *func)
 {
 	int change = 0;
@@ -768,27 +761,47 @@ static int ir_imm_elim(ir_func_t *func)
 	return change;
 }
 
+static bool leads_to_phi(reg_t *r)
+{
+	reg_t *found = r;
+	while(found->insty == IR_INST_MOV) {
+		if(found->lhs->insty == IR_INST_PHI) {
+			return true;
+		}
+		found = found->lhs;
+	}
+	return false;
+}
+
+#define REPLACE(x)                                         \
+	do {                                                   \
+		if((x) && (x)->insty == IR_INST_MOV && (x)->lhs) { \
+			(x) = (x)->lhs;                                \
+			change = 1;                                    \
+		}                                                  \
+	} while(0)
+
 /* or copy propagation, whatever you call it */
 /* doesn't work */
 static int ir_mov_elim(ir_func_t *func)
 {
-	/* mark moves */
-
 	int change = 0;
+
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
-			if(inst->type == IR_INST_MOV && !inst->r0->phi_arg &&
-			   !inst->r1->phi_arg && inst->r0->def == inst->r1->last_use) {
-				change = 1;
-				inst->type = IR_INST_NOP;
-				inst->r0->insty = IR_INST_MOV;
-				inst->r0->lhs = inst->r1;
+			if(inst->type != IR_INST_MOV) {
 				continue;
+			}
+
+			/* cannot copy prop if rhs of mov leads to a phi */
+			if(leads_to_phi(inst->r1) || inst->r1->phi_arg) {
+				inst->r1->insty = IR_INST_NOP;
 			}
 		}
 	}
 
+	/* do elim */
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
@@ -807,6 +820,7 @@ static int ir_mov_elim(ir_func_t *func)
 			}
 		}
 	}
+
 	return change;
 }
 
@@ -875,6 +889,12 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 
 	ir_ssa_enter(func);
 
+	if(debug) {
+		printf("After SSA constr.:\n");
+		ir_dump(func, 'v');
+		printf("****\n");
+	}
+
 	int left = max_tolerated_change;
 	while(left) {
 		change = 0;
@@ -885,8 +905,11 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 
 		/* dead code elim */
 		{
+			/* still doesn't work */
+			// change |= ir_mov_elim(func);
 			change |= ir_dce(func);
 			change |= ir_simpleopt(func);
+
 			change |= ir_imm_elim(func);
 
 			ir_nopremover(func);
@@ -919,6 +942,13 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 	}
 
 	ir_nopremover(func);
+
+	if(debug) {
+		printf("Before SSA destruct.:\n");
+		ir_dump(func, 'v');
+		printf("****\n");
+	}
+
 	ir_ssa_exit(func);
 	ir_nopremover(func);
 

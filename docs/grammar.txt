@@ -1,9 +1,11 @@
 gnu-stmt-expr = "(" "{" compound-stmt "}" ")"
 prim = "(" expr ")" | gnu-stmt-expr | ident args? | num | strlit
 funcall = ident "(" (assign ("," assign)*)? ")"
-postfix = prim ("[" expr "]")*
+postfix = prim ("[" expr "]" | "++" | "--")*
 unary = ("+" | "-" | "*" | "&" | "~" | "!") unary
 		| postfix
+		| "++" unary
+		| "--" unary
 		| "sizeof" unary
 		| "_Alignof" unary         # extension
 mul = unary ("*" unary | "/" unary)*
@@ -16,7 +18,8 @@ eor-expr = and-expr ("^" and-expr)*
 or-expr = eor-expr ("|" eor-expr)*
 log-and-expr = or-expr ("&&" or-expr)*
 log-or-expr = log-and-expr ("||" log-and-expr)*
-assign = log-or-expr ("=" assign)?
+assign-oper = "=" | "*=" | "/=" | "%=" | "+=" | "-=" | "<<=" | ">>=" | "&=" | "^=" | "|="
+assign = log-or-expr assign-oper assign
 expr = assign
 expr-stmt = expr? ";"
 type-specifier = "_Bool" | "void" | "char" | "short" | "int" | "long" | "signed" | "unsigned"

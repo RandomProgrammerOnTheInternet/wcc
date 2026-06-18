@@ -28,6 +28,16 @@ static bool has_long(LIST(long) list, long want)
 	return false;
 }
 
+static bool has_inst(LIST(ir_inst_t *) list, ir_inst_t *want)
+{
+	for(size_t i = 0; i < list_len(list); i++) {
+		if(list[i] == want) {
+			return true;
+		}
+	}
+	return false;
+}
+
 static bool has_blk(LIST(ir_blk_t *) list, ir_blk_t *want)
 {
 	for(size_t i = 0; i < list_len(list); i++) {
@@ -133,6 +143,7 @@ static reg_t *find_var(reg_t *reg)
 	return r;
 }
 
+static ir_func_t *func;
 static LIST(ir_blk_t *) sealed_blks;
 
 static reg_t *write_reg(ir_blk_t *blk, reg_t *reg, reg_t *val)
@@ -168,7 +179,72 @@ static reg_t *try_remove_trivial_phi(ir_inst_t *phi)
 		return phi->r0;
 	}
 
-	return phi->r0;
+	reg_t *same = NULL;
+	for(size_t i = 0; i < list_len(phi->phi_args); i++) {
+		reg_t *op = phi->phi_args[i];
+		if(op == same || op == phi->r0) {
+			continue;
+		}
+
+		if(!same) {
+			/* phi merges at least 2 values */
+			return phi->r0;
+		}
+
+		same = op;
+	}
+
+	if(!same) {
+		/* DCE will take care of this. */
+		return phi->r0;
+	}
+
+	/* replace all uses of `phi->r0` to `same` */
+	phi->type = IR_INST_NOP;
+	list_delete(phi->phi_args);
+
+#define REPLACE(x)                       \
+	do {                                 \
+		if((x) && (x) == phi->r0) {      \
+			if(!has_inst(users, ins)) {  \
+				list_append(users, ins); \
+			}                            \
+			(x) = same;                  \
+		}                                \
+	} while(0)
+
+	LIST(ir_inst_t *) users = list_make(ir_inst_t *);
+
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			REPLACE(ins->r0);
+			REPLACE(ins->r1);
+			REPLACE(ins->r2);
+			if(ins->type == IR_INST_CALL) {
+				for(size_t j = 0; j < list_len(ins->call_args); j++) {
+					REPLACE(ins->call_args[j]->r);
+				}
+			}
+			if(ins->type == IR_INST_PHI) {
+				for(size_t j = 0; j < list_len(ins->phi_args); j++) {
+					REPLACE(ins->phi_args[j]);
+				}
+			}
+		}
+	}
+
+	/* try recursively remove phi users */
+	for(size_t i = 0; i < list_len(users); i++) {
+		if(users[i]->type != IR_INST_PHI) {
+			continue;
+		}
+		(void)try_remove_trivial_phi(users[i]);
+	}
+
+	list_delete(users);
+
+	return same;
 }
 
 static reg_t *add_phi_ops(ir_blk_t *blk, reg_t *var, ir_inst_t *phi)

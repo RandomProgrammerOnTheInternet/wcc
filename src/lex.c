@@ -88,12 +88,14 @@ int isidentfirst(int c)
 /* returns the length of a possible punctuator */
 static int punct_len(char *p)
 {
-	const char *puncts[] = { "<=", ">=", "==", "!=", "&&", "||", ">>", "<<" };
+	const char *puncts[] = { "<=", ">=", "==", "!=", "&&", "||",  ">>",
+							 "<<", "*=", "/=", "+=", "-=", "<<=", ">>=",
+							 "&=", "^=", "|=", "++", "--" };
 	size_t puncts_len = sizeof(puncts) / sizeof(puncts[0]);
 
 	for(size_t i = 0; i < puncts_len; i++) {
-		if(strncmp(p, puncts[i], 2) == 0) {
-			return 2;
+		if(strncmp(p, puncts[i], strlen(puncts[i])) == 0) {
+			return strlen(puncts[i]);
 		}
 	}
 

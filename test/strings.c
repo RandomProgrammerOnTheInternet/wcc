@@ -9,7 +9,7 @@ int main()
 		return 0;
 	}
 
-	for(int i = 0; i < strlen(str); i = i + 1) {
+	for(int i = 0; i < strlen(str); i += 1) {
 		if(str[i] != str2[i]) {
 			return 0;
 		}

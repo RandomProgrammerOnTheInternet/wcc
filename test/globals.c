@@ -2,7 +2,6 @@ int a;
 
 void reset_a(void)
 {
-	int olda = a;
 	a = 0;
 	return;
 }
@@ -10,14 +9,14 @@ void reset_a(void)
 int increment_a(void)
 {
 	int olda = a;
-	a = a + 1;
+	a++;
 	return olda;
 }
 
 int decrement_a(void)
 {
 	int olda = a;
-	a = a - 1;
+	a--;
 	return olda;
 }
 

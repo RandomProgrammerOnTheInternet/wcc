@@ -140,6 +140,14 @@ obj_t *obj_make_str(token_t *str)
 	return obj;
 }
 
+obj_t *obj_make_anon(type_t *type)
+{
+	char *name;
+	asprintf(&name, ".anon%ld", runk(0));
+	obj_t *obj = obj_make_noadd(name, type, false);
+	return obj;
+}
+
 /* finds a local variable given token */
 static obj_t *find_var(token_t *tok)
 {
@@ -534,10 +542,76 @@ static node_t *parse_compound_stmt(token_t *tok, token_t **rest)
 static node_t *parse_assign(token_t *tok, token_t **rest)
 {
 	node_t *node = parse_logor(tok, &tok);
+	node_t *op = NULL;
+
+	/* rewrite
+	 * A op= B
+	 * to
+	 * (A = A op B)
+	 */
+
+	token_t *save = tok->next;
 
 	if(token_eq(tok, "=")) {
 		node = node_bin(NODE_ASSIGN, node, parse_assign(tok->next, &tok),
 						tok->next);
+		*rest = tok;
+		return node;
+	}
+
+	if(token_eq(tok, "*=")) {
+		op = node_bin(NODE_MUL, node, parse_assign(tok->next, &tok), tok->next);
+		goto end;
+	}
+
+	if(token_eq(tok, "/=")) {
+		op = node_bin(NODE_DIV, node, parse_assign(tok->next, &tok), tok->next);
+		goto end;
+	}
+
+	if(token_eq(tok, "%=")) {
+		op = node_bin(NODE_MOD, node, parse_assign(tok->next, &tok), tok->next);
+		goto end;
+	}
+
+	if(token_eq(tok, "+=")) {
+		op = node_add(node, parse_assign(tok->next, &tok), tok->next);
+		goto end;
+	}
+
+	if(token_eq(tok, "-=")) {
+		op = node_sub(node, parse_assign(tok->next, &tok), tok->next);
+		goto end;
+	}
+
+	if(token_eq(tok, "<<=")) {
+		op = node_bin(NODE_SHL, node, parse_assign(tok->next, &tok), tok->next);
+		goto end;
+	}
+
+	if(token_eq(tok, ">>=")) {
+		op = node_bin(NODE_SHR, node, parse_assign(tok->next, &tok), tok->next);
+		goto end;
+	}
+
+	if(token_eq(tok, "&=")) {
+		op = node_bin(NODE_AND, node, parse_assign(tok->next, &tok), tok->next);
+		goto end;
+	}
+
+	if(token_eq(tok, "^=")) {
+		op = node_bin(NODE_EOR, node, parse_assign(tok->next, &tok), tok->next);
+		goto end;
+	}
+
+	if(token_eq(tok, "|=")) {
+		op = node_bin(NODE_OR, node, parse_assign(tok->next, &tok), tok->next);
+		goto end;
+	}
+
+end:
+	if(op) {
+		node = node_bin(NODE_ASSIGN, node, op, save);
 	}
 
 	*rest = tok;
@@ -927,7 +1001,8 @@ static node_t *parse_postfix(token_t *tok, token_t **rest)
 {
 	node_t *prim = parse_prim(tok, &tok);
 
-	while(token_eq(tok, "[")) {
+parse:
+	if(token_eq(tok, "[")) {
 		token_t *marker = tok;
 		tok = token_skip(tok, "[");
 		token_t *marker_add = tok;
@@ -935,6 +1010,63 @@ static node_t *parse_postfix(token_t *tok, token_t **rest)
 		tok = token_skip(tok, "]");
 
 		prim = node_unary(NODE_DEREF, node_add(prim, indx, marker_add), marker);
+		goto parse;
+	}
+
+	/* i++  = ({ T i2 = i; i = i + 1; i2; })
+	 * i--  = ({ T i2 = i; i = i - 1; i2; })
+	 */
+
+	if(token_eq(tok, "++")) {
+		node_t *stmt_expr = node_make(NODE_STMT_EXPR, tok);
+
+		type_propagate(prim);
+		obj_t *i2 = obj_make_anon(prim->type);
+		node_t *i2v = node_var(i2, tok);
+		node_t *stmt1 = node_unary(NODE_EXPR_STMT,
+								   node_bin(NODE_ASSIGN, i2v, prim, tok), tok);
+		node_t *stmt2 =
+			node_unary(NODE_EXPR_STMT,
+					   node_bin(NODE_ASSIGN, prim,
+								node_add(prim, node_num(1, tok), tok), tok),
+					   tok);
+		node_t *stmt3 = node_unary(NODE_EXPR_STMT, i2v, tok);
+		stmt1->next = stmt2;
+		stmt2->next = stmt3;
+
+		node_t *blk = node_make(NODE_BLOCK, tok);
+		blk->next = stmt1;
+
+		stmt_expr->body = blk;
+		tok = token_skip(tok, "++");
+		prim = stmt_expr;
+		goto parse;
+	}
+
+	if(token_eq(tok, "--")) {
+		node_t *stmt_expr = node_make(NODE_STMT_EXPR, tok);
+
+		type_propagate(prim);
+		obj_t *i2 = obj_make_anon(prim->type);
+		node_t *i2v = node_var(i2, tok);
+		node_t *stmt1 = node_unary(NODE_EXPR_STMT,
+								   node_bin(NODE_ASSIGN, i2v, prim, tok), tok);
+		node_t *stmt2 =
+			node_unary(NODE_EXPR_STMT,
+					   node_bin(NODE_ASSIGN, prim,
+								node_sub(prim, node_num(1, tok), tok), tok),
+					   tok);
+		node_t *stmt3 = node_unary(NODE_EXPR_STMT, i2v, tok);
+		stmt1->next = stmt2;
+		stmt2->next = stmt3;
+
+		node_t *blk = node_make(NODE_BLOCK, tok);
+		blk->next = stmt1;
+
+		stmt_expr->body = blk;
+		tok = token_skip(tok, "--");
+		prim = stmt_expr;
+		goto parse;
 	}
 
 	*rest = tok;
@@ -983,6 +1115,27 @@ static node_t *parse_unary(token_t *tok, token_t **rest)
 		node_t *expr = parse_unary(tok, &tok);
 		*rest = tok;
 		return node_num(expr->type->align, tok);
+	}
+
+	/* pre increment/decrement */
+	/* ++i  = (i += 1) = (i = i + 1)
+	 * --i  = (i -= 1) = (i = i - 1) */
+	if(token_eq(tok, "++")) {
+		token_t *save = tok;
+		tok = token_skip(tok, "++");
+		node_t *unary = parse_unary(tok, &tok);
+		node_t *inc = node_add(unary, node_num(1, save), save);
+		*rest = tok;
+		return node_bin(NODE_ASSIGN, unary, inc, save);
+	}
+
+	if(token_eq(tok, "--")) {
+		token_t *save = tok;
+		tok = token_skip(tok, "--");
+		node_t *unary = parse_unary(tok, &tok);
+		node_t *dec = node_sub(unary, node_num(1, save), save);
+		*rest = tok;
+		return node_bin(NODE_ASSIGN, unary, dec, save);
 	}
 
 	return parse_postfix(tok, rest);
