@@ -219,6 +219,7 @@ static node_t *parse_eor(token_t *tok, token_t **rest);
 static node_t *parse_or(token_t *tok, token_t **rest);
 static node_t *parse_logand(token_t *tok, token_t **rest);
 static node_t *parse_logor(token_t *tok, token_t **rest);
+static node_t *parse_cond_expr(token_t *tok, token_t **rest);
 static node_t *parse_expr_stmt(token_t *tok, token_t **rest);
 static node_t *parse_stmt(token_t *tok, token_t **rest);
 static node_t *parse_stmt_expr(token_t *tok, token_t **rest);
@@ -541,7 +542,7 @@ static node_t *parse_compound_stmt(token_t *tok, token_t **rest)
 
 static node_t *parse_assign(token_t *tok, token_t **rest)
 {
-	node_t *node = parse_logor(tok, &tok);
+	node_t *node = parse_cond_expr(tok, &tok);
 	node_t *op = NULL;
 
 	/* rewrite
@@ -833,6 +834,48 @@ parse:
 
 	*rest = tok;
 	return node;
+}
+
+/* cond ? x : y   -> ({ T res; if(cond) { res = x; } else { res = y } res;  }) */
+static node_t *make_cond_expr(node_t *cond, node_t *x, node_t *y, token_t *tok)
+{
+	node_t *res = node_var(obj_make_anon(x->type), tok);
+
+	node_t *res_stmt = node_unary(NODE_EXPR_STMT, res, tok);
+	node_t *assignx =
+		node_unary(NODE_EXPR_STMT, node_bin(NODE_ASSIGN, res, x, tok), tok);
+	node_t *assigny =
+		node_unary(NODE_EXPR_STMT, node_bin(NODE_ASSIGN, res, y, tok), tok);
+
+	node_t *iff = node_make(NODE_IF, tok);
+	iff->cond = cond;
+	iff->then = assignx;
+	iff->elze = assigny;
+
+	node_t *stmt1 = node_unary(NODE_EXPR_STMT, res, tok);
+	stmt1->next = iff;
+	iff->next = res_stmt;
+
+	node_t *stmt_expr = node_make(NODE_STMT_EXPR, tok);
+	node_t *blk = node_make(NODE_BLOCK, tok);
+	blk->next = stmt1;
+	stmt_expr->body = blk;
+	return stmt_expr;
+}
+
+/* cond ? x : y */
+static node_t *parse_cond_expr(token_t *tok, token_t **rest)
+{
+	token_t *save = tok;
+	node_t *logor = parse_logor(tok, &tok);
+	if(token_eat(&tok, "?")) {
+		node_t *x = parse_expr(tok, &tok);
+		tok = token_skip(tok, ":");
+		node_t *y = parse_cond_expr(tok, &tok);
+		logor = make_cond_expr(logor, x, y, save);
+	}
+	*rest = tok;
+	return logor;
 }
 
 static node_t *parse_relational(token_t *tok, token_t **rest)
@@ -1152,24 +1195,20 @@ static type_t *parse_parameter_declaration(token_t *tok, token_t **rest)
 
 static void parse_global_var(type_t *decltype, token_t *tok, token_t **rest)
 {
-	obj_t *global = NULL, *found = NULL;
+	obj_t *found = NULL;
 
-	if((found = find_var(decltype->ident))) {
-		global = found;
-	} else {
-		global = obj_make_global(mystrndup(decltype->ident->loc,
-										   decltype->ident->len),
-								 decltype, false);
+	if(!(found = find_var(decltype->ident))) {
+		(void)obj_make_global(mystrndup(decltype->ident->loc,
+										decltype->ident->len),
+							  decltype, false);
 	}
 
 	while(token_eq(tok, ",")) {
 		tok = token_skip(tok, ",");
-		if((found = find_var(decltype->ident))) {
-			global = found;
-		} else {
-			global = obj_make_global(mystrndup(decltype->ident->loc,
-											   decltype->ident->len),
-									 decltype, false);
+		if(!(found = find_var(decltype->ident))) {
+			(void)obj_make_global(mystrndup(decltype->ident->loc,
+											decltype->ident->len),
+								  decltype, false);
 		}
 	}
 

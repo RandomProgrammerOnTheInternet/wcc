@@ -66,6 +66,7 @@ assert 4 "globals.c"
 assert 1 "strings.c"
 assert 0 "fold.c"
 assert 1 "stmt_expr.c"
+assert 5 "cond_expr.c"
 
 if [ "$passing" = "1" ]; then
   echo "all tests passed"

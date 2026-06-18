@@ -18,8 +18,9 @@ eor-expr = and-expr ("^" and-expr)*
 or-expr = eor-expr ("|" eor-expr)*
 log-and-expr = or-expr ("&&" or-expr)*
 log-or-expr = log-and-expr ("||" log-and-expr)*
+cond-expr = log-or ("?" expr ":" cond-expr)?
 assign-oper = "=" | "*=" | "/=" | "%=" | "+=" | "-=" | "<<=" | ">>=" | "&=" | "^=" | "|="
-assign = log-or-expr assign-oper assign
+assign = cond-expr assign-oper assign
 expr = assign
 expr-stmt = expr? ";"
 type-specifier = "_Bool" | "void" | "char" | "short" | "int" | "long" | "signed" | "unsigned"
