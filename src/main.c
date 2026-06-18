@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include "zz/base.h"
 #include "zz/arena.h"
+#include "zz/strmap.h"
 #include <ctype.h>
 #include <stdarg.h>
 #include "lex.h"
