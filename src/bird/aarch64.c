@@ -1,4 +1,5 @@
 #include "bird.h"
+#include <ctype.h>
 
 void ir_func_opt_aarch64(ir_func_t *fun, int opt_level)
 {
@@ -76,6 +77,26 @@ void ir_prog_end_aarch64_apple(FILE *f, ir_prog_t *prog)
 	return;
 }
 
+static void emit_str(const char *str, size_t len)
+{
+	if(str[len - 1]) {
+		printf("\t.ascii \"");
+	} else {
+		printf("\t.asciz \"");
+		len--;
+	}
+
+	for(size_t i = 0; i < len; i++) {
+		if(isprint(str[i])) {
+			putchar(str[i]);
+		} else {
+			printf("\\x%02x", str[i]);
+		}
+	}
+
+	printf("\"\n");
+}
+
 void ir_glob_emit_aarch64_apple(FILE *f, ir_global_t *glob)
 {
 	fprintf(f, "\t.globl _%s\n", glob->name);
@@ -85,8 +106,12 @@ void ir_glob_emit_aarch64_apple(FILE *f, ir_global_t *glob)
 				glob->size, glob->align);
 	} else {
 		fprintf(f, "_%s:\n", glob->name);
-		for(size_t i = 0; i < glob->size; i++) {
-			fprintf(f, "\t.byte %hhu\n", glob->data[i]);
+		if(glob->is_str) {
+			emit_str((const char *)glob->data, glob->size);
+		} else {
+			for(size_t i = 0; i < glob->size; i++) {
+				fprintf(f, "\t.byte %hhu\n", glob->data[i]);
+			}
 		}
 	}
 	fprintf(f, "\n");

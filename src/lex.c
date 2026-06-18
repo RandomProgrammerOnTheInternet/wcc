@@ -144,6 +144,106 @@ static int iskeyword(char *prog, size_t plen)
 	return 0;
 }
 
+static char read_hex(char *p, char **rest)
+{
+	char res = 0;
+	for(int i = 0; i < 2; i++) {
+		char digit = *p++;
+		if(digit >= '0' && digit <= '9') {
+			res = (16 * res) + (digit - '0');
+		} else if(digit >= 'a' && digit <= 'f') {
+			res = (16 * res) + (10 + (digit - 'a'));
+		} else if(digit >= 'A' && digit <= 'F') {
+			res = (16 * res) + (10 + (digit - 'A'));
+		} else
+			break;
+	}
+	*rest = p;
+	return res;
+}
+
+static char read_octal(char *p, char **rest)
+{
+	char res = 0;
+	for(int i = 0; i < 3; i++) {
+		char digit = *p++;
+		if(digit >= '0' && digit <= '7') {
+			res = (8 * res) + (digit - '0');
+		} else
+			break;
+	}
+	*rest = p;
+	return res;
+}
+
+/* read a single (possibly escaped) character */
+static char read_chr(char *prog, char **rest)
+{
+	char *p = prog;
+	if(*p != '\\') {
+		*rest = p + 1;
+		return *p;
+	}
+
+	p++;
+	char res = 0;
+	switch(*p) {
+#define CASE(c, v) \
+	case c:        \
+		res = (v); \
+		p++;       \
+		break
+		CASE('a', 0x07);
+		CASE('b', 0x08);
+		CASE('e', 0x1b); /* GNU ext. */
+		CASE('f', 0x0c);
+		CASE('n', 0x0a);
+		CASE('r', 0x0d);
+		CASE('t', 0x09);
+		CASE('v', 0x0b);
+		CASE('\\', 0x5c);
+		CASE('\'', 0x27);
+		CASE('\"', 0x22);
+		CASE('?', 0x3f);
+#undef CASE
+
+	/* octal byte */
+	case '0':
+	case '1':
+	case '2':
+	case '3':
+	case '4':
+	case '5':
+	case '6':
+	case '7':
+		res = read_octal(p, &p);
+		break;
+
+	/* hex byte */
+	case 'x':
+		res = read_hex(p + 1, &p);
+		break;
+
+	default:
+		compile_err(p, "unknown escape character '%s'", *p);
+	}
+
+	*rest = p;
+	return res;
+}
+
+/* read a string */
+static strb_t read_str(char *prog, char **rest)
+{
+	strb_t str = strb_make(NULL, 0);
+	char *p = prog;
+	while(*p != '\"') {
+		strb_add_chr(&str, read_chr(p, &p));
+	}
+	*rest = p;
+	return str;
+}
+
 /* does the lexing */
 token_t *lex_do(char *prog, token_t **end)
 {
@@ -222,17 +322,19 @@ token_t *lex_do(char *prog, token_t **end)
 
 		/* tokenize strings */
 		if(*prog == '"') {
+			char *begin = prog + 1;
 			/* this is absolutely not correct but I will fix it later */
-			char *end = strstr(prog + 1, "\"");
-			if(!end) {
+			strb_t strb = read_str(begin, &prog);
+			char *string = strb_build(&strb);
+			if(*prog != '\"') {
 				compile_err(prog, "unclosed string");
 			}
-			token_t *str = token_make(TOK_STR, prog + 1, end - 1);
-			str->str = mystrndup(str->loc, (end - prog) - 1);
-			str->type = type_arr_to(TY_CHAR, (end - prog));
+			token_t *str = token_make(TOK_STR, begin, prog);
+			str->str = string;
+			str->type = type_arr_to(TY_CHAR, strb.len + 1);
 			str->start_line = start_line;
 			start_line = 0;
-			prog = end + 1;
+			prog++;
 			tok->next = str;
 			tok = tok->next;
 			continue;
@@ -240,16 +342,20 @@ token_t *lex_do(char *prog, token_t **end)
 
 		if(*prog == '\'') {
 			char *chr = prog + 1;
-			if(chr[1] != '\'') {
+
+			char content = read_chr(chr, &chr);
+			char *str = zalloc(2);
+			str[0] = content;
+			if(*chr != '\'') {
 				compile_err(prog, "unclosed character literal");
 			}
 
 			token_t *chrlit = token_make(TOK_STR, chr, chr);
-			chrlit->str = mystrndup(chrlit->loc, 1);
+			chrlit->str = str;
 			chrlit->type = TY_CHAR;
 			chrlit->start_line = start_line;
 			start_line = 0;
-			prog += 3;
+			prog = chr + 1;
 			tok->next = chrlit;
 			tok = tok->next;
 			continue;

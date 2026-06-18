@@ -1,4 +1,5 @@
 #include "bird.h"
+#include <ctype.h>
 
 /* is the instruction in form A = F(B, C) where it needs A and B to be separate? */
 static bool ins_is_3source(enum ins_type t)
@@ -87,14 +88,38 @@ void ir_prog_end_x64_sysv(FILE *f, ir_prog_t *prog)
 	return;
 }
 
+static void emit_str(const char *str, size_t len)
+{
+	if(str[len - 1]) {
+		printf("\t.ascii \"");
+	} else {
+		printf("\t.asciz \"");
+		len--;
+	}
+
+	for(size_t i = 0; i < len; i++) {
+		if(isprint(str[i])) {
+			putchar(str[i]);
+		} else {
+			printf("\\x%02x", str[i]);
+		}
+	}
+
+	printf("\"\n");
+}
+
 void ir_glob_emit_x64_sysv(FILE *f, ir_global_t *glob)
 {
 	fprintf(f, "\t.global %s\n", glob->name);
 	fprintf(f, glob->has_data ? "\t.data\n" : "\t.bss\n");
 	fprintf(f, "%s:\n", glob->name);
 	if(glob->has_data) {
-		for(size_t i = 0; i < glob->size; i++) {
-			fprintf(f, "\t.byte %hhu\n", glob->data[i]);
+		if(glob->is_str) {
+			emit_str((const char *)glob->data, glob->size);
+		} else {
+			for(size_t i = 0; i < glob->size; i++) {
+				fprintf(f, "\t.byte %hhu\n", glob->data[i]);
+			}
 		}
 	} else {
 		fprintf(f, "\t.zero %zu\n", glob->size);

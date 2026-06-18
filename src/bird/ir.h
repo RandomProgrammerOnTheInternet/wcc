@@ -199,6 +199,7 @@ typedef struct ir_global {
 	size_t size; /* size of this global variable */
 	size_t align; /* alignment of this global variable */
 	bool has_data; /* is this global variable initalized with data? */
+	bool is_str; /* is this global a string? */
 	uint8_t *data; /* if so, the data */
 } ir_global_t;
 

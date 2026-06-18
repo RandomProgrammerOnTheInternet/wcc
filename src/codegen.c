@@ -534,6 +534,11 @@ static UNUSEDA void assign_globals(LIST(obj_t *) globals)
 		}
 		glob->glob = ir_glob_make(glob->name, glob->type->size,
 								  glob->type->align, glob->data);
+		/* crude string detection */
+		if(glob->type->kind == TYPE_ARRAY &&
+		   glob->type->to->kind == TYPE_CHAR) {
+			glob->glob->is_str = true;
+		}
 	}
 	return;
 }

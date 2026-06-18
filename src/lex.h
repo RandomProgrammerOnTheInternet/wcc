@@ -3,6 +3,7 @@
 
 #include "zz/base.h"
 #include "zz/list.h"
+#include "zz/strb.h"
 #include "zz/arena.h"
 #include <ctype.h>
 
