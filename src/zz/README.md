@@ -16,6 +16,7 @@ Code | Use |
 **[base.h](base.h)**, **[base.c](base.c)** | base library
 **[list.h](list.h)** | dynamic lists
 **[arena.h](arena.h)**, **[arena.c](arena.c)** | arena allocators
+**[strb.h](strb.h)**, **[strb.c](strb.c)** | string builders
 **[strmap.h](strmap.h)**, **[strmap.c](strmap.c)** | string hashmaps
 
 More to come!

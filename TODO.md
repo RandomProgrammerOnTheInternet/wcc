@@ -5,3 +5,4 @@
 - Proper immediate support in IR
 - More optimizations
 - proper SSA destruction (parallel copies)
+- Refactor everything to use stringmaps
