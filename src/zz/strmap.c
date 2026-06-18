@@ -23,7 +23,7 @@ static uint64_t hashstr(zz_hashstr_t *s)
 
 static bool hashstr_eq(zz_hashstr_t *a, zz_hashstr_t *b)
 {
-	return a->len == b->len && memcmp(a, b, a->len) == 0;
+	return a->len == b->len && strncmp(a->str, b->str, a->len) == 0;
 }
 
 void *strmap_donotuse_make(size_t size, size_t cap)
@@ -135,6 +135,9 @@ void strmap_donotuse_put(void *map, zz_hashstr_t *str, size_t size, void *obj)
 	/* if hashmap over 75% capacity, rebuild */
 	if(hdr->size >= (3 * hdr->cap) / 4) {
 		strmap_rebuild(map, size);
+		keys = (zz_hashstr_t **)hdr->data[0];
+		vals = (uint8_t *)hdr->data[1];
+		hdr = strmap_hdr(map);
 	}
 
 	lookup_t lookup = strmap_lookup(map, str);
@@ -143,6 +146,9 @@ void strmap_donotuse_put(void *map, zz_hashstr_t *str, size_t size, void *obj)
 		memcpy(&vals[lookup.loc * size], obj, size);
 		return;
 	}
+
+	/* insert new item */
+	hdr->size++;
 
 	keys[lookup.loc] = str;
 	memcpy(&vals[lookup.loc * size], obj, size);

@@ -47,6 +47,79 @@ static void help(char *pname)
 	return;
 }
 
+static char *vfmt(char *fmt, va_list va)
+{
+	char *res = NULL;
+	vasprintf(&res, fmt, va);
+	return res;
+}
+
+static char *fmt(char *fmt, ...)
+{
+	va_list va;
+	va_start(va, fmt);
+	char *res = vfmt(fmt, va);
+	va_end(va);
+	return res;
+}
+
+static void test_strmap(void)
+{
+	STRMAP(int) map = strmap_make(int);
+
+	/* populate with keys */
+	for(int i = 0; i < 1000; i++) {
+		char *s = fmt("big key %d", i);
+		strmap_put(map, s, i);
+		if(strmap_get(map, s) != i) {
+			printf("uh oh\n");
+			exit(1);
+		}
+		if(strmap_get(map, "big key 0") != 0) {
+			printf("uh oh\n");
+			exit(1);
+		}
+	}
+
+	/* check */
+	for(int i = 0; i < 1000; i++) {
+		char *s = fmt("big key %d", i);
+		int j = strmap_get(map, s);
+		if(j != i) {
+			printf("uh oh\n");
+			exit(1);
+		}
+	}
+
+	/* delete all odds */
+	for(int i = 0; i < 1000; i++) {
+		if(!(i & 1)) {
+			continue;
+		}
+		char *s = fmt("big key %d", i);
+		strmap_del(map, s);
+	}
+
+	/* check */
+	for(int i = 0; i < 1000; i++) {
+		char *s = fmt("big key %d", i);
+		if(i & 1) {
+			if(strmap_has(map, s)) {
+				printf("uh oh\n");
+				exit(1);
+			}
+		} else {
+			int j = strmap_get(map, s);
+			if(j != i) {
+				printf("uh oh\n");
+				exit(1);
+			}
+		}
+	}
+
+	strmap_delete(map);
+}
+
 int main(int argc, char *argv[])
 {
 	ENSURE(sizeof(char) == 1 && sizeof(short) == 2 && sizeof(int) == 4,
@@ -96,6 +169,12 @@ int main(int argc, char *argv[])
 		if(strcmp(arg, "-d") == 0) {
 			debug = 1;
 			continue;
+		}
+
+		if(strcmp(arg, "--internal-test-strmap") == 0) {
+			test_strmap();
+			printf("OK\n");
+			exit(0);
 		}
 
 		if(strcmp(arg, "--help") == 0 || strcmp(arg, "-?") == 0) {

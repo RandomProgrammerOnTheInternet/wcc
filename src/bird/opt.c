@@ -845,6 +845,9 @@ static int ir_dce(ir_func_t *func)
 				if(ins->type == IR_INST_CALL) {
 					ins->r0 = NULL;
 				} else {
+					if(ins->type == IR_INST_PHI) {
+						list_delete(ins->phi_args);
+					}
 					ins->type = IR_INST_NOP;
 				}
 			}

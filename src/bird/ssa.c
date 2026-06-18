@@ -501,6 +501,7 @@ comehere:
 		}
 	}
 
+	list_delete(pmov->pmov_args);
 	return seq;
 }
 
@@ -519,8 +520,9 @@ static void deparallelize_pmovs(ir_func_t *fun)
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
 		ir_inst_t *prev = blk->insts;
-		for(ir_inst_t *inst = blk->insts->next; inst; inst = inst->next) {
-			ir_inst_t *nxt = inst->next;
+		ir_inst_t *nxt;
+		for(ir_inst_t *inst = blk->insts->next; inst; inst = nxt) {
+			nxt = inst->next;
 			LIST(reg_pmov_t) seq = NULL;
 			if(inst->type != IR_INST_PMOV) {
 				goto end;
@@ -528,29 +530,30 @@ static void deparallelize_pmovs(ir_func_t *fun)
 			inst->type = IR_INST_NOP;
 
 			seq = deparallelize_pmov(inst);
+			ir_inst_delete(inst);
 			if(list_len(seq) == 0) {
+				list_delete(seq);
 				goto end;
 			}
 
 			ir_inst_t *mov = ins_mov(NULL, NULL);
 			ir_inst_t *prev_mov = NULL;
+			ir_inst_t *newmov;
 			prev->next = mov;
 			for(size_t i = 0; i < list_len(seq); i++) {
 				reg_pmov_t cur_mov = seq[i];
 				mov->r0 = cur_mov.dst;
 				mov->r1 = cur_mov.src;
-				ir_inst_t *newmov = ins_mov(NULL, NULL);
+				newmov = ins_mov(NULL, NULL);
 				prev_mov = mov;
 				mov->next = newmov;
 				mov = newmov;
 			}
-			ir_inst_delete(prev_mov->next);
+			ir_inst_delete(newmov);
 			prev_mov->next = nxt;
+			list_delete(seq);
 
 end:
-			if(seq) {
-				list_delete(seq);
-			}
 			prev = inst;
 		}
 	}

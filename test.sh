@@ -5,6 +5,8 @@ passing=1
 # ./bin/wcc test/one.c -o test/one.s -O3
 # cc -c -o one.o test/one.s
 
+./bin/wcc --internal-test-strmap
+
 assert() {
   
   expect="$1"
