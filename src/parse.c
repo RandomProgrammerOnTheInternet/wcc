@@ -30,6 +30,7 @@ node_t *node_make(enum node_kind kind, token_t *tok)
 /* deallocates a node */
 void node_delete(node_t *node)
 {
+	UNUSED(node);
 	// free(node);
 	return;
 }

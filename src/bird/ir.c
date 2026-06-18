@@ -709,7 +709,7 @@ static void print_blklist(LIST(ir_blk_t *) list)
 	printf("\n");
 }
 
-static void ir_dump_stats(ir_func_t *fun)
+static UNUSEDA void ir_dump_stats(ir_func_t *fun)
 {
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];

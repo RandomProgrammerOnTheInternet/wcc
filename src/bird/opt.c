@@ -194,7 +194,7 @@ static int inverse_brcmp(enum ins_type ty)
 	}
 }
 
-static reg_t *mov_root(reg_t *reg)
+static UNUSEDA reg_t *mov_root(reg_t *reg)
 {
 	if(reg->phi_arg) {
 		return reg;
@@ -432,7 +432,7 @@ static void ir_zeroopt(ir_inst_t *inst)
 	return;
 }
 
-static int ir_fold(ir_func_t *func)
+static UNUSEDA int ir_fold(ir_func_t *func)
 {
 	int change = 0;
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
@@ -783,7 +783,7 @@ static bool leads_to_phi(reg_t *r)
 
 /* or copy propagation, whatever you call it */
 /* doesn't work */
-static int ir_mov_elim(ir_func_t *func)
+static UNUSEDA int ir_mov_elim(ir_func_t *func)
 {
 	int change = 0;
 
