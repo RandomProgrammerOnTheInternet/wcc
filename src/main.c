@@ -66,16 +66,15 @@ static char *fmt(char *fmt, ...)
 static void test_strmap(void)
 {
 	STRMAP(int) map = strmap_make(int);
-
 	/* populate with keys */
 	for(int i = 0; i < 1000; i++) {
 		char *s = fmt("big key %d", i);
 		strmap_put(map, s, i);
-		if(strmap_get(map, s) != i) {
+		if(*strmap_get(map, s) != i) {
 			printf("uh oh\n");
 			exit(1);
 		}
-		if(strmap_get(map, "big key 0") != 0) {
+		if(*strmap_get(map, "big key 0") != 0) {
 			printf("uh oh\n");
 			exit(1);
 		}
@@ -84,7 +83,7 @@ static void test_strmap(void)
 	/* check */
 	for(int i = 0; i < 1000; i++) {
 		char *s = fmt("big key %d", i);
-		int j = strmap_get(map, s);
+		int j = *strmap_get(map, s);
 		if(j != i) {
 			printf("uh oh\n");
 			exit(1);
@@ -109,13 +108,27 @@ static void test_strmap(void)
 				exit(1);
 			}
 		} else {
-			int j = strmap_get(map, s);
+			int j = *strmap_get(map, s);
 			if(j != i) {
 				printf("uh oh\n");
 				exit(1);
 			}
 		}
 	}
+
+	/* check iter */
+	UNUSEDA char *key;
+	int val;
+	strmap_iter(map, key, val, {
+		if(val & 1) {
+			printf("uh oh\n");
+			exit(1);
+		}
+		if(!starts_with(key, "big key")) {
+			printf("uh oh\n");
+			exit(1);
+		}
+	});
 
 	strmap_delete(map);
 }
@@ -223,7 +236,6 @@ int main(int argc, char *argv[])
 	token_t *cur = head;
 	parse_res_t res = parse_do(cur);
 	LIST(obj_t *) globals = res.globals;
-	LIST(obj_t *) locals = res.locals;
 	codegen_func(emit_to, globals, opt_level, arch);
 
 	fclose(emit_to);
@@ -245,16 +257,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	/*
-	for(size_t i = 0; i < list_len(locals); i++) {
-		if(locals[i]) {
-			obj_delete_all(locals[i]->vars);
-		}
-	}
-	*/
-
 	list_delete(globals);
-	list_delete(locals);
 
 	scr_cleanup();
 	return 0;

@@ -46,7 +46,7 @@ void *strmap_data(strmap_hdr_t *hdr);
 
 #define strmap_get(m, s)                                                      \
 	({                                                                        \
-		*(typeof(((m)->vals)))strmap_donotuse_get(                            \
+		(typeof(((m)->vals)))strmap_donotuse_get(                             \
 			(void *)(m), strmap_donotuse_tozzstr((s)), sizeof((m)->vals[0])); \
 	})
 
@@ -64,6 +64,24 @@ void *strmap_data(strmap_hdr_t *hdr);
 #define strmap_delete(v)             \
 	do {                             \
 		strmap_donotuse_delete((v)); \
+	} while(0)
+
+#define strmap_iter(m, k, v, code)                                             \
+	do {                                                                       \
+		for(size_t iter_indx = 0; iter_indx < strmap_hdr((m))->cap;            \
+			iter_indx++) {                                                     \
+			if(((zz_hashstr_t **)(strmap_hdr((m))->data[0]))[iter_indx] ==     \
+				   NULL ||                                                     \
+			   ((zz_hashstr_t **)(strmap_hdr((m))->data[0]))[iter_indx] ==     \
+				   (void *)-1) {                                               \
+				continue;                                                      \
+			}                                                                  \
+			k = ((zz_hashstr_t **)(strmap_hdr((m))->data[0]))[iter_indx]->str; \
+			v = ((typeof(v) *)(strmap_hdr((m))->data[1]))[iter_indx];          \
+			do {                                                               \
+				code;                                                          \
+			} while(0);                                                        \
+		}                                                                      \
 	} while(0)
 
 #endif /* STRMAP_H_ */

@@ -131,7 +131,6 @@ void obj_delete(obj_t *obj);
 void obj_delete_all(LIST(obj_t *) objs);
 
 typedef struct parse_res {
-	LIST(obj_t *) locals;
 	LIST(obj_t *) globals;
 } parse_res_t;
 

@@ -1,11 +1,12 @@
 #include "parse.h"
 #include "zz/base.h"
+#include "zz/strmap.h"
 #include "lex.h"
 #include "type.h"
 
-LIST(obj_t *) locals = NULL;
+STRMAP(obj_t *) locals = NULL;
+
 LIST(obj_t *) globals = NULL;
-LIST(obj_t *) all = NULL;
 
 /* ron's universal number kounter */
 /* very important, critical piece of code */
@@ -115,7 +116,7 @@ static obj_t *obj_make_noadd(char *name, type_t *type, bool is_func)
 obj_t *obj_make(char *name, type_t *type, bool is_func)
 {
 	obj_t *obj = obj_make_noadd(name, type, is_func);
-	list_append(locals, obj);
+	strmap_put(locals, obj->name, obj);
 	return obj;
 }
 
@@ -153,18 +154,17 @@ obj_t *obj_make_anon(type_t *type)
 static obj_t *find_var(token_t *tok)
 {
 	/* traverse list */
+
+	char *str = mystrndup(tok->loc, tok->len);
+
 	if(locals) {
-		for(size_t i = 0; i < list_len(locals); i++) {
-			obj_t *obj = locals[i];
-			if(!obj || obj->is_func) {
-				continue;
-			}
-			if(strlen(obj->name) == tok->len &&
-			   strncmp(obj->name, tok->loc, tok->len) == 0) {
-				return obj;
-			}
+		obj_t **found = strmap_get(locals, str);
+		if(found) {
+			free(str);
+			return *found;
 		}
 	}
+	free(str);
 
 	if(globals) {
 		for(size_t i = 0; i < list_len(globals); i++) {
@@ -1227,7 +1227,7 @@ static void parse_global_var(type_t *decltype, token_t *tok, token_t **rest)
 
 static obj_t *parse_function_def(type_t *decltype, token_t *tok, token_t **rest)
 {
-	locals = list_make(obj_t *);
+	locals = strmap_make(obj_t *);
 	obj_t *func =
 		obj_make(mystrndup(decltype->ident->loc, decltype->ident->len),
 				 type_func_to(decltype), true);
@@ -1284,7 +1284,6 @@ parse_res_t parse_do(token_t *toks)
 {
 	token_t *tok = toks;
 	globals = list_make(obj_t *);
-	all = list_make(obj_t *);
 	while(tok->kind != TOK_END) {
 		type_t *declspec = parse_declspec(tok, &tok);
 		type_t *decl = parse_declarator(declspec, tok, &tok);
@@ -1294,7 +1293,13 @@ parse_res_t parse_do(token_t *toks)
 		/* function */
 		if(token_eq(tok, "(")) {
 			obj = parse_function_def(decl, tok, &tok);
-			obj->vars = locals;
+
+			LIST(obj_t *) locals_list = list_make(obj_t *);
+			UNUSEDA char *key;
+			obj_t *val;
+			strmap_iter(locals, key, val, { list_append(locals_list, val); });
+
+			obj->vars = locals_list;
 			obj->stack_size = -1;
 			list_append(globals, obj);
 		} else {
@@ -1302,14 +1307,8 @@ parse_res_t parse_do(token_t *toks)
 			parse_global_var(decl, tok, &tok);
 		}
 
-		if(locals) {
-			for(size_t i = 0; i < list_len(locals); i++) {
-				list_append(all, locals[i]);
-			}
-		}
-
 		locals = NULL;
 	}
 
-	return (parse_res_t){ .globals = globals, .locals = all };
+	return (parse_res_t){ .globals = globals };
 }
