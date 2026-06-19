@@ -5,8 +5,7 @@
 #include "type.h"
 
 STRMAP(obj_t *) locals = NULL;
-
-LIST(obj_t *) globals = NULL;
+STRMAP(obj_t *) globals = NULL;
 
 /* ron's universal number kounter */
 /* very important, critical piece of code */
@@ -127,7 +126,7 @@ obj_t *obj_make_global(char *name, type_t *type, bool is_func)
 	obj_t *obj = obj_make_noadd(name, type, is_func);
 	obj->is_global = true;
 	obj->data = NULL;
-	list_append(globals, obj);
+	strmap_put(globals, obj->name, obj);
 	return obj;
 }
 
@@ -164,20 +163,17 @@ static obj_t *find_var(token_t *tok)
 			return *found;
 		}
 	}
-	free(str);
 
 	if(globals) {
-		for(size_t i = 0; i < list_len(globals); i++) {
-			obj_t *obj = globals[i];
-			if(!obj || obj->is_func) {
-				continue;
-			}
-			if(strlen(obj->name) == tok->len &&
-			   strncmp(obj->name, tok->loc, tok->len) == 0) {
-				return obj;
-			}
+		obj_t **found = strmap_get(globals, str);
+		if(found) {
+			free(str);
+			return *found;
 		}
 	}
+
+	free(str);
+
 	return NULL;
 }
 
@@ -1287,7 +1283,7 @@ end:
 parse_res_t parse_do(token_t *toks)
 {
 	token_t *tok = toks;
-	globals = list_make(obj_t *);
+	globals = strmap_make(obj_t *);
 	while(tok->kind != TOK_END) {
 		type_t *declspec = parse_declspec(tok, &tok);
 		type_t *decl = parse_declarator(declspec, tok, &tok);
@@ -1305,7 +1301,7 @@ parse_res_t parse_do(token_t *toks)
 
 			obj->vars = locals_list;
 			obj->stack_size = -1;
-			list_append(globals, obj);
+			strmap_put(globals, obj->name, obj);
 		} else {
 			/* global variable */
 			parse_global_var(decl, tok, &tok);
@@ -1317,5 +1313,13 @@ parse_res_t parse_do(token_t *toks)
 		locals = NULL;
 	}
 
-	return (parse_res_t){ .globals = globals };
+	/* collect globals */
+
+	LIST(obj_t *) globals_list = list_make(obj_t *);
+	UNUSEDA char *key;
+	obj_t *val;
+	strmap_iter(globals, key, val, { list_append(globals_list, val); });
+	strmap_delete(globals);
+
+	return (parse_res_t){ .globals = globals_list };
 }
