@@ -1,6 +1,7 @@
 /* Inspired by https://nullprogram.com/blog/2026/05/06/ (without the atomics) and
  * https://github.com/RealNeGate/Cuik/tree/master/common . */
 #include "strmap.h"
+#include "arena.h"
 
 /* No pointer is ever going to be 0xffffffffffffffff, so make that the tombstone */
 #define TOMBSTONE ((void *)-1)
@@ -14,6 +15,11 @@ zz_hashstr_t *strmap_donotuse_tozzstr(char *str)
 	zz_hashstr_t *ptr = zalloc(sizeof(hashstr));
 	*ptr = hashstr;
 	return ptr;
+}
+
+static void zzstr_delete(zz_hashstr_t *str)
+{
+	free(str);
 }
 
 static uint64_t hashstr(zz_hashstr_t *s)
@@ -68,6 +74,14 @@ void strmap_donotuse_delete(void *map)
 {
 	strmap_hdr_t *hdr = strmap_hdr(map);
 
+	zz_hashstr_t **keys = hdr->data[0];
+	for(size_t i = 0; i < hdr->cap; i++) {
+		if(keys[i] != NULL && keys[i] != TOMBSTONE) {
+			zzstr_delete(keys[i]);
+			keys[i] = NULL;
+		}
+	}
+
 	free((void *)hdr->data[0]);
 	free((void *)hdr->data[1]);
 	free(hdr);
@@ -115,13 +129,13 @@ void strmap_donotuse_del(void *map, zz_hashstr_t *str)
 
 	zz_hashstr_t **strs = (zz_hashstr_t **)hdr->data[0];
 	lookup_t lookup = strmap_lookup(map, str);
-	free(str);
+	zzstr_delete(str);
 	if(!lookup.exists) {
 		return;
 	}
 
 	hdr->size--;
-	free(strs[lookup.loc]);
+	zzstr_delete(strs[lookup.loc]);
 	strs[lookup.loc] = TOMBSTONE;
 	return;
 }
@@ -142,7 +156,7 @@ void strmap_donotuse_put(void *map, zz_hashstr_t *str, size_t size, void *obj)
 
 	lookup_t lookup = strmap_lookup(map, str);
 	if(lookup.exists) {
-		free(str);
+		zzstr_delete(str);
 		memcpy(&vals[lookup.loc * size], obj, size);
 		return;
 	}
@@ -159,7 +173,7 @@ void *strmap_donotuse_get(void *map, zz_hashstr_t *str, size_t size)
 {
 	strmap_hdr_t *hdr = strmap_hdr(map);
 	lookup_t lookup = strmap_lookup(map, str);
-	free(str);
+	zzstr_delete(str);
 	if(!lookup.exists) {
 		return NULL;
 	}
@@ -171,7 +185,7 @@ void *strmap_donotuse_get(void *map, zz_hashstr_t *str, size_t size)
 bool strmap_donotuse_has(void *map, zz_hashstr_t *str)
 {
 	bool res = strmap_lookup(map, str).exists;
-	free(str);
+	zzstr_delete(str);
 	return res;
 }
 

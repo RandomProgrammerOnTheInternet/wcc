@@ -1227,6 +1227,10 @@ static void parse_global_var(type_t *decltype, token_t *tok, token_t **rest)
 
 static obj_t *parse_function_def(type_t *decltype, token_t *tok, token_t **rest)
 {
+	if(locals) {
+		strmap_delete(locals);
+		locals = NULL;
+	}
 	locals = strmap_make(obj_t *);
 	obj_t *func =
 		obj_make(mystrndup(decltype->ident->loc, decltype->ident->len),
@@ -1307,6 +1311,9 @@ parse_res_t parse_do(token_t *toks)
 			parse_global_var(decl, tok, &tok);
 		}
 
+		if(locals) {
+			strmap_delete(locals);
+		}
 		locals = NULL;
 	}
 
