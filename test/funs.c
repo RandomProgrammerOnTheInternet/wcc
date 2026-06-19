@@ -1,3 +1,7 @@
+long doubleit(long x);
+long negative_short(long x);
+_Bool boolean(void);
+
 int main()
 {
 	return doubleit(2) + negative_short(1) + boolean() - boolean();

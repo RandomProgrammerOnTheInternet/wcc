@@ -1,5 +1,10 @@
 /* prime number generator, returns maximum prime number in [0, 1000] */
 // comment test 5000
+void *malloc(long size);
+void free(void *ptr);
+
+#include "test/one.c"
+
 int primes()
 {
 	int max = 0;
@@ -33,8 +38,6 @@ int primes()
 
 	return max;
 }
-
-#include "test/one.c"
 
 int main()
 {

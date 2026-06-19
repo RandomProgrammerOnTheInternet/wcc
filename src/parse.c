@@ -6,6 +6,7 @@
 
 STRMAP(obj_t *) locals = NULL;
 STRMAP(obj_t *) globals = NULL;
+STRMAP(int) known_funcs = NULL;
 
 /* ron's universal number kounter */
 /* very important, critical piece of code */
@@ -988,6 +989,11 @@ static node_t *parse_prim(token_t *tok, token_t **rest)
 			node_t *fun = node_make(NODE_FUNCALL, tok);
 			fun->fname = mystrndup(tok->loc, tok->len);
 			fun->fargs = NULL;
+
+			if(!strmap_has(known_funcs, fun->fname)) {
+				compile_err(tok->loc, "unknown function '%s'", fun->fname);
+			}
+
 			tok = tok->next;
 			tok = token_skip(tok, "(");
 
@@ -1274,6 +1280,15 @@ static obj_t *parse_function_def(type_t *decltype, token_t *tok, token_t **rest)
 	tok = token_skip(tok, ")");
 
 end:
+
+	strmap_put(known_funcs, func->name, 1);
+	if(token_eat(&tok, ";")) {
+		strmap_delete(locals);
+		locals = NULL;
+		*rest = tok;
+		return NULL;
+	}
+
 	func->body = parse_compound_stmt(tok, &tok);
 	*rest = tok;
 	return func;
@@ -1284,6 +1299,7 @@ parse_res_t parse_do(token_t *toks)
 {
 	token_t *tok = toks;
 	globals = strmap_make(obj_t *);
+	known_funcs = strmap_make(int);
 	while(tok->kind != TOK_END) {
 		type_t *declspec = parse_declspec(tok, &tok);
 		type_t *decl = parse_declarator(declspec, tok, &tok);
@@ -1293,6 +1309,9 @@ parse_res_t parse_do(token_t *toks)
 		/* function */
 		if(token_eq(tok, "(")) {
 			obj = parse_function_def(decl, tok, &tok);
+			if(!obj) {
+				goto out;
+			}
 
 			LIST(obj_t *) locals_list = list_make(obj_t *);
 			UNUSEDA char *key;
@@ -1306,6 +1325,7 @@ parse_res_t parse_do(token_t *toks)
 			/* global variable */
 			parse_global_var(decl, tok, &tok);
 		}
+out:
 
 		if(locals) {
 			strmap_delete(locals);
@@ -1320,6 +1340,7 @@ parse_res_t parse_do(token_t *toks)
 	obj_t *val;
 	strmap_iter(globals, key, val, { list_append(globals_list, val); });
 	strmap_delete(globals);
+	strmap_delete(known_funcs);
 
 	return (parse_res_t){ .globals = globals_list };
 }

@@ -1,3 +1,6 @@
+int strlen(char *s);
+void printf(char *s);
+
 int main()
 {
 	char *str = "hello world";

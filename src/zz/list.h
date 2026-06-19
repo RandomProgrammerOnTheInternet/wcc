@@ -53,6 +53,15 @@ void *list_donotuse_fit(void *list, size_t count, size_t size);
 		(list)[hdr->size++] = elem;                           \
 	} while(0);
 
+#define list_push(list, elem) list_append(list, elem)
+
+/* Pops an element off of list `list` */
+#define list_pop(list)                                             \
+	({                                                             \
+		ASSERT(list_hdr((list))->size, "tried to pop empty list"); \
+		(list)[--list_hdr((list))->size];                          \
+	})
+
 /* list_size and list_len are the same. gets size/length of list */
 #define list_size(list) (list_hdr((list))->size)
 #define list_len(list) (list_hdr((list))->size)

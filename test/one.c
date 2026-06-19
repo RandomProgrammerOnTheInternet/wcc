@@ -14,6 +14,8 @@ long argument_waster(long a, long b, long c, long d, long e, long f, long g,
 	return a + b + c + d + e + f + g + h + i + j + k + l;
 }
 
+void putchar(int c);
+
 void print_num_helper(int num)
 {
 	/* https://stackoverflow.com/a/59389473 */
