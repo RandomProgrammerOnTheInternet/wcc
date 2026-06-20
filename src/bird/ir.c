@@ -868,7 +868,7 @@ void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt)
 		}
 
 		ir_opt(func, opt, arch);
-		ir_finalize(func, arch == IR_ARCH_AARCH64_APPLE ? 9 : 7, opt, arch);
+		ir_finalize(func, arch == IR_ARCH_AARCH64_APPLE ? 9 : 5, opt, arch);
 
 		for(size_t j = 0; j < list_len(func->blocks); j++) {
 			func->blocks[j]->num = acc++;
