@@ -68,6 +68,7 @@ typedef struct obj {
 	struct obj *args; /* arguments to function */
 	size_t stack_size; /* total size of this function's stack frame */
 	reg_t *eq_reg; /* equivalent register, if used */
+	long order; /* order of object */
 } obj_t;
 
 /* an AST node */

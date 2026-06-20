@@ -3,7 +3,7 @@
 passing=1
 
 # ./bin/wcc test/one.c -o test/one.s -O3
-# cc -c -o one.o test/one.s
+cc -c -o one.o test/one_impl.c
 
 ./bin/wcc --internal-test-strmap
 
@@ -21,7 +21,7 @@ assert() {
     return
   fi
   
-  cc -o prog prog.s && ./prog
+  cc -o prog prog.s one.o && ./prog
   status="$?"
   rm prog prog.s
   

@@ -7,6 +7,8 @@
 STRMAP(obj_t *) locals = NULL;
 STRMAP(obj_t *) globals = NULL;
 STRMAP(int) known_funcs = NULL;
+long local_order = 0;
+long global_order = 0;
 
 /* ron's universal number kounter */
 /* very important, critical piece of code */
@@ -116,6 +118,7 @@ static obj_t *obj_make_noadd(char *name, type_t *type, bool is_func)
 obj_t *obj_make(char *name, type_t *type, bool is_func)
 {
 	obj_t *obj = obj_make_noadd(name, type, is_func);
+	obj->order = local_order++;
 	strmap_put(locals, obj->name, obj);
 	return obj;
 }
@@ -127,6 +130,7 @@ obj_t *obj_make_global(char *name, type_t *type, bool is_func)
 	obj_t *obj = obj_make_noadd(name, type, is_func);
 	obj->is_global = true;
 	obj->data = NULL;
+	obj->order = global_order++;
 	strmap_put(globals, obj->name, obj);
 	return obj;
 }
@@ -1222,6 +1226,7 @@ static void parse_global_var(type_t *decltype, token_t *tok, token_t **rest)
 
 static obj_t *parse_function_def(type_t *decltype, token_t *tok, token_t **rest)
 {
+	local_order = 0;
 	if(locals) {
 		strmap_delete(locals);
 		locals = NULL;
@@ -1287,11 +1292,20 @@ end:
 	return func;
 }
 
+static int cmp_order(const void *a, const void *b)
+{
+	obj_t *obj_a = *(obj_t **)a;
+	obj_t *obj_b = *(obj_t **)b;
+	return obj_a->order - obj_b->order;
+}
+
 /* does the parsing */
 parse_res_t parse_do(token_t *toks)
 {
 	token_t *tok = toks;
 	globals = strmap_make(obj_t *);
+	global_order = 0;
+	local_order = 0;
 	known_funcs = strmap_make(int);
 	while(tok->kind != TOK_END) {
 		type_t *declspec = parse_declspec(tok, &tok);
@@ -1310,6 +1324,8 @@ parse_res_t parse_do(token_t *toks)
 			UNUSEDA char *key;
 			obj_t *val;
 			strmap_iter(locals, key, val, { list_append(locals_list, val); });
+			qsort(locals_list, list_len(locals_list), sizeof(obj_t *),
+				  cmp_order);
 
 			obj->vars = locals_list;
 			obj->stack_size = -1;
@@ -1332,6 +1348,7 @@ out:
 	UNUSEDA char *key;
 	obj_t *val;
 	strmap_iter(globals, key, val, { list_append(globals_list, val); });
+	qsort(globals_list, list_len(globals_list), sizeof(obj_t *), cmp_order);
 	strmap_delete(globals);
 	strmap_delete(known_funcs);
 

@@ -651,7 +651,7 @@ static int ir_simplify(ir_func_t *fun, int amount, enum ir_arch arch)
 			 * if we encounter add %r2, %r?  then reorder it to add %r?, %r2
 			 * if the dest is not %r2. */
 			if(arch == IR_ARCH_X64_SYSV && ins->type == IR_INST_ADD &&
-			   ins->r0 != ins->r1 && ins->r1->rr == 2) {
+			   ins->r0->rr != ins->r1->rr && ins->r1->rr == 2) {
 				reg_t *tmp = ins->r1;
 				ins->r1 = ins->r2;
 				ins->r2 = tmp;
