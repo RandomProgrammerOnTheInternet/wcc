@@ -20,14 +20,14 @@ int primes()
 			iter += i;
 		}
 	}
-	put("sieve ok");
+	puts("sieve ok");
 
 	for(int i = 0; i < 1000; ++i) {
 		if(!array[i] && i > max) {
 			max = i;
 		}
 	}
-	put("chk ok");
+	puts("chk ok");
 
 	print_num(max);
 	return max;
