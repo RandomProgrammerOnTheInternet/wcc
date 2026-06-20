@@ -348,8 +348,37 @@ static void replace_phis(ir_func_t *func, ir_blk_t *orig, ir_blk_t *replace)
 	return;
 }
 
+typedef struct edge {
+	ir_blk_t *from; /* pred */
+	ir_blk_t *to; /* succ */
+} edge_t;
+
 /* pre-step to destroying SSA form */
-static void split_critical(ir_func_t *fun)
+static UNUSEDA void spilt_critical(ir_func_t *fun)
+{
+	/* append NOP to each block, find befores */
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		ir_inst_t *nop = ins_nop();
+		nop->next = blk->insts;
+		blk->insts = nop;
+		find_before_last_term_ins(blk);
+	}
+
+	UNUSEDA long counter = fun->blocks[list_len(fun->blocks) - 1]->num;
+
+	LIST(edge_t) edges = list_make(edge_t);
+
+	/* collect all edges */
+
+	/* TODO */
+
+	list_delete(edges);
+
+	return;
+}
+
+static void split_critical_old(ir_func_t *fun)
 {
 	/* append NOP to each block, find befores */
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
@@ -636,7 +665,7 @@ void ir_ssa_exit(ir_func_t *fun)
 {
 	ir_fix(fun);
 	ir_blk_flow(fun);
-	split_critical(fun);
+	split_critical_old(fun);
 	ir_nopremover(fun);
 	deparallelize_pmovs(fun);
 	ir_nopremover(fun);

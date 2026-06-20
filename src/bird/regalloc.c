@@ -343,11 +343,52 @@ static void rewrite_make_2op(ir_inst_t *ins_prev, ir_inst_t *ins)
 	return;
 }
 
+static int rewrite_mov(ir_inst_t *ins_prev, ir_inst_t *ins)
+{
+	/* opt
+	 * %r0 = %r1(spill)
+	 * ->
+	 * %r0 = spill_load %r1
+	 */
+	if(!ins->r0->spilld && ins->r1->spilld) {
+		ins->type = IR_INST_LOADSS;
+		ins->size = 8;
+		ins->imm = ins->r1->off;
+		return 1;
+	}
+
+	/* opt
+	 * %r0(spill) = %r1
+	 * ->
+	 * spill_store %r0, %r1 */
+	if(ins->r0->spilld && !ins->r1->spilld) {
+		ins->type = IR_INST_STORESS;
+		ins->size = 8;
+		ins->imm = ins->r0->off;
+		return 1;
+	}
+
+	/* opt
+	 * %r0(spill) = %r1(spill)
+	 * ->
+	 * %r0 = spill_load %r1
+	 * spill_store %r0, %r0
+	 */
+
+	return 0;
+}
+
 /* spill registers used in `ins` if needed */
 static void rewrite_ins(ir_inst_t *ins_prev, ir_inst_t *ins)
 {
 	if(ins->type == IR_INST_LOADSS || ins->type == IR_INST_STORESS) {
 		return;
+	}
+
+	/* special case */
+	if(ins->type == IR_INST_MOV) {
+		if(rewrite_mov(ins_prev, ins))
+			return;
 	}
 
 	int noedge = 0;
