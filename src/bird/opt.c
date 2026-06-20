@@ -784,7 +784,8 @@ static int ir_mov_elim(ir_func_t *func)
 				continue;
 			}
 
-			if(leads_to_phi(inst->r1) || inst->r1->phi_related) {
+			/* do we need this? */
+			if(0 && (leads_to_phi(inst->r1) || inst->r1->phi_related)) {
 				inst->r1->insty = IR_INST_NOP;
 				/* do we need this? */
 				inst->r0->phi_related = true;
