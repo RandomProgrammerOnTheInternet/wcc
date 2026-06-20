@@ -16,6 +16,9 @@ int primes()
 	for(int i = 2; i < 1000; i++) {
 		iter = i << 1;
 		while(iter < 1000) {
+			print_num(i);
+			putchar(';');
+			print_num(iter);
 			array[iter] |= 1;
 			iter += i;
 		}
