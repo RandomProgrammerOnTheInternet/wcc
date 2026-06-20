@@ -564,7 +564,7 @@ static bool ir_choose_alloc_strat(ir_func_t *fun, int amount, int callee_cost,
 	return true; /* how did you get here? */
 }
 
-static int ir_simplify(ir_func_t *fun, int amount)
+static int ir_simplify(ir_func_t *fun, int amount, enum ir_arch arch)
 {
 	int change = 0;
 	long *imm = zcalloc(amount, sizeof(long));
@@ -632,6 +632,32 @@ static int ir_simplify(ir_func_t *fun, int amount)
 				change = 1;
 			}
 
+			/* simplify
+			 * %r0 = assoc %r1, %r0
+			 * into
+			 * %r0 = assoc %r0, %r1
+			 */
+			if(ir_inst_is_assoc(ins->type) && ins->r0->rr == ins->r2->rr) {
+				reg_t *tmp = ins->r1;
+				ins->r1 = ins->r2;
+				ins->r2 = tmp;
+				change = 1;
+			}
+
+			/* x64 opt:
+			 * according to Intel's optimization manual (Intel® 64 and IA-32 Architectures Optimization Reference Manual):
+			 * "For LEA instructions with three source operands and some specific situations, instruction latency has increased to 3 cycles, and must dispatch via port 1: [...] --- LEA that uses base and index registers where the base is EBP, RBP, or R13."
+			 * R13 is the x64 backend is "real" register r2, so
+			 * if we encounter add %r2, %r?  then reorder it to add %r?, %r2
+			 * if the dest is not %r2. */
+			if(ins->type == IR_INST_ADD && ins->r0 != ins->r1 &&
+			   ins->r1->rr == 2) {
+				reg_t *tmp = ins->r1;
+				ins->r1 = ins->r2;
+				ins->r2 = tmp;
+				change = 1;
+			}
+
 			/* remove useless insts where thing stored is never used
 			 * beyond this inst */
 			if(ins->r0 && ins->r0->def == ins->r0->last_use &&
@@ -694,7 +720,7 @@ void ir_finalize(ir_func_t *fun, int amount, int opt_level, enum ir_arch arch)
 	ir_fix(fun);
 	while(change && tolerance) {
 		tolerance--;
-		change = ir_simplify(fun, amount);
+		change = ir_simplify(fun, amount, arch);
 		ir_fix(fun);
 	}
 
