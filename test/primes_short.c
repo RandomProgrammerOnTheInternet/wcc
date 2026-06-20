@@ -11,26 +11,20 @@ int primes()
 	for(int i = 0; i < 1000; ++i) {
 		array[i] ^= array[i];
 	}
-	puts("xor ok");
 
 	for(int i = 2; i < 1000; i++) {
 		iter = i << 1;
 		while(iter < 1000) {
-			print_num(i);
-			putchar(';');
-			print_num(iter);
 			array[iter] |= 1;
 			iter += i;
 		}
 	}
-	puts("sieve ok");
 
 	for(int i = 0; i < 1000; ++i) {
 		if(!array[i] && i > max) {
 			max = i;
 		}
 	}
-	puts("chk ok");
 
 	print_num(max);
 	return max;
