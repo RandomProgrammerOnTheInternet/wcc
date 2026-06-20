@@ -11,6 +11,7 @@ int primes()
 	for(int i = 0; i < 1000; ++i) {
 		array[i] ^= array[i];
 	}
+	puts("xor ok");
 
 	for(int i = 2; i < 1000; i++) {
 		iter = i << 1;
@@ -19,12 +20,14 @@ int primes()
 			iter += i;
 		}
 	}
+	put("sieve ok");
 
 	for(int i = 0; i < 1000; ++i) {
 		if(!array[i] && i > max) {
 			max = i;
 		}
 	}
+	put("chk ok");
 
 	print_num(max);
 	return max;
