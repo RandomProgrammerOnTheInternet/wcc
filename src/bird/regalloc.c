@@ -650,8 +650,8 @@ static int ir_simplify(ir_func_t *fun, int amount, enum ir_arch arch)
 			 * R13 is the x64 backend is "real" register r2, so
 			 * if we encounter add %r2, %r?  then reorder it to add %r?, %r2
 			 * if the dest is not %r2. */
-			if(ins->type == IR_INST_ADD && ins->r0 != ins->r1 &&
-			   ins->r1->rr == 2) {
+			if(arch == IR_ARCH_X64_SYSV && ins->type == IR_INST_ADD &&
+			   ins->r0 != ins->r1 && ins->r1->rr == 2) {
 				reg_t *tmp = ins->r1;
 				ins->r1 = ins->r2;
 				ins->r2 = tmp;
