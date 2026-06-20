@@ -301,6 +301,227 @@ static void seal_block(ir_blk_t *blk)
 	list_append(sealed_blks, blk);
 }
 
+static bool has_several_outgoing_edges(ir_inst_t *ins)
+{
+	if(ins->type == IR_INST_JMP || ins->type == IR_INST_RET) {
+		return false;
+	}
+
+	/* else, if true block != false block, true */
+	return ins->true_blk != ins->false_blk;
+}
+
+static void replace_edge(ir_blk_t *blk, ir_blk_t *orig, ir_blk_t *replace)
+{
+	ir_inst_t *last = blk->tail;
+	if(last->true_blk && last->true_blk == orig) {
+		last->true_blk = replace;
+	}
+	if(last->false_blk && last->false_blk == orig) {
+		last->false_blk = replace;
+	}
+	return;
+}
+
+/* pre-step to destroying SSA form */
+static void split_critical(ir_func_t *fun)
+{
+	/* append NOP to each block, find befores */
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		ir_inst_t *nop = ins_nop();
+		nop->next = blk->insts;
+		blk->insts = nop;
+		find_before_last_term_ins(blk);
+	}
+
+	long counter = fun->blocks[list_len(fun->blocks) - 1]->num;
+
+	size_t orig_len = list_len(fun->blocks);
+	for(size_t i = 0; i < orig_len; i++) {
+		ir_blk_t *blk = fun->blocks[i];
+
+		bool has_phis = false;
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type == IR_INST_PHI) {
+				has_phis = true;
+				break;
+			}
+		}
+
+		if(!has_phis) {
+			continue;
+		}
+
+		ir_inst_t **pmovs = zcalloc(list_len(blk->pred), sizeof(ir_inst_t *));
+
+		for(size_t j = 0; j < list_len(blk->pred); j++) {
+			ir_blk_t *pred = blk->pred[j];
+			ir_inst_t *pmov = ir_inst_make(IR_INST_PMOV, NULL, NULL, NULL, 0);
+			pmovs[j] = pmov;
+			pmov->pmov_args = list_make(reg_pmov_t);
+			/* TODO: this doesn't work.. why? */
+			if(0 && has_several_outgoing_edges(pred->tail)) {
+				ir_inst_t *jmp = ins_jmp(blk);
+				pmov->next = jmp;
+				ir_blk_t *newblk = ir_blk_make(pmov);
+				newblk->num = ++counter;
+				list_append(fun->blocks, newblk);
+				replace_edge(pred, blk, newblk);
+				ir_blk_flow(fun);
+			} else {
+				pred->tailprev->next = pmov;
+				pmov->next = pred->tail;
+				pred->tailprev = pred->tailprev->next;
+			}
+		}
+
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type != IR_INST_PHI) {
+				continue;
+			}
+
+			inst->type = IR_INST_NOP;
+			for(size_t j = 0; j < list_len(inst->phi_args); j++) {
+				reg_pmov_t mov = { .dst = inst->r0, .src = inst->phi_args[j] };
+				list_append(pmovs[j]->pmov_args, mov);
+			}
+
+			list_delete(inst->phi_args);
+		}
+
+		free(pmovs);
+	}
+
+	return;
+}
+
+/* Leroy's algorithm for sequentializing parallel moves. */
+/* Couldn't find a paper/description for it, but https://github.com/tekknolagi/tekknolagi.github.com/blob/main/_posts/2025-08-13-linear-scan.md seems to have the implementation. */
+
+enum leroy_status {
+	TO_MOVE = 0,
+	BEING_MOVED,
+	MOVED,
+};
+
+static void move_one(reg_t **src, reg_t **dst, uint8_t *status, size_t i,
+					 size_t len, LIST(reg_pmov_t) * seq)
+{
+	if(src[i] == dst[i]) {
+		return;
+	}
+	status[i] = BEING_MOVED;
+	for(size_t j = 0; j < len; j++) {
+		if(src[j] == dst[j]) {
+			switch(status[j]) {
+			case TO_MOVE:
+				move_one(src, dst, status, j, len, seq);
+				break;
+			case BEING_MOVED: {
+				reg_t *tmp = reg_make();
+				list_append(*seq, ((reg_pmov_t){ .dst = tmp, .src = src[j] }));
+				src[j] = tmp;
+			}; break;
+			default:
+				break;
+			}
+		}
+	}
+
+	list_append(*seq, ((reg_pmov_t){ .dst = dst[i], .src = src[i] }));
+	status[i] = MOVED;
+	return;
+}
+
+static LIST(reg_pmov_t) deparallelize_pmov(ir_inst_t *pmov)
+{
+	LIST(reg_pmov_t) seq = list_make(reg_pmov_t);
+
+	if(list_len(pmov->pmov_args) == 0) {
+		return seq;
+	}
+
+	size_t len = list_len(pmov->pmov_args);
+	reg_t **src = zcalloc(len, sizeof(reg_t *));
+	reg_t **dst = zcalloc(len, sizeof(reg_t *));
+	uint8_t *status = zcalloc(len, 1);
+
+	for(size_t i = 0; i < list_len(pmov->pmov_args); i++) {
+		src[i] = pmov->pmov_args[i].src;
+		dst[i] = pmov->pmov_args[i].dst;
+		status[i] = TO_MOVE;
+	}
+
+	for(size_t i = 0; i < len; i++) {
+		if(status[i] == TO_MOVE) {
+			move_one(src, dst, status, i, len, &seq);
+		}
+	}
+
+	free(dst);
+	free(src);
+	free(status);
+
+	return seq;
+}
+
+/* turns parallel moves -> sequential moves */
+static void deparallelize_pmovs(ir_func_t *fun)
+{
+	/* append NOP to each block, find befores */
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		ir_inst_t *nop = ins_nop();
+		nop->next = blk->insts;
+		blk->insts = nop;
+		find_before_last_term_ins(blk);
+	}
+
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		ir_inst_t *prev = blk->insts;
+		ir_inst_t *nxt;
+		for(ir_inst_t *inst = blk->insts->next; inst; inst = nxt) {
+			nxt = inst->next;
+			LIST(reg_pmov_t) seq = NULL;
+			if(inst->type != IR_INST_PMOV) {
+				goto end;
+			}
+			inst->type = IR_INST_NOP;
+
+			seq = deparallelize_pmov(inst);
+			list_delete(inst->pmov_args);
+			ir_inst_delete(inst);
+			if(list_len(seq) == 0) {
+				prev->next = nxt;
+				list_delete(seq);
+				goto end;
+			}
+
+			ir_inst_t *mov = ins_mov(NULL, NULL);
+			ir_inst_t *prev_mov = NULL;
+			ir_inst_t *newmov;
+			prev->next = mov;
+			for(size_t i = 0; i < list_len(seq); i++) {
+				reg_pmov_t cur_mov = seq[i];
+				mov->r0 = cur_mov.dst;
+				mov->r1 = cur_mov.src;
+				newmov = ins_mov(NULL, NULL);
+				prev_mov = mov;
+				mov->next = newmov;
+				mov = newmov;
+			}
+			ir_inst_delete(newmov);
+			prev_mov->next = nxt;
+			list_delete(seq);
+
+end:
+			prev = inst;
+		}
+	}
+}
+
 void ir_ssa_enter(ir_func_t *fun)
 {
 	reg_reset_counter();
@@ -377,194 +598,17 @@ void ir_ssa_enter(ir_func_t *fun)
 	return;
 }
 
-static bool has_several_outgoing_edges(ir_inst_t *ins)
-{
-	if(ins->type == IR_INST_JMP || ins->type == IR_INST_RET) {
-		return false;
-	}
-
-	/* else, if true block != false block, true */
-	return ins->true_blk != ins->false_blk;
-}
-
-static void replace_edge(ir_blk_t *blk, ir_blk_t *orig, ir_blk_t *replace)
-{
-	ir_inst_t *last = blk->tail;
-	if(last->true_blk && last->true_blk == orig) {
-		last->true_blk = replace;
-	}
-	if(last->false_blk && last->false_blk == orig) {
-		last->false_blk = replace;
-	}
-	return;
-}
-
-/* pre-step to destroying SSA form */
-static void split_critical(ir_func_t *fun)
-{
-	/* append NOP to each block, find befores */
-	for(size_t i = 0; i < list_len(fun->blocks); i++) {
-		ir_blk_t *blk = fun->blocks[i];
-		ir_inst_t *nop = ins_nop();
-		nop->next = blk->insts;
-		blk->insts = nop;
-		find_before_last_term_ins(blk);
-	}
-
-	long counter = fun->blocks[list_len(fun->blocks) - 1]->num;
-	size_t orig_len = list_len(fun->blocks);
-	for(size_t i = 0; i < orig_len; i++) {
-		ir_blk_t *blk = fun->blocks[i];
-
-		bool has_phis = false;
-		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
-			if(inst->type == IR_INST_PHI) {
-				has_phis = true;
-				break;
-			}
-		}
-
-		if(!has_phis) {
-			continue;
-		}
-
-		ir_inst_t **pmovs = zcalloc(list_len(blk->pred), sizeof(ir_inst_t *));
-
-		for(size_t j = 0; j < list_len(blk->pred); j++) {
-			ir_blk_t *pred = blk->pred[j];
-			ir_inst_t *pmov = ir_inst_make(IR_INST_PMOV, NULL, NULL, NULL, 0);
-			pmovs[j] = pmov;
-			pmov->pmov_args = list_make(reg_pmov_t);
-			/* TODO: this doesn't work.. why? */
-			if(0 && has_several_outgoing_edges(pred->tail)) {
-				ir_inst_t *jmp = ins_jmp(blk);
-				pmov->next = jmp;
-				ir_blk_t *newblk = ir_blk_make(pmov);
-				newblk->num = ++counter;
-				list_append(fun->blocks, newblk);
-				replace_edge(pred, blk, newblk);
-			} else {
-				pred->tailprev->next = pmov;
-				pmov->next = pred->tail;
-				pred->tailprev = pred->tailprev->next;
-			}
-		}
-
-		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
-			if(inst->type != IR_INST_PHI) {
-				continue;
-			}
-
-			inst->type = IR_INST_NOP;
-			for(size_t j = 0; j < list_len(inst->phi_args); j++) {
-				reg_pmov_t mov = { .dst = inst->r0, .src = inst->phi_args[j] };
-				list_append(pmovs[j]->pmov_args, mov);
-			}
-
-			list_delete(inst->phi_args);
-		}
-
-		free(pmovs);
-	}
-}
-
-static LIST(reg_pmov_t) deparallelize_pmov(ir_inst_t *pmov)
-{
-	UNUSEDA int useless = 0;
-	for(size_t i = 0; i < list_len(pmov->pmov_args); i++) {
-		reg_pmov_t arg = pmov->pmov_args[i];
-		for(size_t j = 0; j < list_len(pmov->pmov_args); j++) {
-			reg_pmov_t chk = pmov->pmov_args[j];
-			if(chk.src == arg.dst) {
-				reg_t *orig = arg.dst;
-				arg.dst = reg_make();
-				arg.dst->insty = IR_INST_PMOV;
-				arg.dst->lhs = orig;
-				pmov->pmov_args[i].dst = arg.dst;
-				goto comehere;
-			}
-		}
-comehere:
-		useless = 0;
-	}
-
-	LIST(reg_pmov_t) seq = list_make(reg_pmov_t);
-
-	for(size_t i = 0; i < list_len(pmov->pmov_args); i++) {
-		list_append(seq, pmov->pmov_args[i]);
-	}
-
-	for(size_t i = 0; i < list_len(pmov->pmov_args); i++) {
-		if(pmov->pmov_args[i].dst->insty == IR_INST_PMOV) {
-			list_append(seq, ((reg_pmov_t){ .dst = pmov->pmov_args[i].dst->lhs,
-											.src = pmov->pmov_args[i].dst }));
-		}
-	}
-
-	list_delete(pmov->pmov_args);
-	return seq;
-}
-
-/* turns parallel moves -> sequential moves */
-static void deparallelize_pmovs(ir_func_t *fun)
-{
-	/* append NOP to each block, find befores */
-	for(size_t i = 0; i < list_len(fun->blocks); i++) {
-		ir_blk_t *blk = fun->blocks[i];
-		ir_inst_t *nop = ins_nop();
-		nop->next = blk->insts;
-		blk->insts = nop;
-		find_before_last_term_ins(blk);
-	}
-
-	for(size_t i = 0; i < list_len(fun->blocks); i++) {
-		ir_blk_t *blk = fun->blocks[i];
-		ir_inst_t *prev = blk->insts;
-		ir_inst_t *nxt;
-		for(ir_inst_t *inst = blk->insts->next; inst; inst = nxt) {
-			nxt = inst->next;
-			LIST(reg_pmov_t) seq = NULL;
-			if(inst->type != IR_INST_PMOV) {
-				goto end;
-			}
-			inst->type = IR_INST_NOP;
-
-			seq = deparallelize_pmov(inst);
-			ir_inst_delete(inst);
-			if(list_len(seq) == 0) {
-				list_delete(seq);
-				goto end;
-			}
-
-			ir_inst_t *mov = ins_mov(NULL, NULL);
-			ir_inst_t *prev_mov = NULL;
-			ir_inst_t *newmov;
-			prev->next = mov;
-			for(size_t i = 0; i < list_len(seq); i++) {
-				reg_pmov_t cur_mov = seq[i];
-				mov->r0 = cur_mov.dst;
-				mov->r1 = cur_mov.src;
-				newmov = ins_mov(NULL, NULL);
-				prev_mov = mov;
-				mov->next = newmov;
-				mov = newmov;
-			}
-			ir_inst_delete(newmov);
-			prev_mov->next = nxt;
-			list_delete(seq);
-
-end:
-			prev = inst;
-		}
-	}
-}
-
 /* turn the IR from an SSA form into a typical 3AC IR.
  * Removes and deallocates all phis, turning them into NOPs. */
 void ir_ssa_exit(ir_func_t *fun)
 {
+	ir_fix(fun);
 	ir_blk_flow(fun);
 	split_critical(fun);
+	ir_nopremover(fun);
 	deparallelize_pmovs(fun);
+	ir_nopremover(fun);
+	ir_fix(fun);
+
 	return;
 }

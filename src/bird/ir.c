@@ -640,7 +640,7 @@ void ir_print_inst(ir_blk_t *blk, ir_inst_t *ins, int mode)
 			reg_pmov_t mov = ins->pmov_args[i];
 			printf("\t%%r%ld = %%r%ld\n", mov.dst->vr, mov.src->vr);
 		}
-		printf("}");
+		printf("\t}");
 	}; break;
 	case IR_INST_BREQ:
 		out("br.eq %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,

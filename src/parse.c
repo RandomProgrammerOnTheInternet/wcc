@@ -493,13 +493,6 @@ static node_t *node_sub(node_t *lhs, node_t *rhs, token_t *tok)
 		return node_bin(NODE_SUB, lhs, rhs, tok);
 	}
 
-	/* if int - ptr, swap */
-	if(type_is_int(lhs->type)) {
-		node_t *tmp = lhs;
-		lhs = rhs;
-		rhs = tmp;
-	}
-
 	/* ptr - ptr is invalid */
 	if(type_is_ptr(lhs->type) && type_is_ptr(rhs->type)) {
 		compile_err(tok->loc, "cannot add two pointers");

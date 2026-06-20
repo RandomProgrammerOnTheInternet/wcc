@@ -3,7 +3,7 @@
 void *malloc(long size);
 void free(void *ptr);
 
-#include "test/one.c"
+void print_num(int num);
 
 int primes()
 {
@@ -38,6 +38,8 @@ int primes()
 
 	return max;
 }
+
+#include "test/one.c"
 
 int main()
 {

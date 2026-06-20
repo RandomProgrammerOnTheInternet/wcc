@@ -642,6 +642,7 @@ static void ir_simplify(ir_func_t *fun, int amount)
 			}
 
 			/* seed immediate values */
+
 			if(ins->type == IR_INST_IMM) {
 				/* remove useless immediate loads */
 				if(are_imm[ins->r0->rr] &&

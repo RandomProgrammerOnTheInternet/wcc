@@ -194,17 +194,6 @@ static int inverse_brcmp(enum ins_type ty)
 	}
 }
 
-static UNUSEDA reg_t *mov_root(reg_t *reg)
-{
-	if(reg->phi_arg) {
-		return reg;
-	}
-	if(reg->insty == IR_INST_MOV) {
-		return reg->lhs;
-	}
-	return reg;
-}
-
 static void ir_placemarks(ir_func_t *func)
 {
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
@@ -219,8 +208,9 @@ static void ir_placemarks(ir_func_t *func)
 
 			if(inst->type == IR_INST_PHI) {
 				for(size_t i = 0; i < list_len(inst->phi_args); i++) {
-					inst->phi_args[i]->phi_arg = true;
+					inst->phi_args[i]->phi_related = true;
 				}
+				inst->r0->phi_related = true;
 			}
 		}
 	}
@@ -782,8 +772,7 @@ static bool leads_to_phi(reg_t *r)
 	} while(0)
 
 /* or copy propagation, whatever you call it */
-/* doesn't work */
-static UNUSEDA int ir_mov_elim(ir_func_t *func)
+static int ir_mov_elim(ir_func_t *func)
 {
 	int change = 0;
 
@@ -794,9 +783,13 @@ static UNUSEDA int ir_mov_elim(ir_func_t *func)
 				continue;
 			}
 
-			/* cannot copy prop if rhs of mov leads to a phi */
-			if(leads_to_phi(inst->r1) || inst->r1->phi_arg) {
+			if(leads_to_phi(inst->r1) || inst->r1->phi_related) {
 				inst->r1->insty = IR_INST_NOP;
+				inst->r0->phi_related = true;
+			}
+
+			if(leads_to_phi(inst->r0) || inst->r0->phi_related) {
+				inst->r0->insty = IR_INST_NOP;
 			}
 		}
 	}
@@ -813,15 +806,16 @@ static UNUSEDA int ir_mov_elim(ir_func_t *func)
 					REPLACE(inst->call_args[j]->r);
 				}
 			}
-			if(inst->type == IR_INST_PHI) {
-				for(size_t j = 0; j < list_len(inst->phi_args); j++) {
-					REPLACE(inst->phi_args[j]);
-				}
-			}
 		}
 	}
 
 	return change;
+}
+
+static bool ins_is_mem(enum ins_type t)
+{
+	return t == IR_INST_LOAD || t == IR_INST_LOADS || t == IR_INST_LOADSS ||
+		   t == IR_INST_STORE || t == IR_INST_STORES || t == IR_INST_STORESS;
 }
 
 static int ir_dce(ir_func_t *func)
@@ -835,12 +829,12 @@ static int ir_dce(ir_func_t *func)
 				continue;
 			}
 
-			if(ins->r0->phi_arg) {
+			if(ins->r0->phi_related) {
 				continue;
 			}
 
 			/* todo: this might break in some scenarios */
-			if(ins->r0->def == ins->r0->last_use) {
+			if(ins->r0->def == ins->r0->last_use && !ins_is_mem(ins->type)) {
 				change = 1;
 				if(ins->type == IR_INST_CALL) {
 					ins->r0 = NULL;
@@ -906,14 +900,12 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		ir_blk_liveness(func);
 		ir_placemarks(func);
 
-		/* dead code elim */
+		/* dead code elim + extras */
 		{
-			/* still doesn't work */
-			// change |= ir_mov_elim(func);
+			change |= ir_imm_elim(func);
+			change |= ir_mov_elim(func);
 			change |= ir_dce(func);
 			change |= ir_simpleopt(func);
-
-			change |= ir_imm_elim(func);
 
 			ir_nopremover(func);
 			ir_fix(func);
