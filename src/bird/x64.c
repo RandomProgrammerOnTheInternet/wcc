@@ -338,7 +338,7 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			if(stack_used) {
 				fprintf(f, "\tsub rsp, %zu\n", stack_used);
 			}
-			printf("\tpop r11\n\tpop r10\n");
+			fprintf(f, "\tpop r11\n\tpop r10\n");
 		} break;
 
 		case IR_INST_BREQ:
