@@ -145,7 +145,7 @@ static reg_t *find_var(reg_t *reg)
 	return r;
 }
 
-static ir_func_t *func;
+static ir_func_t *func_phi;
 static LIST(ir_blk_t *) sealed_blks;
 
 static reg_t *write_reg(ir_blk_t *blk, reg_t *reg, reg_t *val)
@@ -165,6 +165,10 @@ static ir_inst_t *insert_phi(ir_blk_t *blk)
 {
 	ir_inst_t *phi = ir_inst_make(IR_INST_PHI, NULL, NULL, NULL, 0);
 	phi->phi_args = list_make(reg_t *);
+	phi->phi_preds = list_make(ir_blk_t *);
+	for(size_t i = 0; i < list_len(blk->pred); i++) {
+		list_append(phi->phi_preds, blk->pred[i]);
+	}
 	phi->next = blk->insts->next;
 	blk->insts->next = phi;
 	return phi;
@@ -178,6 +182,7 @@ static reg_t *try_remove_trivial_phi(ir_inst_t *phi)
 		phi->type = IR_INST_MOV;
 		phi->r1 = phi->phi_args[0];
 		list_delete(phi->phi_args);
+		list_delete(phi->phi_preds);
 		return phi->r0;
 	}
 
@@ -204,6 +209,7 @@ static reg_t *try_remove_trivial_phi(ir_inst_t *phi)
 	/* replace all uses of `phi->r0` to `same` */
 	phi->type = IR_INST_NOP;
 	list_delete(phi->phi_args);
+	list_delete(phi->phi_preds);
 
 #define REPLACE(x)                       \
 	do {                                 \
@@ -217,8 +223,8 @@ static reg_t *try_remove_trivial_phi(ir_inst_t *phi)
 
 	LIST(ir_inst_t *) users = list_make(ir_inst_t *);
 
-	for(size_t i = 0; i < list_len(func->blocks); i++) {
-		ir_blk_t *blk = func->blocks[i];
+	for(size_t i = 0; i < list_len(func_phi->blocks); i++) {
+		ir_blk_t *blk = func_phi->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
 			REPLACE(ins->r0);
 			REPLACE(ins->r1);
@@ -323,6 +329,25 @@ static void replace_edge(ir_blk_t *blk, ir_blk_t *orig, ir_blk_t *replace)
 	return;
 }
 
+static void replace_phis(ir_func_t *func, ir_blk_t *orig, ir_blk_t *replace)
+{
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type != IR_INST_PHI) {
+				continue;
+			}
+
+			for(size_t i = 0; i < list_len(inst->phi_args); i++) {
+				if(inst->phi_preds[i] == orig) {
+					inst->phi_preds[i] = replace;
+				}
+			}
+		}
+	}
+	return;
+}
+
 /* pre-step to destroying SSA form */
 static void split_critical(ir_func_t *fun)
 {
@@ -353,9 +378,11 @@ static void split_critical(ir_func_t *fun)
 			continue;
 		}
 
-		ir_inst_t **pmovs = zcalloc(list_len(blk->pred), sizeof(ir_inst_t *));
+		ir_inst_t **pmovs =
+			zcalloc(list_len(blk->pred) * 2, sizeof(ir_inst_t *));
 
-		for(size_t j = 0; j < list_len(blk->pred); j++) {
+		size_t orig_len_pred = list_len(blk->pred);
+		for(size_t j = 0; j < orig_len_pred; j++) {
 			ir_blk_t *pred = blk->pred[j];
 			ir_inst_t *pmov = ir_inst_make(IR_INST_PMOV, NULL, NULL, NULL, 0);
 			pmovs[j] = pmov;
@@ -368,6 +395,7 @@ static void split_critical(ir_func_t *fun)
 				newblk->num = ++counter;
 				list_append(fun->blocks, newblk);
 				replace_edge(pred, blk, newblk);
+				replace_phis(fun, blk, newblk);
 				ir_blk_flow(fun);
 			} else {
 				pred->tailprev->next = pmov;
@@ -383,11 +411,15 @@ static void split_critical(ir_func_t *fun)
 
 			inst->type = IR_INST_NOP;
 			for(size_t j = 0; j < list_len(inst->phi_args); j++) {
+				if(!pmovs[j]) {
+					continue;
+				}
 				reg_pmov_t mov = { .dst = inst->r0, .src = inst->phi_args[j] };
 				list_append(pmovs[j]->pmov_args, mov);
 			}
 
 			list_delete(inst->phi_args);
+			list_delete(inst->phi_preds);
 		}
 
 		free(pmovs);

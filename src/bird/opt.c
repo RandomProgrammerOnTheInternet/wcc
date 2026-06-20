@@ -5,16 +5,42 @@
 
 extern int debug;
 
-/* optimize
- * %reg = leas #off
- * ...
- * %other_reg = load %reg
- * to
- * %other_reg = loads #off
- * and then
- * %reg = leas #off
- 
- */
+static void fix_phis(ir_func_t *func)
+{
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type != IR_INST_PHI) {
+				continue;
+			}
+
+			if(list_len(blk->pred) == 1 && list_len(inst->phi_preds) != 1) {
+				/* remove the odd one(s) out */
+				size_t ok_i;
+				bool set = false;
+
+				for(size_t i = 0; i < list_len(inst->phi_preds); i++) {
+					inst->phi_args[i]->phi_related = false;
+					if(inst->phi_preds[i] == blk->pred[0]) {
+						set = true;
+						ok_i = i;
+						break;
+					}
+				}
+
+				ASSERT(set, "how");
+
+				inst->type = IR_INST_MOV;
+				inst->r1 = inst->phi_args[ok_i];
+				inst->r1->phi_related = false;
+				inst->r0->phi_related = false;
+
+				list_delete(inst->phi_args);
+				list_delete(inst->phi_preds);
+			}
+		}
+	}
+}
 
 static ir_inst_t *find_last_or_flow_ins(ir_inst_t *root)
 {
@@ -27,6 +53,17 @@ static ir_inst_t *find_last_or_flow_ins(ir_inst_t *root)
 	ASSERT(ir_inst_is_term(ret->type), "IR is not constructed properly");
 	return NULL;
 }
+
+/* optimize
+ * %reg = leas #off
+ * ...
+ * %other_reg = load %reg
+ * to
+ * %other_reg = loads #off
+ * and then
+ * %reg = leas #off
+ 
+ */
 
 static int ir_stackopt(ir_func_t *func)
 {
@@ -844,6 +881,7 @@ static int ir_dce(ir_func_t *func)
 				} else {
 					if(ins->type == IR_INST_PHI) {
 						list_delete(ins->phi_args);
+						list_delete(ins->phi_preds);
 					}
 					ins->type = IR_INST_NOP;
 				}
@@ -888,6 +926,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 	}
 
 	ir_ssa_enter(func);
+	ir_blk_flow(func);
 
 	if(debug) {
 		printf("After SSA constr.:\n");
@@ -909,6 +948,8 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 			change |= ir_mov_elim(func);
 			change |= ir_dce(func);
 			change |= ir_simpleopt(func);
+			change |= ir_fold(func);
+			fix_phis(func);
 
 			ir_nopremover(func);
 			ir_fix(func);
@@ -937,6 +978,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		}
 
 		left--;
+		ir_blk_flow(func);
 	}
 
 	ir_nopremover(func);

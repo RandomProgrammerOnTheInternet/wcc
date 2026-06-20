@@ -307,6 +307,7 @@ void ir_inst_delete(ir_inst_t *ins)
 	}
 	if(ins->type == IR_INST_PHI) {
 		list_delete(ins->phi_args);
+		list_delete(ins->phi_preds);
 	}
 	free(ins);
 	return;
@@ -491,7 +492,7 @@ void ir_fix(ir_func_t *func)
 
 char size_suf[9] = { [1] = 'b', [2] = 'w', [4] = 'l', [8] = 'q' };
 
-static void print_phiarg(ir_blk_t *blk, ir_inst_t *phi, int indx, int mode)
+static void print_phiarg(ir_inst_t *phi, int indx, int mode)
 {
 	reg_t *r = phi->phi_args[indx];
 	long rn;
@@ -501,7 +502,7 @@ static void print_phiarg(ir_blk_t *blk, ir_inst_t *phi, int indx, int mode)
 		rn = r ? r->rr : -1;
 	}
 
-	printf("[BB%ld, %%r%ld]", blk->pred[indx]->num, rn);
+	printf("[BB%ld, %%r%ld]", phi->phi_preds[indx]->num, rn);
 	return;
 }
 
@@ -625,13 +626,13 @@ void ir_print_inst(ir_blk_t *blk, ir_inst_t *ins, int mode)
 		printf("%%r%ld = phi ", r0);
 		size_t count = list_len(ins->phi_args);
 		if(count >= 1) {
-			print_phiarg(blk, ins, 0, mode);
+			print_phiarg(ins, 0, mode);
 		}
 
 		size_t i = 1;
 		while(i < count) {
 			printf(", ");
-			print_phiarg(blk, ins, i++, mode);
+			print_phiarg(ins, i++, mode);
 		}
 	}; break;
 	case IR_INST_PMOV: {

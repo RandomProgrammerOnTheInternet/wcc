@@ -150,6 +150,7 @@ typedef struct ir_inst {
 	struct ir_blk *false_blk, *true_blk; /* for br */
 	LIST(callreg_t *) call_args; /* for call */
 	LIST(reg_t *) phi_args; /* for phi */
+	LIST(struct ir_blk *) phi_preds; /* for phi */
 	LIST(reg_pmov_t) pmov_args; /* for pmov */
 	char *fname; /* for call */
 	bool noopt; /* is this inst volatile? */
