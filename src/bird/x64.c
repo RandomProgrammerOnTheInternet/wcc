@@ -128,14 +128,16 @@ void ir_glob_emit_x64_sysv(FILE *f, ir_global_t *glob)
 	return;
 }
 
-static const char *x64_reg[6] = { "rbx", "r12", "r13", "r14", "r15", NULL };
-static const char *x64_reg8[6] = { "bl", "r12b", "r13b", "r14b", "r15b", NULL };
-static const char *x64_reg16[6] = { "bx", "r12w", "r13w", "r14w", "r15w", NULL };
-static const char *x64_reg32[6] = {
-	"ebx", "r12d", "r13d", "r14d", "r15d", NULL
-};
+static const char *x64_reg[8] = { "rbx", "r12", "r13", "r14",
+								  "r15", "r10", "r11", NULL };
+static const char *x64_reg8[8] = { "bl",   "r12b", "r13b", "r14b",
+								   "r15b", "r10b", "r11b", NULL };
+static const char *x64_reg16[8] = { "bx",	"r12w", "r13w", "r14w",
+									"r15w", "r10w", "r11w", NULL };
+static const char *x64_reg32[8] = { "ebx",	"r12d", "r13d", "r14d",
+									"r15d", "r10d", "r11d", NULL };
 
-static const int x64_reg_count = 5;
+static const int x64_reg_count = 7;
 
 static int64_t i64abs(int64_t v)
 {
@@ -311,6 +313,7 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			}
 		}; break;
 		case IR_INST_CALL: {
+			fprintf(f, "\tpush r10\n\tpush r11\n");
 			size_t stack_used = 0;
 			for(size_t i = 0; i < list_len(ins->call_args); i++) {
 				if(ins->call_args[i]->r->spilld) {
@@ -335,6 +338,7 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			if(stack_used) {
 				fprintf(f, "\tsub rsp, %zu\n", stack_used);
 			}
+			printf("\tpop r11\n\tpop r10\n");
 		} break;
 
 		case IR_INST_BREQ:
