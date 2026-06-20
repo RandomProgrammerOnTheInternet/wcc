@@ -564,8 +564,9 @@ static bool ir_choose_alloc_strat(ir_func_t *fun, int amount, int callee_cost,
 	return true; /* how did you get here? */
 }
 
-static void ir_simplify(ir_func_t *fun, int amount)
+static int ir_simplify(ir_func_t *fun, int amount)
 {
+	int change = 0;
 	long *imm = zcalloc(amount, sizeof(long));
 	bool *are_imm = zcalloc(amount, sizeof(bool));
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
@@ -584,6 +585,7 @@ static void ir_simplify(ir_func_t *fun, int amount)
 			if(ins->type == IR_INST_MOV && ins->r0->rr != -1 &&
 			   ins->r0->rr == ins->r1->rr && !ins->noopt) {
 				ins->type = IR_INST_NOP;
+				change = 1;
 			}
 
 			/* simplify
@@ -596,6 +598,7 @@ static void ir_simplify(ir_func_t *fun, int amount)
 			if(ins->type == IR_INST_LOADSS && nxt->type == IR_INST_STORESS &&
 			   ins->imm == nxt->imm) {
 				nxt->type = IR_INST_NOP;
+				change = 1;
 			}
 
 			/* simplify
@@ -613,6 +616,7 @@ static void ir_simplify(ir_func_t *fun, int amount)
 					nxt->type = IR_INST_MOV;
 					nxt->r1 = ins->r1;
 				}
+				change = 1;
 			}
 
 			/* simplify
@@ -625,6 +629,7 @@ static void ir_simplify(ir_func_t *fun, int amount)
 			   ins->r0->rr == nxt->r1->rr && ins->r1->rr == nxt->r0->rr &&
 			   !ins->noopt && !nxt->noopt) {
 				nxt->type = IR_INST_NOP;
+				change = 1;
 			}
 
 			/* remove useless insts where thing stored is never used
@@ -632,6 +637,7 @@ static void ir_simplify(ir_func_t *fun, int amount)
 			if(ins->r0 && ins->r0->def == ins->r0->last_use &&
 			   ins->type != IR_INST_CALL && !ins->noopt) {
 				ins->type = IR_INST_NOP;
+				change = 1;
 			}
 
 			/* if call ins, and the val is not used at all, remove
@@ -639,6 +645,7 @@ static void ir_simplify(ir_func_t *fun, int amount)
 			if(ins->r0 && ins->r0->def == ins->r0->last_use &&
 			   ins->type == IR_INST_CALL) {
 				ins->r0 = NULL;
+				change = 1;
 			}
 
 			/* seed immediate values */
@@ -647,6 +654,7 @@ static void ir_simplify(ir_func_t *fun, int amount)
 				/* remove useless immediate loads */
 				if(are_imm[ins->r0->rr] &&
 				   ins->imm == (uint64_t)imm[ins->r0->rr]) {
+					change = 1;
 					ins->type = IR_INST_NOP;
 				}
 				are_imm[ins->r0->rr] = 1;
@@ -656,6 +664,7 @@ static void ir_simplify(ir_func_t *fun, int amount)
 			}
 
 			if(ins->type == IR_INST_MOV && are_imm[ins->r1->rr]) {
+				change = 1;
 				ins->type = IR_INST_IMM;
 				ins->imm = imm[ins->r1->rr];
 			}
@@ -666,12 +675,13 @@ static void ir_simplify(ir_func_t *fun, int amount)
 
 	free(imm);
 	free(are_imm);
+	return change;
 }
 
 extern int debug;
 
 /* do register allocation all in one */
-void ir_finalize(ir_func_t *fun, int amount, enum ir_arch arch)
+void ir_finalize(ir_func_t *fun, int amount, int opt_level, enum ir_arch arch)
 {
 	ir_blk_reguse(fun);
 	ir_blk_fixup_entry(fun);
@@ -679,9 +689,14 @@ void ir_finalize(ir_func_t *fun, int amount, enum ir_arch arch)
 	ir_regalloc(allocated, amount);
 	ir_fix(fun);
 	ir_regalloc_spill(fun, allocated);
+	int tolerance = opt_level * 8;
+	int change = 1;
 	ir_fix(fun);
-	ir_simplify(fun, amount);
-	ir_fix(fun);
+	while(change || (tolerance)) {
+		tolerance--;
+		change = ir_simplify(fun, amount);
+		ir_fix(fun);
+	}
 
 	int callee_cost;
 	int caller_cost;
