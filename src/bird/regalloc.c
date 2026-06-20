@@ -689,7 +689,7 @@ void ir_finalize(ir_func_t *fun, int amount, int opt_level, enum ir_arch arch)
 	ir_regalloc(allocated, amount);
 	ir_fix(fun);
 	ir_regalloc_spill(fun, allocated);
-	int tolerance = opt_level * 8;
+	int tolerance = (opt_level * 8) + 1;
 	int change = 1;
 	ir_fix(fun);
 	while(change && tolerance) {

@@ -61,6 +61,7 @@ assert 229 "primes.c"
 assert 229 "primes2.c"
 assert 229 "primes_short.c"
 assert 1 "arrays.c"
+assert 5 "mov_elim.c"
 #todo proper alignment support (need to switch to sp-rel addressing)
 #assert 6 "align.c"
 assert 164 "sizeof_alignof.c"
