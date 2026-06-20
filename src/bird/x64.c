@@ -624,7 +624,7 @@ static void ir_func_save_regs(FILE *f, ir_func_t *fun)
 {
 	/* luckily x86_64 is CISC, ez */
 	for(size_t i = 0; i < x64_reg_count; i++) {
-		if(fun->alloc_used[i]) {
+		if(fun->alloc_used[i] && i != 5 && i != 6) {
 			fprintf(f, "\tpush %s\n", x64_reg[i]);
 		}
 	}
@@ -634,7 +634,7 @@ static void ir_func_save_regs(FILE *f, ir_func_t *fun)
 static void ir_func_restore_regs(FILE *f, ir_func_t *fun)
 {
 	for(size_t i = x64_reg_count - 1; i >= 0; i--) {
-		if(fun->alloc_used[i]) {
+		if(fun->alloc_used[i] && i != 5 && i != 6) {
 			fprintf(f, "\tpop %s\n", x64_reg[i]);
 		}
 
