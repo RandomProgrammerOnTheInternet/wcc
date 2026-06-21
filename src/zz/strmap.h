@@ -22,7 +22,7 @@ typedef struct strmap_hdr {
 } strmap_hdr_t;
 
 // clang-format off
-#define STRMAP(V) struct { zz_hashstr_t **keys; V *vals; }*
+#define STRMAP(V) struct { zz_hashstr_t **keys; V* vals; }*
 // clang-format on
 
 void strmap_donotuse_put(void *map, zz_hashstr_t *str, size_t size, void *obj);

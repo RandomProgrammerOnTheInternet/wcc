@@ -458,7 +458,7 @@ static void split_critical(ir_func_t *fun)
 		  * If I split the critical edge then `primes.c`
 		  * breaks. I don't know why. */
 		if(has_several_outgoing_edges(edge.from->tail) &&
-		   has_any_phis(edge.to) && list_len(edge.to) > 1) {
+		   list_len(edge.to->pred) > 1) {
 			/*
 			ir_inst_t *jmp = ins_jmp(edge.to);
 			ir_inst_t *nop = ins_nop();
@@ -470,7 +470,6 @@ static void split_critical(ir_func_t *fun)
 			replace_edge(edge.from, edge.to, critical);
 			replace_phis(edge.to, edge.from, critical);
 			edge.from = critical;
-			
 			assemble_pmov(edge, 2);
 			*/
 			assemble_pmov(edge, 0);
@@ -598,7 +597,7 @@ static void deparallelize_pmovs(ir_func_t *fun)
 
 			LIST(reg_pmov_t) seq = deparallelize_pmov(inst);
 			list_delete(inst->pmov_args);
-			movs = zrealloc(movs, sizeof(ir_inst_t *) * list_len(seq));
+			movs = zcalloc(sizeof(ir_inst_t *), list_len(seq));
 			for(size_t i = 0; i < list_len(seq); i++) {
 				reg_pmov_t pmov1 = seq[i];
 				ir_inst_t *mov = ins_mov(pmov1.dst, pmov1.src);
@@ -611,11 +610,9 @@ static void deparallelize_pmovs(ir_func_t *fun)
 			ir_inst_t *nxt = inst->next;
 			inst->next = movs[0];
 			inst = nxt;
+			free(movs);
+			list_delete(seq);
 		}
-	}
-
-	if(movs) {
-		free(movs);
 	}
 }
 

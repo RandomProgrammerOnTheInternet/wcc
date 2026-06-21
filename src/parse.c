@@ -1316,7 +1316,7 @@ parse_res_t parse_do(token_t *toks)
 	globals = strmap_make(obj_t *);
 	global_order = 0;
 	local_order = 0;
-	known_funcs = strmap_make(int);
+	known_funcs = strmap_make(obj_t *);
 	while(tok->kind != TOK_END) {
 		type_t *declspec = parse_declspec(tok, &tok);
 		type_t *decl = parse_declarator(declspec, tok, &tok);
