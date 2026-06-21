@@ -249,7 +249,11 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 									  long last_i)
 {
 	/* todo: smarter basic block placement */
-	fprintf(f, ".BB%ld:\n", blk->num);
+	fprintf(f, ".BB%ld: \t\t; preds = ", blk->num);
+	for(size_t i = 0; i < list_len(blk->pred); i++) {
+		fprintf(f, ".BB%ld, ", blk->pred[i]->num);
+	}
+	fprintf(f, "\n");
 	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
 		int r0 = ins->r0 && ins->r0->rr >= 0 ? arm_reg[ins->r0->rr] : -1;
 		int r1 = ins->r1 && ins->r1->rr >= 0 ? arm_reg[ins->r1->rr] : -1;

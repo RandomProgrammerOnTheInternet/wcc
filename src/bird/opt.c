@@ -106,17 +106,6 @@ static int ir_stackopt(ir_func_t *func)
 		}
 	}
 
-	/* replace those leas with nops */
-	for(size_t i = 0; i < list_len(func->blocks); i++) {
-		ir_blk_t *blk = func->blocks[i];
-		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-			if(ins->type == IR_INST_LEAS && ins->r0->stack_loc) {
-				ins->type = IR_INST_NOP;
-				changed = 1;
-			}
-		}
-	}
-
 	/* now, simply replace the load %leas_reg with loads #off */
 	/* and store %leas_reg, %reg with stores %reg, #off */
 	for(size_t i = 0; i < list_len(func->blocks); i++) {

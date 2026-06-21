@@ -3,6 +3,7 @@
 
 #include "bird/ir.h"
 #include "zz/base.h"
+#include "zz/strmap.h"
 #include "lex.h"
 #include "type.h"
 

@@ -1,5 +1,6 @@
 #include "type.h"
 #include "zz/arena.h"
+#include "zz/strmap.h"
 #include "parse.h"
 
 type_t *TY_INT = &(type_t){ .kind = TYPE_INT,
@@ -144,6 +145,8 @@ void type_propagate(node_t *node)
 	case NODE_LE:
 	case NODE_NE:
 	case NODE_LT:
+	case NODE_GT:
+	case NODE_GE:
 	case NODE_NUM:
 	case NODE_FUNCALL:
 		node->type = TY_LONG;
@@ -181,6 +184,9 @@ void type_propagate(node_t *node)
 			node->type = type_ptr_to(node->lhs->type->to);
 		} else {
 			node->type = type_ptr_to(node->lhs->type);
+		}
+		if(node->var) {
+			node->var->addressed = true;
 		}
 		if(node->lhs->type->kind == TYPE_VOID) {
 			compile_err(node->lhs->type->ident->loc, "invalid void decltype");

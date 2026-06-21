@@ -6,7 +6,7 @@
 
 STRMAP(obj_t *) locals = NULL;
 STRMAP(obj_t *) globals = NULL;
-STRMAP(int) known_funcs = NULL;
+STRMAP(obj_t *) known_funcs = NULL;
 long local_order = 0;
 long global_order = 0;
 
@@ -1232,10 +1232,17 @@ static obj_t *parse_function_def(type_t *decltype, token_t *tok, token_t **rest)
 		locals = NULL;
 	}
 	locals = strmap_make(obj_t *);
-	obj_t *func =
-		obj_make(mystrndup(decltype->ident->loc, decltype->ident->len),
-				 type_func_to(decltype), true);
 
+	obj_t *func;
+	char *name = mystrndup(decltype->ident->loc, decltype->ident->len);
+	obj_t **possible = strmap_get(known_funcs, name);
+	if(possible) {
+		func = *possible;
+		free(name);
+	} else {
+		func = obj_make_noadd(name, type_func_to(decltype), true);
+		func->order = local_order++;
+	}
 	tok = token_skip(tok, "(");
 
 	if(token_eq(tok, "void")) {
@@ -1279,13 +1286,16 @@ static obj_t *parse_function_def(type_t *decltype, token_t *tok, token_t **rest)
 
 end:
 
-	strmap_put(known_funcs, func->name, 1);
+	strmap_put(known_funcs, func->name, func);
 	if(token_eat(&tok, ";")) {
 		strmap_delete(locals);
 		locals = NULL;
 		*rest = tok;
 		return NULL;
 	}
+
+	strmap_put(locals, func->name, func);
+	strmap_put(known_funcs, func->name, func);
 
 	func->body = parse_compound_stmt(tok, &tok);
 	*rest = tok;

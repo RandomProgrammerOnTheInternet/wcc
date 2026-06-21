@@ -820,6 +820,32 @@ static ir_inst_t *find_last_or_flow_ins(ir_inst_t *root)
 	return NULL;
 }
 
+static UNUSEDA void ir_print_graph(ir_prog_t *prog)
+{
+	printf("digraph {\n");
+	for(size_t i = 0; i < list_len(prog->funcs); i++) {
+		ir_func_t *func = prog->funcs[i];
+		ir_fix(func);
+		printf("//%s\n", func->name);
+		for(size_t j = 0; j < list_len(func->blocks); j++) {
+			ir_blk_t *blk = func->blocks[j];
+			blk->tail = find_last_or_flow_ins(blk->insts);
+			if(blk->tail->type == IR_INST_RET) {
+				printf("\tBB%zu -> Ret_%s\n", blk->num, func->name);
+			} else if(blk->tail->type == IR_INST_JMP) {
+				printf("\tBB%zu -> BB%zu\n", blk->num,
+					   blk->tail->true_blk->num);
+			} else if(ir_inst_is_br(blk->tail->type)) {
+				printf("\tBB%zu -> BB%zu\n", blk->num,
+					   blk->tail->true_blk->num);
+				printf("\tBB%zu -> BB%zu\n", blk->num,
+					   blk->tail->false_blk->num);
+			}
+		}
+	}
+	printf("}\n");
+}
+
 /* generates code for an IR program */
 /* handles all the function finalization stuff */
 void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt)
@@ -868,10 +894,11 @@ void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt)
 		}
 
 		ir_opt(func, opt, arch);
-		ir_finalize(func, arch == IR_ARCH_AARCH64_APPLE ? 5 : 5, opt, arch);
+		ir_finalize(func, arch == IR_ARCH_AARCH64_APPLE ? 9 : 5, opt, arch);
 
 		for(size_t j = 0; j < list_len(func->blocks); j++) {
-			func->blocks[j]->num = acc++;
+			ir_blk_t *blk = func->blocks[j];
+			blk->num = acc++;
 		}
 
 		if(debug) {

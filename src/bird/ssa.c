@@ -89,16 +89,17 @@ static void postorder_visit(LIST(long) postorder, ir_blk_t *blk)
 	}
 
 	blk->visited = true;
-	union_(postorder, blk->num);
 
 	if(blk->tail->true_blk) {
-		union_(postorder, blk->tail->true_blk->num);
+		// union_(postorder, blk->tail->true_blk->num);
 		postorder_visit(postorder, blk->tail->true_blk);
 	}
 	if(blk->tail->false_blk) {
-		union_(postorder, blk->tail->false_blk->num);
+		// union_(postorder, blk->tail->false_blk->num);
 		postorder_visit(postorder, blk->tail->false_blk);
 	}
+
+	union_(postorder, blk->num);
 
 	return;
 }
@@ -317,6 +318,16 @@ static bool has_several_outgoing_edges(ir_inst_t *ins)
 	return ins->true_blk != ins->false_blk;
 }
 
+static bool has_any_phis(ir_blk_t *blk)
+{
+	for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+		if(inst->type == IR_INST_PHI) {
+			return true;
+		}
+	}
+	return false;
+}
+
 static void replace_edge(ir_blk_t *blk, ir_blk_t *orig, ir_blk_t *replace)
 {
 	ir_inst_t *last = blk->tail;
@@ -329,19 +340,16 @@ static void replace_edge(ir_blk_t *blk, ir_blk_t *orig, ir_blk_t *replace)
 	return;
 }
 
-static void replace_phis(ir_func_t *func, ir_blk_t *orig, ir_blk_t *replace)
+static void replace_phis(ir_blk_t *blk, ir_blk_t *orig, ir_blk_t *replace)
 {
-	for(size_t i = 0; i < list_len(func->blocks); i++) {
-		ir_blk_t *blk = func->blocks[i];
-		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
-			if(inst->type != IR_INST_PHI) {
-				continue;
-			}
+	for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+		if(inst->type != IR_INST_PHI) {
+			continue;
+		}
 
-			for(size_t i = 0; i < list_len(inst->phi_args); i++) {
-				if(inst->phi_preds[i] == orig) {
-					inst->phi_preds[i] = replace;
-				}
+		for(size_t i = 0; i < list_len(inst->phi_args); i++) {
+			if(inst->phi_preds[i] == orig) {
+				inst->phi_preds[i] = replace;
 			}
 		}
 	}
@@ -353,32 +361,64 @@ typedef struct edge {
 	ir_blk_t *to; /* succ */
 } edge_t;
 
-/* pre-step to destroying SSA form */
-static UNUSEDA void spilt_critical(ir_func_t *fun)
+static bool has_edge(LIST(edge_t) list, edge_t want)
 {
-	/* append NOP to each block, find befores */
-	for(size_t i = 0; i < list_len(fun->blocks); i++) {
-		ir_blk_t *blk = fun->blocks[i];
-		ir_inst_t *nop = ins_nop();
-		nop->next = blk->insts;
-		blk->insts = nop;
-		find_before_last_term_ins(blk);
+	for(size_t i = 0; i < list_len(list); i++) {
+		if(list[i].from == want.from && list[i].to == want.to) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/* where=0: put at end of `edge.from`
+ * where=1: put at start of `edge.to`
+ * where=2: put at start of `edge.from`
+ */
+static void assemble_pmov(edge_t edge, int where)
+{
+	/* want to collect phis from `edge.to` where we sel
+	 * pred as `edge.from`. */
+	ir_inst_t *pmov = ir_inst_make(IR_INST_PMOV, NULL, NULL, NULL, 0);
+	pmov->pmov_args = list_make(reg_pmov_t);
+
+	for(ir_inst_t *inst = edge.to->insts; inst; inst = inst->next) {
+		if(inst->type != IR_INST_PHI) {
+			continue;
+		}
+		reg_t *dst = inst->r0;
+		for(size_t j = 0; j < list_len(inst->phi_args); j++) {
+			if(inst->phi_preds[j] == edge.from) {
+				reg_pmov_t mov = { .dst = dst, .src = inst->phi_args[j] };
+				list_append(pmov->pmov_args, mov);
+				goto cont;
+			}
+		}
+cont:;
 	}
 
-	UNUSEDA long counter = fun->blocks[list_len(fun->blocks) - 1]->num;
-
-	LIST(edge_t) edges = list_make(edge_t);
-
-	/* collect all edges */
-
-	/* TODO */
-
-	list_delete(edges);
+	switch(where) {
+	case 2: /* start of `edge.from` (critical) */
+		pmov->next = edge.from->insts->next;
+		edge.from->insts->next = pmov;
+		break;
+	case 1: /* start of `edge.to` */
+		pmov->next = edge.to->insts->next;
+		edge.to->insts->next = pmov;
+		break;
+	case 0: /* end of `edge.from` */
+		pmov->next = edge.from->tailprev->next;
+		edge.from->tailprev->next = pmov;
+		break;
+	default: /* unreachable */
+		break;
+	}
 
 	return;
 }
 
-static void split_critical_old(ir_func_t *fun)
+/* pre-step to destroying SSA form */
+static void split_critical(ir_func_t *fun)
 {
 	/* append NOP to each block, find befores */
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
@@ -391,68 +431,71 @@ static void split_critical_old(ir_func_t *fun)
 
 	long counter = fun->blocks[list_len(fun->blocks) - 1]->num;
 
-	size_t orig_len = list_len(fun->blocks);
-	for(size_t i = 0; i < orig_len; i++) {
+	LIST(edge_t) edges = list_make(edge_t);
+
+	/* collect all edges */
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
-
-		bool has_phis = false;
-		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
-			if(inst->type == IR_INST_PHI) {
-				has_phis = true;
-				break;
+		for(size_t i = 0; i < list_len(blk->pred); i++) {
+			edge_t edge = { .from = blk->pred[i], .to = blk };
+			if(!has_edge(edges, edge)) {
+				list_append(edges, edge);
 			}
 		}
-
-		if(!has_phis) {
-			continue;
-		}
-
-		ir_inst_t **pmovs =
-			zcalloc(list_len(blk->pred) * 2, sizeof(ir_inst_t *));
-
-		size_t orig_len_pred = list_len(blk->pred);
-		for(size_t j = 0; j < orig_len_pred; j++) {
-			ir_blk_t *pred = blk->pred[j];
-			ir_inst_t *pmov = ir_inst_make(IR_INST_PMOV, NULL, NULL, NULL, 0);
-			pmovs[j] = pmov;
-			pmov->pmov_args = list_make(reg_pmov_t);
-			/* TODO: this doesn't work.. why? */
-			if(0 && has_several_outgoing_edges(pred->tail)) {
-				ir_inst_t *jmp = ins_jmp(blk);
-				pmov->next = jmp;
-				ir_blk_t *newblk = ir_blk_make(pmov);
-				newblk->num = ++counter;
-				list_append(fun->blocks, newblk);
-				replace_edge(pred, blk, newblk);
-				replace_phis(fun, blk, newblk);
-				ir_blk_flow(fun);
-			} else {
-				pred->tailprev->next = pmov;
-				pmov->next = pred->tail;
-				pred->tailprev = pred->tailprev->next;
-			}
-		}
-
-		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
-			if(inst->type != IR_INST_PHI) {
-				continue;
-			}
-
-			inst->type = IR_INST_NOP;
-			for(size_t j = 0; j < list_len(inst->phi_args); j++) {
-				if(!pmovs[j]) {
-					continue;
-				}
-				reg_pmov_t mov = { .dst = inst->r0, .src = inst->phi_args[j] };
-				list_append(pmovs[j]->pmov_args, mov);
-			}
-
-			list_delete(inst->phi_args);
-			list_delete(inst->phi_preds);
-		}
-
-		free(pmovs);
 	}
+
+	/* iterate over the edges */
+	for(size_t i = 0; i < list_len(edges); i++) {
+		edge_t edge = edges[i];
+
+		/* split the edge if:
+		 * - pred has several outgoing edges
+		 * - succ has several preds
+		 * - succ has any phis */
+		/* TODO: still doesnt work for some reason
+		  * that I do not know. But if I don't split the
+		  * critical edge then everything is fine.
+		  * If I split the critical edge then `primes.c`
+		  * breaks. I don't know why. */
+		if(has_several_outgoing_edges(edge.from->tail) &&
+		   has_any_phis(edge.to) && list_len(edge.to) > 1) {
+			/*
+			ir_inst_t *jmp = ins_jmp(edge.to);
+			ir_inst_t *nop = ins_nop();
+			nop->next = jmp;
+			ir_blk_t *critical = ir_blk_make(nop);
+			critical->num = ++counter;
+			find_before_last_term_ins(critical);
+			list_append(fun->blocks, critical);
+			replace_edge(edge.from, edge.to, critical);
+			replace_phis(edge.to, edge.from, critical);
+			edge.from = critical;
+			
+			assemble_pmov(edge, 2);
+			*/
+			assemble_pmov(edge, 0);
+		} else if(has_several_outgoing_edges(edge.from->tail)) {
+			assemble_pmov(edge, 1);
+		} else {
+			assemble_pmov(edge, 0);
+		}
+	}
+
+	/* delete phis */
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(ins->type == IR_INST_PHI) {
+				list_delete(ins->phi_args);
+				list_delete(ins->phi_preds);
+				ins->type = IR_INST_NOP;
+			}
+		}
+	}
+
+	ir_blk_flow(fun);
+
+	list_delete(edges);
 
 	return;
 }
@@ -539,47 +582,40 @@ static void deparallelize_pmovs(ir_func_t *fun)
 		find_before_last_term_ins(blk);
 	}
 
+	ir_inst_t **movs = NULL;
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
-		ir_inst_t *prev = blk->insts;
-		ir_inst_t *nxt;
-		for(ir_inst_t *inst = blk->insts->next; inst; inst = nxt) {
-			nxt = inst->next;
-			LIST(reg_pmov_t) seq = NULL;
+		for(ir_inst_t *inst = blk->insts->next; inst; inst = inst->next) {
 			if(inst->type != IR_INST_PMOV) {
-				goto end;
+				continue;
 			}
+
 			inst->type = IR_INST_NOP;
+			if(list_len(inst->pmov_args) == 0) {
+				list_delete(inst->pmov_args);
+				continue;
+			}
 
-			seq = deparallelize_pmov(inst);
+			LIST(reg_pmov_t) seq = deparallelize_pmov(inst);
 			list_delete(inst->pmov_args);
-			ir_inst_delete(inst);
-			if(list_len(seq) == 0) {
-				prev->next = nxt;
-				list_delete(seq);
-				goto end;
-			}
-
-			ir_inst_t *mov = ins_mov(NULL, NULL);
-			ir_inst_t *prev_mov = NULL;
-			ir_inst_t *newmov;
-			prev->next = mov;
+			movs = zrealloc(movs, sizeof(ir_inst_t *) * list_len(seq));
 			for(size_t i = 0; i < list_len(seq); i++) {
-				reg_pmov_t cur_mov = seq[i];
-				mov->r0 = cur_mov.dst;
-				mov->r1 = cur_mov.src;
-				newmov = ins_mov(NULL, NULL);
-				prev_mov = mov;
-				mov->next = newmov;
-				mov = newmov;
+				reg_pmov_t pmov1 = seq[i];
+				ir_inst_t *mov = ins_mov(pmov1.dst, pmov1.src);
+				movs[i] = mov;
 			}
-			ir_inst_delete(newmov);
-			prev_mov->next = nxt;
-			list_delete(seq);
-
-end:
-			prev = inst;
+			for(size_t i = 0; i < list_len(seq) - 1; i++) {
+				movs[i]->next = movs[i + 1];
+			}
+			movs[list_len(seq) - 1]->next = inst->next;
+			ir_inst_t *nxt = inst->next;
+			inst->next = movs[0];
+			inst = nxt;
 		}
+	}
+
+	if(movs) {
+		free(movs);
 	}
 }
 
@@ -593,7 +629,7 @@ void ir_ssa_enter(ir_func_t *fun)
 
 	sealed_blks = list_make(ir_blk_t *);
 
-	/* append NOP to each block, find befores */
+	/* append 2 NOPs to each block, find befores */
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
 		ir_inst_t *nop = ins_nop();
@@ -639,7 +675,6 @@ void ir_ssa_enter(ir_func_t *fun)
 		}
 	}
 
-	ir_nopremover(fun);
 	for(size_t i = 0; i < list_len(postorder); i++) {
 		seal_block(fun->blocks[i]);
 	}
@@ -652,6 +687,8 @@ void ir_ssa_enter(ir_func_t *fun)
 		list_delete(allocated[i]->blkregs);
 	}
 
+	// ir_dump(fun, 'v');
+
 	list_delete(sealed_blks);
 	list_delete(postorder);
 	list_delete(allocated);
@@ -663,10 +700,10 @@ void ir_ssa_enter(ir_func_t *fun)
  * Removes and deallocates all phis, turning them into NOPs. */
 void ir_ssa_exit(ir_func_t *fun)
 {
+	ir_nopremover(fun);
 	ir_fix(fun);
 	ir_blk_flow(fun);
-	split_critical_old(fun);
-	ir_nopremover(fun);
+	split_critical(fun);
 	deparallelize_pmovs(fun);
 	ir_nopremover(fun);
 	ir_fix(fun);

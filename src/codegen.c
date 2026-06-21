@@ -333,7 +333,11 @@ reg_t *codegen_expr(node_t *node)
 		emit_shl(res, lhs, rhs);
 		break;
 	case NODE_SHR:
-		emit_ashr(res, lhs, rhs);
+		if(type->unsignd) {
+			emit_ashr(res, lhs, rhs);
+		} else {
+			emit_shr(res, lhs, rhs);
+		}
 		break;
 	case NODE_AND:
 		emit_and(res, lhs, rhs);
@@ -368,13 +372,25 @@ reg_t *codegen_expr(node_t *node)
 		break;
 	}
 	case NODE_MUL:
-		emit_smul(res, lhs, rhs);
+		if(type->unsignd) {
+			emit_umul(res, lhs, rhs);
+		} else {
+			emit_smul(res, lhs, rhs);
+		}
 		break;
 	case NODE_DIV:
-		emit_sdiv(res, lhs, rhs);
+		if(type->unsignd) {
+			emit_udiv(res, lhs, rhs);
+		} else {
+			emit_sdiv(res, lhs, rhs);
+		}
 		break;
 	case NODE_MOD:
-		emit_smod(res, lhs, rhs);
+		if(type->unsignd) {
+			emit_umod(res, lhs, rhs);
+		} else {
+			emit_smod(res, lhs, rhs);
+		}
 		break;
 	case NODE_VAR:
 		res = calc_addr(node);
@@ -388,16 +404,32 @@ reg_t *codegen_expr(node_t *node)
 		emit_ne(res, lhs, rhs);
 		break;
 	case NODE_LE:
-		emit_sle(res, lhs, rhs);
+		if(type->unsignd) {
+			emit_ule(res, lhs, rhs);
+		} else {
+			emit_sle(res, lhs, rhs);
+		}
 		break;
 	case NODE_LT:
-		emit_slt(res, lhs, rhs);
+		if(type->unsignd) {
+			emit_ult(res, lhs, rhs);
+		} else {
+			emit_slt(res, lhs, rhs);
+		}
 		break;
 	case NODE_GE:
-		emit_sge(res, lhs, rhs);
+		if(type->unsignd) {
+			emit_uge(res, lhs, rhs);
+		} else {
+			emit_sge(res, lhs, rhs);
+		}
 		break;
 	case NODE_GT:
-		emit_sgt(res, lhs, rhs);
+		if(type->unsignd) {
+			emit_ugt(res, lhs, rhs);
+		} else {
+			emit_sgt(res, lhs, rhs);
+		}
 		break;
 	}
 

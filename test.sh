@@ -32,6 +32,7 @@ assert() {
     passing=0
   fi
 }
+assert 0 "helloworld.c"
 assert 0 "null_stmt.c"
 assert 0 "ret0.c"
 assert 1 "sub.c"
@@ -56,6 +57,7 @@ assert 1 "call.c"
 assert 156 "call_many.c"
 assert 2 "types.c"
 assert 3 "funs.c"
+assert 1 "div.c"
 assert 251 "triangle.c"
 assert 229 "primes.c"
 assert 229 "primes2.c"

@@ -1,5 +1,4 @@
 int strlen(char *s);
-void printf(char *s);
 
 int main()
 {
@@ -17,8 +16,6 @@ int main()
 			return 0;
 		}
 	}
-
-	printf("\tHello, World!\r\n");
 
 	return (str[0] == first_letter) && (str[0] == first_letter_lit);
 }
