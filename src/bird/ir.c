@@ -321,6 +321,7 @@ ir_blk_t *ir_blk_make(ir_inst_t *insts)
 	blk->insts = insts;
 	blk->visited = false;
 	blk->pred = list_make(ir_blk_t *);
+	blk->succ = list_make(ir_blk_t *);
 	blk->incomplete_phis = list_make(ir_inst_t *);
 	blk->regs_def = list_make(reg_t *);
 	blk->regs_in = list_make(reg_t *);
@@ -346,6 +347,7 @@ void ir_blk_add(ir_blk_t *blk, ir_inst_t *inst)
 void ir_blk_delete(ir_blk_t *blk)
 {
 	list_delete(blk->pred);
+	list_delete(blk->succ);
 	list_delete(blk->incomplete_phis);
 	list_delete(blk->regs_def);
 	list_delete(blk->regs_in);
@@ -751,7 +753,13 @@ void ir_dump(ir_func_t *fun, int mode)
 
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
-		printf("BB%ld:\n", blk->num);
+		printf("BB%ld: ; preds = ", blk->num);
+		for(size_t j = 0; j < list_len(blk->pred); j++) {
+			printf("BB%ld%s", blk->pred[j]->num,
+				   j == (list_len(blk->pred) - 1) ? "" : ", ");
+		}
+		putchar('\n');
+
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
 			putchar('\t');
 			ir_print_inst(blk, inst, mode);
@@ -911,6 +919,8 @@ void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt)
 		}
 		ir_func_emit(f, func, arch);
 	}
+
+	// ir_print_graph(prog);
 
 	return;
 }

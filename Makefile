@@ -132,6 +132,10 @@ clean:
 test: $(BINDIR)/$(APP)
 	@./test.sh
 
+testfast:
+	@make -B RELEASE=yes
+	@make test
+
 testsanitizers:
 	@make -B SANITIZERS=yes
 	@ASAN_OPTIONS=detect_leaks=1 ./test.sh

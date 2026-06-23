@@ -933,10 +933,11 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 
 		/* dead code elim + extras */
 		{
+			change |= ir_dce(func);
 			change |= ir_imm_elim(func);
 			change |= ir_mov_elim(func);
-			change |= ir_dce(func);
 			change |= ir_simpleopt(func);
+			fix_phis(func);
 			change |= ir_fold(func);
 			fix_phis(func);
 
@@ -947,6 +948,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		/* branch opts */
 		{
 			change |= ir_branchopt(func);
+			fix_phis(func);
 			ir_nopremover(func);
 			ir_fix(func);
 		}

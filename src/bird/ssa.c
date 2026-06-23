@@ -308,16 +308,6 @@ static void seal_block(ir_blk_t *blk)
 	list_append(sealed_blks, blk);
 }
 
-static bool has_several_outgoing_edges(ir_inst_t *ins)
-{
-	if(ins->type == IR_INST_JMP || ins->type == IR_INST_RET) {
-		return false;
-	}
-
-	/* else, if true block != false block, true */
-	return ins->true_blk != ins->false_blk;
-}
-
 static bool has_any_phis(ir_blk_t *blk)
 {
 	for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
@@ -417,6 +407,54 @@ cont:;
 	return;
 }
 
+/* inserts parallel moves */
+static void insert_parallel_moves(ir_func_t *fun)
+{
+	ir_blk_flow(fun);
+	/* collect all edges */
+	LIST(edge_t) edges = list_make(edge_t);
+
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		if(!has_any_phis(blk)) {
+			continue;
+		}
+
+		for(size_t i = 0; i < list_len(blk->pred); i++) {
+			edge_t edge = { .from = blk->pred[i], .to = blk };
+			if(!has_edge(edges, edge)) {
+				list_append(edges, edge);
+			}
+		}
+	}
+
+	/* insert parallel moves along all the edges */
+	for(size_t i = 0; i < list_len(edges); i++) {
+		edge_t edge = edges[i];
+		if(list_len(edge.from->succ) > 1) {
+			/* place at start of `edge.to` */
+			assemble_pmov(edge, 1);
+		} else {
+			/* place at end of `edge.from` */
+			assemble_pmov(edge, 0);
+		}
+	}
+
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(ins->type == IR_INST_PHI) {
+				list_delete(ins->phi_args);
+				list_delete(ins->phi_preds);
+				ins->type = IR_INST_NOP;
+			}
+		}
+	}
+
+	list_delete(edges);
+	return;
+}
+
 /* pre-step to destroying SSA form */
 static void split_critical(ir_func_t *fun)
 {
@@ -436,6 +474,9 @@ static void split_critical(ir_func_t *fun)
 	/* collect all edges */
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
+		if(!has_any_phis(blk)) {
+			continue;
+		}
 		for(size_t i = 0; i < list_len(blk->pred); i++) {
 			edge_t edge = { .from = blk->pred[i], .to = blk };
 			if(!has_edge(edges, edge)) {
@@ -452,14 +493,7 @@ static void split_critical(ir_func_t *fun)
 		 * - pred has several outgoing edges
 		 * - succ has several preds
 		 * - succ has any phis */
-		/* TODO: still doesnt work for some reason
-		  * that I do not know. But if I don't split the
-		  * critical edge then everything is fine.
-		  * If I split the critical edge then `primes.c`
-		  * breaks. I don't know why. */
-		if(has_several_outgoing_edges(edge.from->tail) &&
-		   list_len(edge.to->pred) > 1) {
-			/*
+		if(list_len(edge.from->succ) > 1 && list_len(edge.to->pred) > 1) {
 			ir_inst_t *jmp = ins_jmp(edge.to);
 			ir_inst_t *nop = ins_nop();
 			nop->next = jmp;
@@ -470,29 +504,8 @@ static void split_critical(ir_func_t *fun)
 			replace_edge(edge.from, edge.to, critical);
 			replace_phis(edge.to, edge.from, critical);
 			edge.from = critical;
-			assemble_pmov(edge, 2);
-			*/
-			assemble_pmov(edge, 0);
-		} else if(has_several_outgoing_edges(edge.from->tail)) {
-			assemble_pmov(edge, 1);
-		} else {
-			assemble_pmov(edge, 0);
 		}
 	}
-
-	/* delete phis */
-	for(size_t i = 0; i < list_len(fun->blocks); i++) {
-		ir_blk_t *blk = fun->blocks[i];
-		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-			if(ins->type == IR_INST_PHI) {
-				list_delete(ins->phi_args);
-				list_delete(ins->phi_preds);
-				ins->type = IR_INST_NOP;
-			}
-		}
-	}
-
-	ir_blk_flow(fun);
 
 	list_delete(edges);
 
@@ -693,6 +706,86 @@ void ir_ssa_enter(ir_func_t *fun)
 	return;
 }
 
+/* alg
+ * visit(blk):
+ *     if blk->visited return
+ *     order = order U blk
+ *     order = order U blk->right
+ *     order = order U blk->left
+ *     blk->visited = true
+ *     visit order->true
+ *     visit order->false
+ */
+
+static long cur_postnum = 0;
+
+#define unionB(b)                         \
+	do {                                  \
+		if((b)->postnum == -1) {          \
+			(b)->postnum = cur_postnum++; \
+		}                                 \
+	} while(0)
+
+static void order_visit(ir_blk_t *blk)
+{
+	if(blk->visited) {
+		return;
+	}
+	blk->visited = true;
+
+	unionB(blk);
+
+	if(blk->tail->true_blk) {
+		unionB(blk->tail->true_blk);
+		order_visit(blk->tail->true_blk);
+	}
+
+	if(blk->tail->false_blk) {
+		unionB(blk->tail->false_blk);
+		order_visit(blk->tail->false_blk);
+	}
+
+	return;
+}
+
+static int blocks_cmp(const void *a, const void *b)
+{
+	ir_blk_t **blk1 = a;
+	ir_blk_t **blk2 = b;
+	long ord1 = (*blk1)->postnum;
+	long ord2 = (*blk2)->postnum;
+
+	return ord1 - ord2;
+}
+
+static void order_blocks(ir_func_t *fun)
+{
+	/* reset visited */
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		find_before_last_term_ins(fun->blocks[i]);
+		fun->blocks[i]->visited = false;
+		fun->blocks[i]->postnum = -1;
+	}
+
+	/* visit blocks */
+	order_visit(fun->blocks[0]);
+
+	/* mark dead blocks at end */
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		if(fun->blocks[i]->postnum == -1) {
+			fun->blocks[i]->postnum = 1000000000;
+		}
+	}
+
+	/* sort blocks */
+	qsort(fun->blocks, list_len(fun->blocks), sizeof(ir_blk_t *), blocks_cmp);
+}
+
+static void basic_block_placement(ir_func_t *fun)
+{
+	order_blocks(fun);
+}
+
 /* turn the IR from an SSA form into a typical 3AC IR.
  * Removes and deallocates all phis, turning them into NOPs. */
 void ir_ssa_exit(ir_func_t *fun)
@@ -701,7 +794,9 @@ void ir_ssa_exit(ir_func_t *fun)
 	ir_fix(fun);
 	ir_blk_flow(fun);
 	split_critical(fun);
+	insert_parallel_moves(fun);
 	deparallelize_pmovs(fun);
+	basic_block_placement(fun);
 	ir_nopremover(fun);
 	ir_fix(fun);
 

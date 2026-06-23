@@ -170,6 +170,7 @@ typedef struct ir_blk {
 
 	/* register allocation stuff */
 	bool visited;
+	LIST(struct ir_blk *) succ; /* block's successors */
 	LIST(struct ir_blk *) pred; /* block's predecessors */
 	LIST(ir_inst_t *) incomplete_phis; /* block's incomplete phis */
 	LIST(reg_t *) regs_def; /* registers in this block */
