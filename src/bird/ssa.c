@@ -760,6 +760,7 @@ static int blocks_cmp(const void *a, const void *b)
 
 static void order_blocks(ir_func_t *fun)
 {
+	cur_postnum = 0;
 	/* reset visited */
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		find_before_last_term_ins(fun->blocks[i]);
