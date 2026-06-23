@@ -346,7 +346,7 @@ static void rewrite_make_2op(ir_inst_t *ins_prev, ir_inst_t *ins)
 	return;
 }
 
-static int rewrite_mov(ir_inst_t *ins_prev, ir_inst_t *ins)
+static int rewrite_mov(ir_inst_t *ins)
 {
 	/* opt
 	 * %r0 = %r1(spill)
@@ -371,13 +371,6 @@ static int rewrite_mov(ir_inst_t *ins_prev, ir_inst_t *ins)
 		return 1;
 	}
 
-	/* opt
-	 * %r0(spill) = %r1(spill)
-	 * ->
-	 * %r0 = spill_load %r1
-	 * spill_store %r0, %r0
-	 */
-
 	return 0;
 }
 
@@ -390,7 +383,7 @@ static void rewrite_ins(ir_inst_t *ins_prev, ir_inst_t *ins)
 
 	/* special case */
 	if(ins->type == IR_INST_MOV) {
-		if(rewrite_mov(ins_prev, ins))
+		if(rewrite_mov(ins))
 			return;
 	}
 

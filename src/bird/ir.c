@@ -509,7 +509,7 @@ static void print_phiarg(ir_inst_t *phi, int indx, int mode)
 }
 
 /* print IR instruction */
-void ir_print_inst(ir_blk_t *blk, ir_inst_t *ins, int mode)
+void ir_print_inst(ir_inst_t *ins, int mode)
 {
 #define out(...)         \
 	printf(__VA_ARGS__); \
@@ -762,7 +762,7 @@ void ir_dump(ir_func_t *fun, int mode)
 
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
 			putchar('\t');
-			ir_print_inst(blk, inst, mode);
+			ir_print_inst(inst, mode);
 			putchar('\n');
 		}
 	}
@@ -902,12 +902,11 @@ void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt)
 		}
 
 		ir_opt(func, opt, arch);
-		ir_finalize(func, arch == IR_ARCH_AARCH64_APPLE ? 9 : 5, opt, arch);
-
 		for(size_t j = 0; j < list_len(func->blocks); j++) {
 			ir_blk_t *blk = func->blocks[j];
 			blk->num = acc++;
 		}
+		ir_finalize(func, arch == IR_ARCH_AARCH64_APPLE ? 9 : 5, opt, arch);
 
 		if(debug) {
 			printf("Final IR:\n");

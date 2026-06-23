@@ -750,8 +750,8 @@ static void order_visit(ir_blk_t *blk)
 
 static int blocks_cmp(const void *a, const void *b)
 {
-	ir_blk_t **blk1 = a;
-	ir_blk_t **blk2 = b;
+	ir_blk_t **blk1 = (ir_blk_t **)a;
+	ir_blk_t **blk2 = (ir_blk_t **)b;
 	long ord1 = (*blk1)->postnum;
 	long ord2 = (*blk2)->postnum;
 

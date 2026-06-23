@@ -338,7 +338,7 @@ ir_func_t *ir_func_make(char *name);
 void ir_func_delete(ir_func_t *fun);
 
 /* print IR instruction */
-void ir_print_inst(ir_blk_t *blk, ir_inst_t *ins, int mode);
+void ir_print_inst(ir_inst_t *ins, int mode);
 
 /* dump IR */
 void ir_dump(ir_func_t *fun, int mode);
